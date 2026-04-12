@@ -364,6 +364,8 @@ function should_use_corrected_age(baby, measurement_date, metric):
 
 ### 6.1 字段定义 (对齐 D1 schema)
 
+> **Schema 收敛说明**：本节字段定义是 `growth_event` 的上游领域模型，D1 已被同步扩展以承接这些字段。后续若再新增字段，应先修改 D1 作为 schema source of truth，再回写本节，避免 C1/D1 漂移。
+
 ```sql
 -- growth_event 子表 (继承 timeline_event 的 event_id, baby_id, timestamp 等)
 CREATE TABLE growth_event (

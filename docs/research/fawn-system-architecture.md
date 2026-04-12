@@ -88,6 +88,34 @@
 - L5（规则引擎）的判断结果对 L3 具有**否决权**：若规则引擎返回“阻断”级别，Agent 必须终止当前意图并输出规则引擎提供的标准文案。
 - L4（Temporal）可独立于 L3 运行（定时触发），但产出的通知/结果仍写入 L7 并可由 L3 读取。
 
+### 4.3 LangGraph ↔ Temporal 集成契约（生产级约束）
+
+当前架构不是“两个编排引擎各自工作”，而是**LangGraph 负责同步交互编排，Temporal 负责跨请求/跨时间边界的 durable execution**。为避免孤立 workflow，必须显式遵守以下契约：
+
+| 主题 | LangGraph（L3） | Temporal（L4） | 强制约束 |
+|---|---|---|---|
+| 适用场景 | 单次请求内可完成的对话、路由、工具调用、即时安全校验 | 延迟执行、定时提醒、重试、补偿、随访、跨天任务 | **超过当前请求生命周期的动作一律进入 Temporal** |
+| 启动方式 | 不直接在 graph node 内随意 `client.start_workflow()` | 只接受 Application Service / Workflow Bridge 发起 | **L3 只能通过统一 WorkflowApplicationService 发起 L4** |
+| 身份标识 | `correlation_id`（一次用户请求/会话链路） | `workflow_business_id` + `run_id` | `workflow_business_id` 稳定、`run_id` 可变化 |
+| 幂等 | 负责生成 `command_id` / `idempotency_key` | 负责拒绝重复启动、重复 side-effect | 重试必须复用同一个 `idempotency_key` |
+| 回写责任 | 读取 workflow 摘要用于对话解释 | 将状态、心跳、结果回写 `workflow_run` 等表 | 禁止只在 Temporal 内成功、DB 无记录 |
+
+**推荐启动序列**：
+1. L3 判定某动作需要 durable workflow。
+2. 通过 `WorkflowApplicationService` 在同一事务中写入：
+   - `workflow_run(status=pending_start)`
+   - `idempotency_key`
+   - `correlation_id / command_id / trigger_event_id`
+3. 事务提交后，由 bridge/outbox 调用 Temporal `StartWorkflow`。
+4. Temporal 返回 `workflow_id + run_id`，再回写 `workflow_run.external_workflow_id / external_run_id`。
+5. Temporal 执行中的每个关键状态迁移都回写 `workflow_run` / `reminder` / `follow_up_task` / `timeline_event`。
+6. 定时 reconciliation job 扫描 DB 与 Temporal：若一边存在、一边不存在，标记 `orphaned` 并触发修复流程。
+
+**幂等默认公式**：
+- `workflow_business_id = <family_id>:<baby_id>:<workflow_type>:<trigger_scope>`
+- `idempotency_key = sha256(workflow_business_id + normalized_input + schedule_bucket)`
+- 对“提醒/随访/补种计划”这类可重试动作，**副作用落库前必须先检查 `idempotency_key`**。
+
 ---
 
 ## 5 核心模块职责
@@ -104,7 +132,8 @@
 ```
 
 **关键设计**：
-- LangGraph StateGraph 定义节点：`classify_intent → route → [tool_node | rule_check | direct_reply] → safety_gate → respond`
+- LangGraph StateGraph 定义节点：`raw_safety_prefilter → classify_intent → parse_structured_facts → route → [tool_node | rule_check | direct_reply | start_workflow] → safety_gate → respond`
+- `raw_safety_prefilter` 在进入 LLM 语义解析前先做**关键词 / 正则 / 数值阈值 / 注入特征**扫描；命中红旗或发现可疑注入时可直接升级或切到保守模式
 - `safety_gate` 节点在每次回复前强制调用规则引擎做最终安全校验
 - 对话历史持久化到 PostgreSQL（`conversation` 表），Redis 缓存热会话
 
@@ -180,10 +209,16 @@
 用户输入 “宝宝3个月，体温39.5，精神很差”
   │
   ▼
+[L3 raw_safety_prefilter] 原始文本扫描: {age≈3月, temp≈39.5, mental_poor?}
+  │
+  ▼
 [L3 主Agent] classify_intent → “symptom_triage”
   │
   ▼
-[L3] 提取事实: {age_months: 3, temp_c: 39.5, mental_state: poor}
+[L3] 语义解析事实: {age_months: 3, temp_c: 39.5, mental_state: poor}
+  │
+  ▼
+[L3] 合并 prefilter + parser 结果；若冲突/低置信/疑似 injection → 默认升级
   │
   ▼
 [L5 Rule Engine] evaluate("red_flag_rules", facts)
@@ -303,7 +338,7 @@
 | R4 | Temporal Worker 宕机 | Temporal 原生重试 + 告警；关键 Workflow 设置 deadline |
 | R5 | LLM 服务不可用 | 降级模式：规则引擎 + 模板回复仍可工作 |
 | R6 | 多成员权限越权 | API Gateway 层 RBAC 强制校验；最小权限原则 |
-| R7 | 输入注入攻击 | LLM 输入清洗 + 输出过滤；工具参数 schema 校验 |
+| R7 | Prompt injection / 对抗性输入导致漏触发安全规则 | **raw-text prefilter + LLM parser 双通道解析**；冲突/低置信/注入特征一律保守升级；用户原文永不直接作为 tool instruction |
 | R8 | 通知轰炸 | 每用户每日通知上限；合并同类提醒 |
 | R9 | 规则引擎与 LLM 结论矛盾 | safety_gate 中规则引擎拥有绝对否决权 |
 
@@ -334,8 +369,9 @@
 | 项 | 建议 |
 |----|------|
 | LLM 模型 | 主模型 Claude Sonnet/GPT-4o-mini（成本/质量平衡）；意图分类可用更小模型 |
-| PostgreSQL | 开启 TDE（透明数据加密）；敏感字段应用级加密(AES-256) |
-| Temporal | 使用 PostgreSQL 作为持久化后端（复用基础设施） |
+| PostgreSQL | 开启 TDE（透明数据加密）；高敏字段应用级 AES-256-GCM；仅存密文与 DEK 密文 |
+| Key Management | **KEK 仅存在云 KMS/HSM**；应用侧通过 envelope encryption 临时解封 DEK；禁止 KEK/明文 DEK 落盘 |
+| Temporal | 使用 PostgreSQL 作为持久化后端；workflow 必须带 `workflow_id + run_id + correlation_id + idempotency_key` |
 | 日志 | 结构化 JSON 日志 → stdout → 集中采集（Loki/ELK） |
 | 监控 | Prometheus + Grafana；关键指标：LLM 延迟、规则引擎命中率、Workflow 成功率 |
 | 备份 | PostgreSQL WAL 归档 + 每日全量备份；RPO < 1h |

@@ -204,16 +204,34 @@ RetentionDeletionPolicy 约束数据生命周期
 | timeline_event_id | UUID FK UNIQUE | 对应 timeline_event |
 | baby_id | UUID FK | 宝宝 id |
 | measured_at | TIMESTAMP | 测量时间 |
+| chronological_age_days | INTEGER | 实际日龄 |
 | corrected_age_days | INTEGER NULL | 早产校正日龄 |
+| age_used_days | INTEGER | 实际用于查表的年龄 |
 | weight_kg | NUMERIC(5,2)(加密) | 体重 |
 | height_cm | NUMERIC(5,2)(加密) | 身长/身高 |
 | head_circ_cm | NUMERIC(5,2)(加密) | 头围 |
+| measurement_position | ENUM(supine, standing, unknown) NULL | 测量姿态 |
 | weight_zscore | NUMERIC(5,2) NULL | 体重 z-score |
 | height_zscore | NUMERIC(5,2) NULL | 身高 z-score |
 | head_circ_zscore | NUMERIC(5,2) NULL | 头围 z-score |
-| percentile_json | JSONB | percentile 结果 |
-| standard_source | ENUM(who, cdc, cn_nhc, custom) | 标准来源 |
-| measured_by | ENUM(home, clinic, device) | 测量来源 |
+| weight_percentile | NUMERIC(5,1) NULL | 体重百分位 |
+| height_percentile | NUMERIC(5,1) NULL | 身高百分位 |
+| head_circ_percentile | NUMERIC(5,1) NULL | 头围百分位 |
+| bmi | NUMERIC(4,1) NULL | BMI（适用年龄才计算） |
+| bmi_zscore | NUMERIC(5,2) NULL | BMI z-score |
+| bmi_percentile | NUMERIC(5,1) NULL | BMI 百分位 |
+| wfl_zscore | NUMERIC(5,2) NULL | weight-for-length/height z-score |
+| wfl_percentile | NUMERIC(5,1) NULL | weight-for-length/height 百分位 |
+| percentile_json | JSONB | percentile / meta 汇总结果 |
+| standard_source | ENUM(who, cdc, cn_nhc, custom, fenton) | 标准来源 |
+| standard_version | TEXT NULL | 标准版本 |
+| alert_level | ENUM(normal, watch, review, urgent) NULL | 风险分级 |
+| alert_details | JSONB NULL | 告警细节 |
+| trend_flag | ENUM(stable, crossing_up, crossing_down, rapid_change, insufficient_data) NULL | 趋势标记 |
+| trend_details | JSONB NULL | 趋势细节 |
+| measured_by | ENUM(home, clinic, hospital, device, parent) | 测量来源 |
+| engine_version | TEXT NULL | 规则引擎版本 |
+| computed_at | TIMESTAMP NULL | 规则计算时间 |
 | is_outlier | BOOLEAN | 是否超阈值 |
 | note | TEXT NULL | 备注 |
 | created_at | TIMESTAMP | 创建时间 |
@@ -245,15 +263,24 @@ RetentionDeletionPolicy 约束数据生命周期
 | vaccine_name | TEXT(加密) | 疫苗名 |
 | dose_no | SMALLINT | 第几剂 |
 | dose_series_key | TEXT | 同系列逻辑键 |
+| scheduled_at | TIMESTAMP NULL | 计划接种时间 |
+| reminder_dates | JSONB NULL | 计划提醒时间列表 |
 | administered_at | TIMESTAMP NULL | 实际接种时间 |
-| due_at | TIMESTAMP NULL | 应接种时间 |
 | provider_name | TEXT(加密) NULL | 机构名 |
 | batch_no | TEXT(加密) NULL | 批号 |
-| status | ENUM(scheduled, completed, missed, deferred, contraindicated) | 状态 |
+| status | ENUM(scheduled, reminded, given, overdue, deferred, contraindicated, skipped_by_parent) | 剂次主状态 |
+| defer_reason | TEXT NULL | 延期原因 |
+| defer_until | TIMESTAMP NULL | 延期至 |
+| contraindication_note | TEXT NULL | 禁忌说明 |
+| skip_reason | TEXT NULL | 家长跳过原因 |
+| catch_up_from_event_id | UUID NULL | 补种来源 event |
 | adverse_event_flag | BOOLEAN | 是否有不良反应 |
-| reminder_id | UUID FK NULL | 关联提醒 |
+| reminder_id | UUID FK NULL | 最近一次关联提醒 |
 | note | TEXT NULL | 备注 |
 | created_at | TIMESTAMP | 创建时间 |
+| updated_at | TIMESTAMP | 更新时间 |
++
++> 说明：`ADVERSE_EVT`、`FOLLOW_UP`、`CLOSED` 在 C2 中属于**接种后不良反应与随访闭环状态**，其主落点不是 `vaccine_event.status`，而是 `symptom_event + follow_up_task + workflow_run`。因此 `vaccine_event.status` 仅保存“该剂次的主业务状态”；随访子状态在关联表中表达。
 
 ### symptom_event
 | 字段 | 类型 | 说明 |
@@ -325,19 +352,26 @@ RetentionDeletionPolicy 约束数据生命周期
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | UUID PK | workflow 实例 id |
-| workflow_type | ENUM(vaccine_reminder, follow_up, retention, growth_check, export_approval) | workflow 类型 |
+| workflow_type | ENUM(vaccine_reminder, follow_up, retention, growth_check, export_approval, catch_up) | workflow 类型 |
 | external_engine | ENUM(temporal, internal_scheduler) | 执行引擎 |
-| external_run_id | TEXT | Temporal run id |
+| external_workflow_id | TEXT NULL | Temporal workflow id（业务稳定标识） |
+| external_run_id | TEXT NULL | Temporal run id（单次执行标识） |
+| correlation_id | TEXT NULL | 关联一次请求/会话链路 |
+| command_id | TEXT NULL | 触发该 workflow 的命令 id |
+| workflow_business_id | TEXT NULL | 幂等业务标识 |
 | family_id | UUID FK | 家庭 id |
 | baby_id | UUID FK NULL | 宝宝 id |
 | trigger_mode | ENUM(schedule, event, manual, retry) | 触发方式 |
+| trigger_event_id | UUID NULL | 触发该 workflow 的事件 |
 | input_snapshot | JSONB | 入参快照 |
 | output_snapshot | JSONB NULL | 结果快照 |
-| status | ENUM(running, completed, failed, cancelled, timed_out) | 状态 |
+| status | ENUM(pending_start, running, completed, failed, cancelled, timed_out, orphaned) | 状态 |
 | idempotency_scope | TEXT NULL | 幂等作用域 |
-| started_at | TIMESTAMP | 开始时间 |
+| started_at | TIMESTAMP NULL | 开始时间 |
 | finished_at | TIMESTAMP NULL | 结束时间 |
 | created_at | TIMESTAMP | 创建时间 |
++
++> 约束：LangGraph 不得直接绕过 `workflow_run` 表启动 Temporal。任何 durable workflow 都必须先写 `workflow_run + idempotency_key`，再通过 workflow bridge/outbox 发起，以确保 DB 与 Temporal 可 reconciliation。
 
 ### scheduled_job
 | 字段 | 类型 | 说明 |
@@ -556,8 +590,20 @@ RetentionDeletionPolicy 约束数据生命周期
 | media_asset | transcript_text, object_url(或采用签名 URL) | 媒体文本与路径 |
 | consent | scope_json（视实现）、签名/附件字段 | 授权范围可能含敏感信息 |
 | audit_log | metadata 中的敏感字段 | 审计中避免明文暴露 |
-
-**推荐结论**：Viewer 读取一律走脱敏投影，而不是直接查原表。
++
++### 7.1 密钥层次与落库要求
++
++| 对象 | 推荐密钥范围 | DB 中保存 | 不允许保存 |
++|---|---|---|---|
++| baby_profile / member | family 级 DEK | ciphertext + dek_ciphertext + key_version | 明文 DEK / KEK |
++| growth_event / symptom_event / vaccine_event | family 或 health-domain 级 DEK | ciphertext + dek_ciphertext + aad_context | 明文副本 |
++| media_asset transcript / object metadata | object-domain DEK | 密文 + key_version | 可直接访问的永久明文 URL |
++| backup/export | 独立 backup/export key domain | backup key ref | 复用主库同一个 DEK |
++
++**强制约束**：
++- KEK/CMK 仅存在 KMS/HSM；数据库内只允许存 DEK 密文。
++- 需要精确查找的高敏字段使用 blind index / tokenization，而不是明文字段索引。
++- Viewer 读取一律走脱敏投影，而不是直接查原表。
 
 ---
 

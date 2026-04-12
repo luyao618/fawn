@@ -120,6 +120,12 @@ baby_profile.schedule_region ∈ { "CN", "US", "WHO_DEFAULT" }
 
 每一剂疫苗对应一个状态机实例，与 D1 schema 中的 `vaccine_event` 对齐。
 
+> **实现澄清（避免与 D1 漂移）**：本节状态机包含两类状态：
+> 1. **剂次主状态** —— 落在 `vaccine_event.status`：`SCHEDULED / REMINDED / GIVEN / OVERDUE / DEFERRED / CONTRAINDICATED / SKIPPED_BY_PARENT`
+> 2. **接种后不良反应与随访子状态** —— 不直接落在 `vaccine_event.status`，而落在 `symptom_event + follow_up_task + workflow_run`：`ADVERSE_EVT / FOLLOW_UP / CLOSED`
+>
+> 因此，C2 虽描述 10 个业务状态，但 D1 中 `vaccine_event.status` 不应机械承载全部 10 个，而应只承载“剂次主状态”。
+
 ```
                   ┌──────────────────────────────────────────┐
                   │                                          │
@@ -405,12 +411,24 @@ home_care_rules:
 家长描述症状
       │
       ▼
+┌──────────────────────┐
+│ raw-text prefilter   │ ── 关键词/regex/体温数值/注入特征扫描
+└──────────────────────┘
+      │
+      ├── 命中 P0 红旗 / 明显注入？── 是 → 直接保守升级
+      │
+      ▼
 ┌──────────────┐
 │ LLM 解析 NLU │ ── 提取结构化字段 → symptom_event schema
 └──────────────┘
       │
       │ 置信度 < 阈值？── 是 → 追问澄清（最多 2 轮）
       │                         └── 仍不足 → 默认升级为 SEE_DOCTOR
+      ▼
+┌──────────────────────┐
+│ merge / conflict check│ ── prefilter 与 parser 冲突时取更高风险
+└──────────────────────┘
+      │
       ▼
 ┌──────────────────┐
 │ 规则引擎匹配      │ ── 按优先级：E* > D* > H*
@@ -421,6 +439,7 @@ home_care_rules:
 │ safety_gate 审查  │ ── 最终否决权
 │  - 月龄 < 3？     │     任何可疑 → 升级
 │  - 多条规则冲突？  │     取最高级
+│  - parser 冲突？   │     不允许降级
 │  - 免责声明附加    │
 └──────────────────┘
       │
@@ -479,31 +498,35 @@ interface SymptomEvent {
   reported_at: Date;
   reporter: "parent" | "caregiver";
   
-  // NLU 解析结果
-  raw_text: string;              // 家长原始描述
-  parsed_symptoms: string[];     // 结构化症状代码列表
-  nlu_confidence: number;        // 解析置信度 0-1
+  // 原始输入与双通道解析
+  raw_text: string;                 // 家长原始描述
+  prefilter_hits: string[];         // raw-text prefilter 命中的 token/rule
+  injection_signals?: string[];     // 注入/对抗特征
+  parsed_symptoms: string[];        // LLM 结构化症状代码列表
+  nlu_confidence: number;           // 解析置信度 0-1
+  parser_conflict: boolean;         // prefilter 与 parser 是否冲突
   
   // 生命体征（如有）
-  temperature?: number;          // 体温 °C
-  respiratory_rate?: number;     // 呼吸频率
-  heart_rate?: number;           // 心率（如有）
+  temperature?: number;             // 体温 °C
+  respiratory_rate?: number;        // 呼吸频率
+  heart_rate?: number;              // 心率（如有）
   
   // 分诊上下文
-  duration_hours?: number;       // 症状持续时间
-  stool_count_24h?: number;      // 24h 大便次数
-  feeding_refusal_hours?: number; // 拒食时长
-  dehydration_signs?: number;    // 脱水征象计数
-  post_vaccination_hours?: number; // 距上次接种小时数
+  duration_hours?: number;          // 症状持续时间
+  stool_count_24h?: number;         // 24h 大便次数
+  feeding_refusal_hours?: number;   // 拒食时长
+  dehydration_signs?: number;       // 脱水征象计数
+  post_vaccination_hours?: number;  // 距上次接种小时数
   
   // 分诊结果
   triage_level: "HOME_CARE" | "SEE_DOCTOR" | "EMERGENCY_120";
-  matched_rules: string[];       // 命中的规则 ID 列表
-  safety_gate_override?: boolean; // safety_gate 是否介入
+  matched_rules: string[];          // 命中的规则 ID 列表
+  safety_gate_override?: boolean;   // safety_gate 是否介入
+  conservative_reason?: string;     // 触发保守升级的原因
   
   // 关联
-  related_vaccine_event_id?: string;  // 如与接种相关
-  workflow_run_id: string;       // 关联的工作流执行记录
+  related_vaccine_event_id?: string; // 如与接种相关
+  workflow_run_id: string;          // 关联的工作流执行记录
 }
 ```
 
