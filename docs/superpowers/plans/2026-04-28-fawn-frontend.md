@@ -8,6 +8,20 @@
 
 **Tech Stack:** Next.js 15, TypeScript, Tailwind CSS, Zustand, Recharts, Lucide React, date-fns, clsx + tailwind-merge, Vitest + React Testing Library
 
+
+**Commit Protocol:** All commits must use structured format with trailers:
+```
+feat(frontend): <subject>
+
+<body>
+
+Constraint: <any constraints or design decisions>
+Tested: <what was tested>
+Not-tested: <what was not tested>
+
+Co-Authored-By: Claude Opus 4 <noreply@anthropic.com>
+```
+
 ---
 
 ## File Structure
@@ -29,7 +43,7 @@
 - `frontend/src/app/globals.css` — CSS custom properties (design tokens)
 - `frontend/src/app/login/page.tsx` — Login page
 - `frontend/src/app/(main)/layout.tsx` — Main layout with TabBar
-- `frontend/src/middleware.ts` — Auth middleware
+- `frontend/src/components/auth/AuthGuard.tsx` — Client-side auth guard
 
 **Layout Components:**
 - `frontend/src/components/layout/TabBar.tsx` — Bottom tab navigation
@@ -110,7 +124,7 @@
 
 Run:
 ```bash
-npx create-next-app@latest frontend --typescript --tailwind --eslint --app --src-dir --no-import-alias
+npx create-next-app@15 frontend --typescript --tailwind --eslint --app --src-dir --import-alias "@/*"
 ```
 Expected: Project created in `frontend/` with TypeScript, Tailwind, ESLint, App Router, src directory.
 
@@ -1169,7 +1183,7 @@ git commit -m "feat(frontend): add TypeScript types, mock data, and API client w
 - Create: `frontend/src/lib/auth-store.ts`
 - Test: `frontend/src/lib/auth-store.test.ts`
 - Create: `frontend/src/app/login/page.tsx`
-- Create: `frontend/src/middleware.ts`
+- Create: `frontend/src/components/auth/AuthGuard.tsx`
 
 ---
 
@@ -1471,43 +1485,41 @@ export default function LoginPage() {
 
 ---
 
-- [ ] **Step 6: Create `frontend/src/middleware.ts`**
+- [ ] **Step 6: Create `frontend/src/components/auth/AuthGuard.tsx`**
 
 ```typescript
-// frontend/src/middleware.ts
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+// frontend/src/components/auth/AuthGuard.tsx
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
+import { useAuthStore } from '@/lib/auth-store'
 
 const PUBLIC_PATHS = ['/login']
 
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+export function AuthGuard({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+
+  useEffect(() => {
+    const isPublic = PUBLIC_PATHS.some(
+      (path) => pathname === path || pathname.startsWith(path + '/')
+    )
+    if (!isPublic && !isAuthenticated) {
+      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`)
+    }
+  }, [isAuthenticated, pathname, router])
 
   const isPublic = PUBLIC_PATHS.some(
     (path) => pathname === path || pathname.startsWith(path + '/')
   )
 
-  if (isPublic) {
-    return NextResponse.next()
+  if (!isPublic && !isAuthenticated) {
+    return null
   }
 
-  const token =
-    request.cookies.get('fawn-token')?.value ||
-    request.headers.get('authorization')?.replace('Bearer ', '')
-
-  if (!token) {
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(loginUrl)
-  }
-
-  return NextResponse.next()
-}
-
-export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  return <>{children}</>
 }
 ```
 
@@ -1523,7 +1535,7 @@ Expected: Build completes with no errors.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add frontend/src/lib/auth-store.ts frontend/src/lib/auth-store.test.ts frontend/src/app/login/page.tsx frontend/src/middleware.ts
+git add frontend/src/lib/auth-store.ts frontend/src/lib/auth-store.test.ts frontend/src/app/login/page.tsx frontend/src/components/auth/AuthGuard.tsx
 git commit -m "feat(frontend): add Zustand auth store, login page, and auth middleware"
 ```
 
@@ -1650,6 +1662,11 @@ const TABS = [
 
 export default function TabBar() {
   const pathname = usePathname()
+
+  // DESIGN.md: 对话页显示输入栏，其他页显示 Tab — 互斥
+  if (pathname === '/chat' || pathname.startsWith('/chat/')) {
+    return null
+  }
 
   return (
     <nav
@@ -3373,14 +3390,14 @@ export function MessageList({ messages }: MessageListProps) {
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { History } from 'lucide-react'
 import { useChatStore } from '@/lib/chat-store'
 import { MessageList } from '@/components/chat/MessageList'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { QuickActionChips } from '@/components/chat/QuickActionChips'
 
-const MOCK_CONVERSATION_ID = 'conv-demo-001'
+const DEFAULT_CONVERSATION_ID = 'conv-1'
 
 const QUICK_ACTIONS = [
   { label: '记录喂奶', prompt: '帮我记录一次喂奶' },
@@ -3393,9 +3410,12 @@ export default function ChatPage() {
   const router = useRouter()
   const { messages, loadMessages, sendMessage } = useChatStore()
 
+  const searchParams = useSearchParams()
+  const conversationId = searchParams.get('conversationId') ?? DEFAULT_CONVERSATION_ID
+
   useEffect(() => {
-    loadMessages(MOCK_CONVERSATION_ID)
-  }, [loadMessages])
+    loadMessages(conversationId)
+  }, [conversationId, loadMessages])
 
   const handleSend = (content: string) => {
     sendMessage(content)
@@ -3428,7 +3448,7 @@ export default function ChatPage() {
       {/* Quick Actions + Input */}
       <div className="flex-shrink-0 bg-white border-t border-oat-border">
         <QuickActionChips actions={quickActions} />
-        <ChatInput onSend={handleSend} />
+        <ChatInput onSend={handleSend} onAttach={() => {/* TODO: implement image picker in backend integration phase */}} />
       </div>
     </div>
   )
@@ -5543,7 +5563,7 @@ export default function ProfilePage() {
       try {
         const [babyData, items, members] = await Promise.all([
           getBabyProfile(),
-          getProfileItems(),
+          getProfileItems(user?.id ?? 'user-1'),
           isAdmin ? getFamilyMembers() : Promise.resolve([]),
         ])
         setBaby(babyData)
@@ -5780,4 +5800,61 @@ Expected: PASS
 ```bash
 git add frontend/src/app/(main)/profile/page.tsx frontend/src/app/(main)/profile/page.test.tsx
 git commit -m "feat(frontend): add profile page with user info, baby profile, family members, and settings"
+```
+
+---
+
+### Task 15: Final Verification & Smoke Test
+
+**Files:**
+- No new files
+
+- [ ] **Step 1: Run full lint**
+
+Run: `cd frontend && npm run lint`
+Expected: No lint errors.
+
+- [ ] **Step 2: Run full test suite**
+
+Run: `cd frontend && npm run test`
+Expected: All tests pass.
+
+- [ ] **Step 3: Run production build**
+
+Run: `cd frontend && npm run build`
+Expected: Build completes with no errors.
+
+- [ ] **Step 4: Start dev server and smoke test**
+
+Run: `cd frontend && npm run dev`
+
+Manual verification checklist:
+1. Open http://localhost:3000 → redirects to /login
+2. Login with mama/password123 → redirects to /chat
+3. /chat page: messages render, input works, send button works, attach button visible, quick action chips visible
+4. /chat page: no TabBar visible (only input bar at bottom)
+5. Navigate to /dashboard via TabBar on another page → growth chart renders, feeding/sleep stats show data
+6. Navigate to /album → photos render in grid, click photo opens viewer, upload button visible
+7. Navigate to /profile → user info renders, baby profile card, family members (admin), logout button
+8. Click a history conversation → navigates to /chat?conversationId=xxx, loads correct messages
+9. Verify all pages have correct warm-cream background (#FFF9F4), fawn-amber accents (#D4956A)
+10. Verify mobile viewport (375px width in Chrome DevTools)
+
+- [ ] **Step 5: Commit final state**
+
+```bash
+git add -A
+git commit -m "$(cat <<'COMMITEOF'
+chore(frontend): final verification pass
+
+All lint, test, and build checks pass.
+Manual smoke test completed on dev server.
+
+Constraint: mock API only, no backend integration
+Tested: lint, vitest full suite, next build, manual smoke (10-point checklist)
+Not-tested: real API integration, e2e with Playwright, iOS Safari
+
+Co-Authored-By: Claude Opus 4 <noreply@anthropic.com>
+COMMITEOF
+)"
 ```
