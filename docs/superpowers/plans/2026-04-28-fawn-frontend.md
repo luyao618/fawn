@@ -751,6 +751,84 @@ export const mockMessages: Message[] = [
     contentType: 'text',
     createdAt: '2026-07-20T08:00:05Z',
   },
+  // conv-2: 睡眠相关
+  {
+    id: 'msg-9',
+    conversationId: 'conv-2',
+    role: 'user',
+    content: '宝宝午睡只睡了30分钟就醒了，正常吗？',
+    contentType: 'text',
+    createdAt: '2026-07-19T14:00:00Z',
+  },
+  {
+    id: 'msg-10',
+    conversationId: 'conv-2',
+    role: 'agent',
+    content: '30分钟的午睡在2个月大的宝宝中很常见，这通常是一个睡眠周期的长度。随着月龄增长，午睡会逐渐延长。',
+    contentType: 'text',
+    createdAt: '2026-07-19T14:00:05Z',
+  },
+  // conv-3: 生长曲线
+  {
+    id: 'msg-11',
+    conversationId: 'conv-3',
+    role: 'user',
+    content: '帮我看看小鹿本周的生长曲线',
+    contentType: 'text',
+    createdAt: '2026-07-18T10:00:00Z',
+  },
+  {
+    id: 'msg-12',
+    conversationId: 'conv-3',
+    role: 'agent',
+    content: '小鹿本周体重和身高均在正常范围内，体重 WHO P35，身高 WHO P40。',
+    contentType: 'data_card',
+    createdAt: '2026-07-18T10:00:05Z',
+    metadata: {
+      dataCard: {
+        type: 'growth',
+        title: '本周生长',
+        value: '4.5',
+        unit: 'kg',
+        subtitle: 'WHO P35，正常',
+        status: 'normal',
+      },
+    },
+  },
+  // conv-4: 发烧
+  {
+    id: 'msg-13',
+    conversationId: 'conv-4',
+    role: 'user',
+    content: '宝宝额头摸起来有点烫，量了下体温37.8度',
+    contentType: 'text',
+    createdAt: '2026-07-18T20:00:00Z',
+  },
+  {
+    id: 'msg-14',
+    conversationId: 'conv-4',
+    role: 'agent',
+    content: '37.8°C属于低热。建议多喂水、保持通风，每2小时复测。如果超过38.5°C或精神不佳请及时就医。',
+    contentType: 'text',
+    createdAt: '2026-07-18T20:00:05Z',
+  },
+  // conv-5: 辅食
+  {
+    id: 'msg-15',
+    conversationId: 'conv-5',
+    role: 'user',
+    content: '什么时候可以开始给宝宝添加辅食？',
+    contentType: 'text',
+    createdAt: '2026-07-17T09:00:00Z',
+  },
+  {
+    id: 'msg-16',
+    conversationId: 'conv-5',
+    role: 'agent',
+    content: 'WHO建议满6个月（约180天）开始添加辅食。小鹿目前2个月，建议等到满6个月再开始。届时可从高铁米粉开始。',
+    contentType: 'text',
+    createdAt: '2026-07-17T09:00:05Z',
+  },
 ]
 
 export const mockGrowthRecords: GrowthRecord[] = [
@@ -1919,7 +1997,7 @@ export default function MainLayout({
       >
         {children}
       </main>
-      <TabBar />
+      {!isChatPage && <TabBar />}
     </div>
   )
 }
@@ -2751,7 +2829,7 @@ describe('ChatInput', () => {
   })
 
   it('renders the attachment button', () => {
-    render(<ChatInput onSend={vi.fn()} onAttach={vi.fn()} />)
+    render(<ChatInput onSend={vi.fn()} onAttachImage={vi.fn()} />)
     expect(screen.getByTestId('attach-button')).toBeInTheDocument()
   })
 
@@ -2812,11 +2890,14 @@ describe('ChatInput', () => {
     expect(screen.getByTestId('send-button')).toBeDisabled()
   })
 
-  it('calls onAttach when attach button is clicked', () => {
+  it('calls onAttachImage when a file is selected via attach button', () => {
     const handleAttach = vi.fn()
-    render(<ChatInput onSend={vi.fn()} onAttach={handleAttach} />)
+    render(<ChatInput onSend={vi.fn()} onAttachImage={handleAttach} />)
     fireEvent.click(screen.getByTestId('attach-button'))
-    expect(handleAttach).toHaveBeenCalledOnce()
+    const fileInput = screen.getByTestId('file-input') as HTMLInputElement
+    const file = new File(['fake-image'], 'photo.jpg', { type: 'image/jpeg' })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+    expect(handleAttach).toHaveBeenCalledWith(file)
   })
 })
 ```
@@ -3271,6 +3352,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MessageList } from './MessageList'
 import type { Message } from '@/lib/types'
+import { useChatStore } from '@/lib/chat-store'
 
 vi.mock('@/lib/chat-store', () => ({
   useChatStore: vi.fn(() => ({ isTyping: false })),
@@ -3322,10 +3404,7 @@ describe('MessageList', () => {
   })
 
   it('shows TypingIndicator when isTyping is true', () => {
-    const { useChatStore } = vi.mocked(
-      await import('@/lib/chat-store'),
-    )
-    ;(useChatStore as ReturnType<typeof vi.fn>).mockReturnValue({ isTyping: true })
+    vi.mocked(useChatStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ isTyping: true })
     render(<MessageList messages={messages} />)
     expect(screen.getAllByTestId('typing-dot')).toHaveLength(3)
   })
@@ -3349,6 +3428,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => ({
+    get: () => null,
+  }),
 }))
 
 vi.mock('@/lib/chat-store', () => ({
@@ -3367,6 +3449,7 @@ vi.mock('@/lib/chat-store', () => ({
     currentConversationId: 'conv1',
     loadMessages: vi.fn(),
     sendMessage: vi.fn(),
+    addMessage: vi.fn(),
     setTyping: vi.fn(),
   })),
 }))
