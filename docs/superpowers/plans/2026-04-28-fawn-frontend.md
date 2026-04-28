@@ -114,6 +114,21 @@ Co-Authored-By: Claude Opus 4 <noreply@anthropic.com>
 
 ---
 
+## Phases
+
+| Phase | Tasks | 目标 | Review Checkpoint |
+|-------|-------|------|-------------------|
+| **Phase 1: 基础设施** | Task 1–3 | 可构建的空壳 + 完整 mock 数据层 | `npm run build` 通过，mock API 测试全绿 |
+| **Phase 2: 认证 & 布局** | Task 4–6 | 可登录、有导航骨架、基础组件库就绪 | 登录流程可走通，TabBar/TopBar 渲染正确 |
+| **Phase 3: 核心功能页面** | Task 7–10 | 完整聊天功能可用（发消息、图片、历史） | /chat 页面完整交互，历史对话可导航 |
+| **Phase 4: 数据 & 个人中心** | Task 11–15 | 全部页面完成 + smoke test 通过 | 10 项 smoke test 全部通过，生产构建无错误 |
+
+> **执行节奏：** 每个 Phase 结束后暂停，做一次 code review + 构建验证，确认无回归再进入下一 Phase。
+
+---
+
+## Phase 1: 基础设施 (Task 1–3)
+
 ### Task 1: Project Scaffolding & Test Setup
 
 **Files:**
@@ -1271,6 +1286,8 @@ git commit -m "feat(frontend): add TypeScript types, mock data, and API client w
 
 ---
 
+## Phase 2: 认证 & 布局 (Task 4–6)
+
 ### Task 4: Auth Store & Login Page
 
 **Files:**
@@ -2388,6 +2405,8 @@ git commit -m "feat(frontend): add base UI components Button, Card, Avatar"
 ```
 
 ---
+
+## Phase 3: 核心功能页面 (Task 7–10)
 
 ### Task 7: Chat Message Components
 
@@ -4036,6 +4055,11 @@ Expected: PASS
 git add frontend/src/app/\(main\)/history/page.tsx frontend/src/app/\(main\)/history/page.test.tsx
 git commit -m "feat(frontend): add chat history page with search and date grouping"
 ```
+
+---
+
+## Phase 4: 数据 & 个人中心 (Task 11–15)
+
 ### Task 11: Dashboard — Growth Chart & Baby Info Card
 
 **Files:**
