@@ -116,14 +116,15 @@ Co-Authored-By: Claude Opus 4 <noreply@anthropic.com>
 
 ## Phases
 
-| Phase | Tasks | 目标 | Review Checkpoint |
-|-------|-------|------|-------------------|
-| **Phase 1: 基础设施** | Task 1–3 | 可构建的空壳 + 完整 mock 数据层 | `npm run build` 通过，mock API 测试全绿 |
-| **Phase 2: 认证 & 布局** | Task 4–6 | 可登录、有导航骨架、基础组件库就绪 | 登录流程可走通，TabBar/TopBar 渲染正确 |
-| **Phase 3: 核心功能页面** | Task 7–10 | 完整聊天功能可用（发消息、图片、历史） | /chat 页面完整交互，历史对话可导航 |
-| **Phase 4: 数据 & 个人中心** | Task 11–15 | 全部页面完成 + smoke test 通过 | 10 项 smoke test 全部通过，生产构建无错误 |
+| Phase | Tasks | 目标 | Checkpoint Commands |
+|-------|-------|------|---------------------|
+| **Phase 1: 基础设施** | Task 1–3 | 可构建的空壳 + 完整 mock 数据层 | `npm run build && npm run test -- src/lib/api.test.ts` |
+| **Phase 2: 认证 & 布局** | Task 4–6 | 可登录、有导航骨架、基础组件库就绪 | `npm run test -- src/lib/auth-store.test.ts src/components/layout/ src/components/ui/` |
+| **Phase 3: 核心功能页面** | Task 7–10 | 完整聊天功能可用（发消息、图片、历史） | `npm run test -- src/components/chat/ src/lib/chat-store.test.ts src/app/\(main\)/chat/ src/app/\(main\)/history/` + 手动验证 /chat 发消息、图片附件、历史导航 |
+| **Phase 4: 数据 & 个人中心** | Task 11–14 | Dashboard、相册、个人中心页面完成 | `npm run test -- src/components/dashboard/ src/app/\(main\)/dashboard/ src/app/\(main\)/album/ src/app/\(main\)/profile/` |
+| **Phase 5: Release Gate** | Task 15 | 全量验证 + 生产构建 + smoke test | `npm run lint && npm run test && npm run build` + 10 项手动 smoke test checklist |
 
-> **执行节奏：** 每个 Phase 结束后暂停，做一次 code review + 构建验证，确认无回归再进入下一 Phase。
+> **执行节奏：** 每个 Phase 结束后执行 Checkpoint Commands。全部通过则自动进入下一 Phase；任一失败则停下修复，修复后重新执行 checkpoint 直到通过。
 
 ---
 
@@ -4058,7 +4059,7 @@ git commit -m "feat(frontend): add chat history page with search and date groupi
 
 ---
 
-## Phase 4: 数据 & 个人中心 (Task 11–15)
+## Phase 4: 数据 & 个人中心 (Task 11–14)
 
 ### Task 11: Dashboard — Growth Chart & Baby Info Card
 
@@ -6092,6 +6093,8 @@ git commit -m "feat(frontend): add profile page with user info, baby profile, fa
 ```
 
 ---
+
+## Phase 5: Release Gate (Task 15)
 
 ### Task 15: Final Verification & Smoke Test
 
