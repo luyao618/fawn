@@ -22,6 +22,8 @@ Not-tested: <what was not tested>
 Co-Authored-By: Claude Opus 4 <noreply@anthropic.com>
 ```
 
+> **IMPORTANT for executors:** Every `git commit` command in this plan shows only a shorthand subject line for brevity. You **MUST** expand each commit into the full structured format above, adding the body, Constraint, Tested, and Not-tested trailers based on the work done in that task. The shorthand is a template, not the final message.
+
 ---
 
 ## File Structure
@@ -226,7 +228,20 @@ Expected: Build completes with no errors.
 
 ```bash
 git add frontend/
-git commit -m "feat(frontend): scaffold Next.js 15 project with TypeScript, Tailwind, and Vitest"
+git commit -m "$(cat <<'COMMITEOF'
+feat(frontend): scaffold Next.js 15 project with TypeScript, Tailwind, and Vitest
+
+Initialize frontend directory with create-next-app@15 App Router template.
+Configure Vitest with React Testing Library for TDD workflow.
+Install runtime dependencies: Zustand, Recharts, Lucide React, date-fns, clsx, tailwind-merge.
+
+Constraint: pinned to create-next-app@15, import alias set to @/*
+Tested: npm run build passes
+Not-tested: no runtime UI tests yet
+
+Co-Authored-By: Claude Opus 4 <noreply@anthropic.com>
+COMMITEOF
+)"
 ```
 
 ---
@@ -1220,13 +1235,14 @@ describe('auth-store', () => {
   beforeEach(async () => {
     localStorageMock.clear()
     const { useAuthStore } = await import('./auth-store')
-    useAuthStore.setState({ user: null, token: null, isAuthenticated: false })
+    useAuthStore.setState({ user: null, token: null, isAuthenticated: false, _hasHydrated: false })
   })
 
-  it('initial state is unauthenticated', async () => {
+  it('initial state is unauthenticated and not hydrated', async () => {
     const { useAuthStore } = await import('./auth-store')
     const state = useAuthStore.getState()
     expect(state.isAuthenticated).toBe(false)
+    expect(state._hasHydrated).toBe(false)
     expect(state.user).toBeNull()
     expect(state.token).toBeNull()
   })
@@ -1241,10 +1257,45 @@ describe('auth-store', () => {
     expect(state.token).toBe('mock-token-user-1')
   })
 
-  it('login persists token to localStorage', async () => {
+  it('login persists token and user to localStorage', async () => {
     const { useAuthStore } = await import('./auth-store')
     await useAuthStore.getState().login('mama', 'password123')
     expect(localStorageMock.getItem('fawn-token')).toBe('mock-token-user-1')
+    expect(localStorageMock.getItem('fawn-user')).toBe(
+      JSON.stringify({ id: 'user-1', name: '妈妈', role: 'parent' })
+    )
+  })
+
+  it('hydrate restores session from localStorage', async () => {
+    localStorageMock.setItem('fawn-token', 'mock-token-user-1')
+    localStorageMock.setItem('fawn-user', JSON.stringify({ id: 'user-1', name: '妈妈', role: 'parent' }))
+    const { useAuthStore } = await import('./auth-store')
+    useAuthStore.getState().hydrate()
+    const state = useAuthStore.getState()
+    expect(state.isAuthenticated).toBe(true)
+    expect(state._hasHydrated).toBe(true)
+    expect(state.user?.name).toBe('妈妈')
+    expect(state.token).toBe('mock-token-user-1')
+  })
+
+  it('hydrate sets _hasHydrated true even with no stored session', async () => {
+    const { useAuthStore } = await import('./auth-store')
+    useAuthStore.getState().hydrate()
+    const state = useAuthStore.getState()
+    expect(state._hasHydrated).toBe(true)
+    expect(state.isAuthenticated).toBe(false)
+  })
+
+  it('hydrate clears corrupted localStorage gracefully', async () => {
+    localStorageMock.setItem('fawn-token', 'mock-token')
+    localStorageMock.setItem('fawn-user', '{invalid-json')
+    const { useAuthStore } = await import('./auth-store')
+    useAuthStore.getState().hydrate()
+    const state = useAuthStore.getState()
+    expect(state._hasHydrated).toBe(true)
+    expect(state.isAuthenticated).toBe(false)
+    expect(localStorageMock.getItem('fawn-token')).toBeNull()
+    expect(localStorageMock.getItem('fawn-user')).toBeNull()
   })
 
   it('logout clears user, token and isAuthenticated', async () => {
@@ -1257,11 +1308,12 @@ describe('auth-store', () => {
     expect(state.token).toBeNull()
   })
 
-  it('logout removes token from localStorage', async () => {
+  it('logout removes token and user from localStorage', async () => {
     const { useAuthStore } = await import('./auth-store')
     await useAuthStore.getState().login('mama', 'password123')
     useAuthStore.getState().logout()
     expect(localStorageMock.getItem('fawn-token')).toBeNull()
+    expect(localStorageMock.getItem('fawn-user')).toBeNull()
   })
 })
 ```
@@ -1287,10 +1339,14 @@ import { login as apiLogin } from './api'
 
 const TOKEN_KEY = 'fawn-token'
 
+const USER_KEY = 'fawn-user'
+
 interface AuthState {
   user: User | null
   token: string | null
   isAuthenticated: boolean
+  _hasHydrated: boolean
+  hydrate: () => void
   login: (username: string, password: string) => Promise<void>
   logout: () => void
 }
@@ -1299,15 +1355,35 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   token: null,
   isAuthenticated: false,
+  _hasHydrated: false,
+
+  hydrate: () => {
+    if (typeof window === 'undefined') return
+    const token = localStorage.getItem(TOKEN_KEY)
+    const userJson = localStorage.getItem(USER_KEY)
+    if (token && userJson) {
+      try {
+        const user = JSON.parse(userJson) as User
+        set({ user, token, isAuthenticated: true, _hasHydrated: true })
+        return
+      } catch {
+        localStorage.removeItem(TOKEN_KEY)
+        localStorage.removeItem(USER_KEY)
+      }
+    }
+    set({ _hasHydrated: true })
+  },
 
   login: async (username: string, password: string) => {
     const { user, token } = await apiLogin(username, password)
     localStorage.setItem(TOKEN_KEY, token)
+    localStorage.setItem(USER_KEY, JSON.stringify(user))
     set({ user, token, isAuthenticated: true })
   },
 
   logout: () => {
     localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
     set({ user: null, token: null, isAuthenticated: false })
   },
 }))
@@ -1501,15 +1577,24 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const hasHydrated = useAuthStore((s) => s._hasHydrated)
+  const hydrate = useAuthStore((s) => s.hydrate)
 
   useEffect(() => {
+    hydrate()
+  }, [hydrate])
+
+  useEffect(() => {
+    if (!hasHydrated) return
     const isPublic = PUBLIC_PATHS.some(
       (path) => pathname === path || pathname.startsWith(path + '/')
     )
     if (!isPublic && !isAuthenticated) {
       router.replace(`/login?redirect=${encodeURIComponent(pathname)}`)
     }
-  }, [isAuthenticated, pathname, router])
+  }, [hasHydrated, isAuthenticated, pathname, router])
+
+  if (!hasHydrated) return null
 
   const isPublic = PUBLIC_PATHS.some(
     (path) => pathname === path || pathname.startsWith(path + '/')
@@ -1806,26 +1891,29 @@ Expected: PASS — all tests passing.
 
 ```typescript
 // frontend/src/app/(main)/layout.tsx
+'use client'
+
+import { usePathname } from 'next/navigation'
 import TabBar from '@/components/layout/TabBar'
-import TopBar from '@/components/layout/TopBar'
 
 export default function MainLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const pathname = usePathname()
+  const isChatPage = pathname === '/chat' || pathname.startsWith('/chat/')
+
   return (
     <div
       className="relative mx-auto max-w-mobile min-h-screen"
       style={{ backgroundColor: 'var(--color-warm-cream)' }}
     >
-      {/* TopBar placeholder — individual pages can render their own TopBar */}
-      {/* Content area: padded for fixed top (44px) and bottom (49px + safe area) bars */}
       <main
         className="overflow-y-auto"
         style={{
-          paddingTop: '44px',
-          paddingBottom: 'calc(49px + env(safe-area-inset-bottom))',
+          paddingTop: isChatPage ? '0' : '44px',
+          paddingBottom: isChatPage ? '0' : 'calc(49px + env(safe-area-inset-bottom))',
           minHeight: '100svh',
         }}
       >
@@ -1845,6 +1933,7 @@ export default function MainLayout({
 // frontend/src/app/layout.tsx
 import type { Metadata } from 'next'
 import './globals.css'
+import { AuthGuard } from '@/components/auth/AuthGuard'
 
 export const metadata: Metadata = {
   title: 'Fawn — 家庭育儿助手',
@@ -1864,7 +1953,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>
+        <AuthGuard>{children}</AuthGuard>
+      </body>
     </html>
   )
 }
@@ -2567,7 +2658,8 @@ export function MessageBubble({ message, userName }: MessageBubbleProps) {
     )
   }
 
-  if (message.contentType === 'image' && message.metadata?.imageUrl) {
+  if (message.contentType === 'image') {
+    const imageUrl = message.metadata?.imageUrl ?? message.content
     return (
       <div className={cn('flex w-full', isAgent ? 'justify-start' : 'justify-end', 'px-4 py-1')}>
         {isAgent && (
@@ -2576,9 +2668,10 @@ export function MessageBubble({ message, userName }: MessageBubbleProps) {
           </div>
         )}
         <img
-          src={message.metadata.imageUrl}
+          src={imageUrl}
           alt="attachment"
           className="max-w-[75vw] rounded-[12px] object-cover"
+          data-testid="image-message"
         />
       </div>
     )
@@ -2829,18 +2922,19 @@ Expected: FAIL with "Cannot find module" errors
 // frontend/src/components/chat/ChatInput.tsx
 'use client'
 
-import { useState, KeyboardEvent } from 'react'
+import { useState, useRef, type KeyboardEvent, type ChangeEvent } from 'react'
 import { PlusCircle, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface ChatInputProps {
   onSend: (content: string) => void
-  onAttach?: () => void
+  onAttachImage?: (file: File) => void
   disabled?: boolean
 }
 
-export function ChatInput({ onSend, onAttach, disabled = false }: ChatInputProps) {
+export function ChatInput({ onSend, onAttachImage, disabled = false }: ChatInputProps) {
   const [value, setValue] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSend = () => {
     if (!value.trim() || disabled) return
@@ -2855,22 +2949,44 @@ export function ChatInput({ onSend, onAttach, disabled = false }: ChatInputProps
     }
   }
 
+  const handleAttachClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file && onAttachImage) {
+      onAttachImage(file)
+    }
+    e.target.value = ''
+  }
+
   return (
     <div
       className="bg-white border-t border-oat-border px-3 py-2"
       style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}
     >
       <div className="flex items-end gap-2">
-        {onAttach && (
-          <button
-            data-testid="attach-button"
-            type="button"
-            onClick={onAttach}
-            disabled={disabled}
-            className="flex-shrink-0 text-mid-gray active:text-fawn-amber disabled:opacity-40 mb-1"
-          >
-            <PlusCircle size={24} />
-          </button>
+        {onAttachImage && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+              data-testid="file-input"
+            />
+            <button
+              data-testid="attach-button"
+              type="button"
+              onClick={handleAttachClick}
+              disabled={disabled}
+              className="flex-shrink-0 text-mid-gray active:text-fawn-amber disabled:opacity-40 mb-1"
+            >
+              <PlusCircle size={24} />
+            </button>
+          </>
         )}
         <textarea
           value={value}
@@ -3128,6 +3244,24 @@ describe('useChatStore', () => {
     expect(typingStates).toContain(true)
     expect(result.current.isTyping).toBe(false)
   })
+
+  it('addMessage appends a message to the list', () => {
+    const { result } = renderHook(() => useChatStore())
+    const imageMessage = {
+      id: 'img-1',
+      conversationId: 'conv1',
+      role: 'user' as const,
+      content: 'blob:http://localhost/fake-image',
+      contentType: 'image' as const,
+      createdAt: new Date().toISOString(),
+    }
+    act(() => {
+      result.current.addMessage(imageMessage)
+    })
+    expect(result.current.messages).toHaveLength(1)
+    expect(result.current.messages[0].contentType).toBe('image')
+    expect(result.current.messages[0].id).toBe('img-1')
+  })
 })
 ```
 
@@ -3286,6 +3420,7 @@ interface ChatState {
   currentConversationId: string | null
   loadMessages: (conversationId: string) => Promise<void>
   sendMessage: (content: string) => Promise<void>
+  addMessage: (message: Message) => void
   setTyping: (typing: boolean) => void
 }
 
@@ -3295,6 +3430,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentConversationId: null,
 
   setTyping: (typing) => set({ isTyping: typing }),
+
+  addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
 
   loadMessages: async (conversationId) => {
     const messages = await getMessages(conversationId)
@@ -3408,7 +3545,7 @@ const QUICK_ACTIONS = [
 
 export default function ChatPage() {
   const router = useRouter()
-  const { messages, loadMessages, sendMessage } = useChatStore()
+  const { messages, loadMessages, sendMessage, addMessage } = useChatStore()
 
   const searchParams = useSearchParams()
   const conversationId = searchParams.get('conversationId') ?? DEFAULT_CONVERSATION_ID
@@ -3448,7 +3585,20 @@ export default function ChatPage() {
       {/* Quick Actions + Input */}
       <div className="flex-shrink-0 bg-white border-t border-oat-border">
         <QuickActionChips actions={quickActions} />
-        <ChatInput onSend={handleSend} onAttach={() => {/* TODO: implement image picker in backend integration phase */}} />
+        <ChatInput
+          onSend={handleSend}
+          onAttachImage={(file) => {
+            const imageUrl = URL.createObjectURL(file)
+            addMessage({
+              id: `img-${Date.now()}`,
+              conversationId,
+              role: 'user',
+              content: imageUrl,
+              contentType: 'image',
+              createdAt: new Date().toISOString(),
+            })
+          }}
+        />
       </div>
     </div>
   )
@@ -3580,7 +3730,7 @@ import type { Conversation } from '@/lib/types'
 
 const MOCK_CONVERSATIONS: Conversation[] = [
   {
-    id: 'conv-001',
+    id: 'conv-1',
     userId: 'user-1',
     startedAt: '2024-01-15T08:30:00Z',
     endedAt: '2024-01-15T09:00:00Z',
@@ -3588,7 +3738,7 @@ const MOCK_CONVERSATIONS: Conversation[] = [
     messageCount: 12,
   },
   {
-    id: 'conv-002',
+    id: 'conv-2',
     userId: 'user-1',
     startedAt: '2024-01-15T14:00:00Z',
     endedAt: '2024-01-15T14:20:00Z',
@@ -3596,7 +3746,7 @@ const MOCK_CONVERSATIONS: Conversation[] = [
     messageCount: 8,
   },
   {
-    id: 'conv-003',
+    id: 'conv-3',
     userId: 'user-1',
     startedAt: '2024-01-14T10:00:00Z',
     endedAt: '2024-01-14T10:30:00Z',
@@ -3604,7 +3754,7 @@ const MOCK_CONVERSATIONS: Conversation[] = [
     messageCount: 15,
   },
   {
-    id: 'conv-004',
+    id: 'conv-4',
     userId: 'user-1',
     startedAt: '2024-01-14T20:00:00Z',
     endedAt: '2024-01-14T20:15:00Z',
@@ -3612,7 +3762,7 @@ const MOCK_CONVERSATIONS: Conversation[] = [
     messageCount: 10,
   },
   {
-    id: 'conv-005',
+    id: 'conv-5',
     userId: 'user-1',
     startedAt: '2024-01-13T09:00:00Z',
     endedAt: '2024-01-13T09:45:00Z',
