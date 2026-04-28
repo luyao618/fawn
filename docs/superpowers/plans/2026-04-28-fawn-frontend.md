@@ -3352,13 +3352,15 @@ describe('useChatStore', () => {
 ```typescript
 // frontend/src/components/chat/MessageList.test.tsx
 import { render, screen } from '@testing-library/react'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MessageList } from './MessageList'
 import type { Message } from '@/lib/types'
 import { useChatStore } from '@/lib/chat-store'
 
+const defaultChatState = { isTyping: false }
+
 vi.mock('@/lib/chat-store', () => ({
-  useChatStore: vi.fn(() => ({ isTyping: false })),
+  useChatStore: vi.fn((selector: (s: typeof defaultChatState) => unknown) => selector(defaultChatState)),
 }))
 
 const messages: Message[] = [
@@ -3400,6 +3402,12 @@ const separatedMessages: Message[] = [
 ]
 
 describe('MessageList', () => {
+  beforeEach(() => {
+    vi.mocked(useChatStore).mockImplementation(
+      (selector: (s: typeof defaultChatState) => unknown) => selector({ isTyping: false })
+    )
+  })
+
   it('renders all messages', () => {
     render(<MessageList messages={messages} />)
     expect(screen.getByText('Hello there')).toBeInTheDocument()
@@ -3407,7 +3415,9 @@ describe('MessageList', () => {
   })
 
   it('shows TypingIndicator when isTyping is true', () => {
-    vi.mocked(useChatStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ isTyping: true })
+    vi.mocked(useChatStore).mockImplementation(
+      (selector: (s: typeof defaultChatState) => unknown) => selector({ isTyping: true })
+    )
     render(<MessageList messages={messages} />)
     expect(screen.getAllByTestId('typing-dot')).toHaveLength(3)
   })
@@ -3736,7 +3746,7 @@ git commit -m "feat(frontend): add chat store, MessageList, and chat page assemb
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockPush = vi.fn()
+const mockPush = vi.hoisted(() => vi.fn())
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, back: vi.fn() }),
