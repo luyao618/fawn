@@ -80,7 +80,8 @@ Co-Authored-By: Claude Opus 4 <noreply@anthropic.com>
 - `frontend/src/components/chat/MessageList.test.tsx`
 
 **Chat Pages:**
-- `frontend/src/app/(main)/chat/page.tsx`
+- `frontend/src/app/(main)/chat/page.tsx` — Server wrapper with Suspense boundary
+- `frontend/src/app/(main)/chat/ChatClient.tsx` — Client component with useSearchParams
 - `frontend/src/app/(main)/chat/page.test.tsx`
 - `frontend/src/app/(main)/history/page.tsx`
 - `frontend/src/app/(main)/history/page.test.tsx`
@@ -2009,19 +2010,20 @@ export default function MainLayout({
 
 ```typescript
 // frontend/src/app/layout.tsx
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 
 export const metadata: Metadata = {
   title: 'Fawn — 家庭育儿助手',
   description: '私有化家庭育儿 Agent，陪伴宝宝成长每一步',
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 }
 
 export default function RootLayout({
@@ -3228,6 +3230,7 @@ git commit -m "feat(frontend): add chat input and interaction components"
 - Create: `frontend/src/lib/chat-store.ts`
 - Create: `frontend/src/components/chat/MessageList.tsx`
 - Create: `frontend/src/app/(main)/chat/page.tsx`
+- Create: `frontend/src/app/(main)/chat/ChatClient.tsx`
 - Test: `frontend/src/lib/chat-store.test.ts`
 - Test: `frontend/src/components/chat/MessageList.test.tsx`
 - Test: `frontend/src/app/(main)/chat/page.test.tsx`
@@ -3349,7 +3352,7 @@ describe('useChatStore', () => {
 ```typescript
 // frontend/src/components/chat/MessageList.test.tsx
 import { render, screen } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { MessageList } from './MessageList'
 import type { Message } from '@/lib/types'
 import { useChatStore } from '@/lib/chat-store'
@@ -3423,8 +3426,8 @@ describe('MessageList', () => {
 
 ```typescript
 // frontend/src/app/(main)/chat/page.test.tsx
-import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -3454,31 +3457,31 @@ vi.mock('@/lib/chat-store', () => ({
   })),
 }))
 
-import ChatPage from './page'
+import { ChatClient } from './ChatClient'
 
 describe('ChatPage', () => {
   it('renders the Fawn title in the top bar', () => {
-    render(<ChatPage />)
+    render(<ChatClient />)
     expect(screen.getByText('Fawn')).toBeInTheDocument()
   })
 
   it('renders the chat input', () => {
-    render(<ChatPage />)
+    render(<ChatClient />)
     expect(screen.getByPlaceholderText('输入消息...')).toBeInTheDocument()
   })
 
   it('renders quick action chips', () => {
-    render(<ChatPage />)
+    render(<ChatClient />)
     expect(screen.getByText('记录喂奶')).toBeInTheDocument()
   })
 
   it('renders message in the list', () => {
-    render(<ChatPage />)
+    render(<ChatClient />)
     expect(screen.getByText('Welcome to Fawn!')).toBeInTheDocument()
   })
 
   it('renders history navigation button', () => {
-    render(<ChatPage />)
+    render(<ChatClient />)
     expect(screen.getByTestId('history-button')).toBeInTheDocument()
   })
 })
@@ -3607,6 +3610,24 @@ export function MessageList({ messages }: MessageListProps) {
 
 ```typescript
 // frontend/src/app/(main)/chat/page.tsx
+import { Suspense } from 'react'
+import { ChatClient } from './ChatClient'
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-warm-cream">
+        <span className="text-mid-gray text-[15px]">加载中...</span>
+      </div>
+    }>
+      <ChatClient />
+    </Suspense>
+  )
+}
+```
+
+```typescript
+// frontend/src/app/(main)/chat/ChatClient.tsx
 'use client'
 
 import { useEffect } from 'react'
@@ -3626,7 +3647,7 @@ const QUICK_ACTIONS = [
   { label: '查看生长曲线', prompt: '展示宝宝的生长曲线' },
 ]
 
-export default function ChatPage() {
+export function ChatClient() {
   const router = useRouter()
   const { messages, loadMessages, sendMessage, addMessage } = useChatStore()
 
@@ -3696,7 +3717,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/lib/chat-store.ts frontend/src/components/chat/MessageList.tsx frontend/src/app/\(main\)/chat/page.tsx frontend/src/lib/chat-store.test.ts frontend/src/components/chat/MessageList.test.tsx frontend/src/app/\(main\)/chat/page.test.tsx
+git add frontend/src/lib/chat-store.ts frontend/src/components/chat/MessageList.tsx frontend/src/app/\(main\)/chat/page.tsx frontend/src/app/\(main\)/chat/ChatClient.tsx frontend/src/lib/chat-store.test.ts frontend/src/components/chat/MessageList.test.tsx frontend/src/app/\(main\)/chat/page.test.tsx
 git commit -m "feat(frontend): add chat store, MessageList, and chat page assembly"
 ```
 
@@ -3713,15 +3734,21 @@ git commit -m "feat(frontend): add chat store, MessageList, and chat page assemb
 ```typescript
 // frontend/src/app/(main)/history/page.test.tsx
 import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+const mockPush = vi.fn()
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
+  useRouter: () => ({ push: mockPush, back: vi.fn() }),
 }))
 
 import HistoryPage from './page'
 
 describe('HistoryPage', () => {
+  beforeEach(() => {
+    mockPush.mockClear()
+  })
+
   it('renders the 历史对话 title', () => {
     render(<HistoryPage />)
     expect(screen.getByText('历史对话')).toBeInTheDocument()
@@ -3766,15 +3793,10 @@ describe('HistoryPage', () => {
   })
 
   it('navigates to conversation when item is clicked', () => {
-    const push = vi.fn()
-    vi.mocked(await import('next/navigation')).useRouter = () => ({
-      push,
-      back: vi.fn(),
-    })
     render(<HistoryPage />)
     const firstItem = screen.getAllByTestId('conversation-item')[0]
     fireEvent.click(firstItem)
-    expect(push).toHaveBeenCalled()
+    expect(mockPush).toHaveBeenCalled()
   })
 
   it('groups conversations by date', () => {
