@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-canvas: #FFF9F4;
+  --color-card: #FFFFFF;
+  --color-brand: #D4956A;
+  --color-brand-light: #F2DFD0;
+  --color-text-primary: #2C2C2E;
+  --color-text-secondary: #636366;
+  --color-text-placeholder: #8E8E93;
+  --color-border: #E5DED5;
+  --color-bubble-agent: #F2EDE8;
+  --color-bubble-user: #D4956A;
+  --color-safety: #E25B45;
+  --color-safety-bg: #FDEEEB;
+  --color-success: #7FB685;
+  --radius-card: 16px;
+  --radius-bubble: 20px;
+  --radius-input: 20px;
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --transition-fast: 150ms ease-out;
+  --transition-page: 250ms ease-in-out;
+  --transition-bubble: 200ms ease-out;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--color-canvas);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  letter-spacing: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+img {
+  max-width: 100%;
+}
+
+@keyframes typing-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mobile-shell {
+  width: 100%;
+  max-width: 428px;
+  min-height: 100vh;
+  margin: 0 auto;
+  background: var(--color-canvas);
+}
+
+.safe-bottom {
+  padding-bottom: var(--safe-area-bottom);
+}

@@ -1,0 +1,16 @@
+family:
+  - username: mama
+    display_name: Mom
+    role: admin
+    password: "change-me"
+  - username: baba
+    display_name: Dad
+    role: parent
+    password: "change-me"
+  - username: nainai
+    display_name: Grandma
+    role: family
+    password: "change-me"
+    permissions:
+      can_upload_photos: true
+      can_write_tracker: false
