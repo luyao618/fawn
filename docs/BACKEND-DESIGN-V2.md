@@ -505,6 +505,7 @@ SSE 事件类型：
 | `tool_result` | Tool 执行结果 | 渲染为数据卡片（生长数据、统计等） |
 | `done` | 流结束 | 结束加载态，保存 message_id，根据 message_type 渲染样式 |
 | `error` | 错误 | 显示错误提示 |
+| `session_expired` | 会话已超时（30 分钟无活动），payload: `{ type, expired_conversation_id }` | 前端创建新对话，重新发送消息 |
 
 **GET /api/chat/conversations**
 
@@ -985,11 +986,20 @@ from fastapi.responses import StreamingResponse
 
 @router.post("/conversations/{conv_id}/messages")
 async def send_message(conv_id: str, body: SendMessageRequest, user: User = Depends(get_current_user)):
+    # 0. 检查会话超时（30 分钟无活动）
+    #    若超时：finalize 旧会话（摘要 + 画像 + 标记结束）→ 返回 session_expired 事件 → 关闭流
     # 1. 保存用户消息到 messages 表
     # 2. 构建 agent input 和 config
     # 3. 流式执行 agent 并逐事件返回
 
     async def event_stream():
+        # 超时检查：check_session_timeout 只检测，不 finalize
+        expired_conv_id = await check_session_timeout(user.id)
+        if expired_conv_id:
+            await finalize_conversation(expired_conv_id)
+            yield f"data: {json.dumps({'type': 'session_expired', 'expired_conversation_id': expired_conv_id})}\n\n"
+            return
+
         config = {"configurable": {"thread_id": conv_id}}
         input_message = HumanMessage(content=body.content)
 
@@ -1025,11 +1035,12 @@ async def send_message(conv_id: str, body: SendMessageRequest, user: User = Depe
 ```
 1. POST 请求发出
 2. 逐行读取 SSE 事件
-3. type=token → 追加到 Agent 气泡文本
-4. type=tool_call → 显示"正在记录..."或"正在查询..."
-5. type=tool_result → 渲染为数据卡片组件
-6. type=done → 结束加载态
-7. type=error → 显示错误提示
+3. type=session_expired → 会话已超时，前端创建新对话并重发消息
+4. type=token → 追加到 Agent 气泡文本
+5. type=tool_call → 显示"正在记录..."或"正在查询..."
+6. type=tool_result → 渲染为数据卡片组件
+7. type=done → 结束加载态
+8. type=error → 显示错误提示
 ```
 
 ---

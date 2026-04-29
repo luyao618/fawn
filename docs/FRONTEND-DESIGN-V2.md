@@ -192,7 +192,8 @@ type SSEEvent =
   | { type: 'tool_call'; name: string; args: Record<string, unknown> }
   | { type: 'tool_result'; name: string; result: Record<string, unknown> }
   | { type: 'done'; message_id: string; message_type: MessageType }  // message_type 由后端判定
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'session_expired'; expired_conversation_id: string };  // 会话超时，需创建新对话重发
 
 // === Tracker ===
 type TrackerType = 'growth' | 'feeding' | 'sleep' | 'health';
@@ -532,6 +533,7 @@ interface SSEOptions {
   onToolResult: (name: string, result: Record<string, unknown>) => void;
   onDone: (messageId: string) => void;
   onError: (message: string) => void;
+  onSessionExpired: (expiredConversationId: string) => void;
 }
 
 async function consumeSSE(response: Response, options: SSEOptions): Promise<void> {
@@ -557,6 +559,7 @@ async function consumeSSE(response: Response, options: SSEOptions): Promise<void
         case 'tool_result': options.onToolResult(data.name, data.result); break;
         case 'done':       options.onDone(data.message_id); break;
         case 'error':      options.onError(data.message); break;
+        case 'session_expired': options.onSessionExpired(data.expired_conversation_id); break;
       }
     }
   }
@@ -580,6 +583,7 @@ async sendMessage(content: string) {
   //      onToolResult: (name, result) => { /* 移除 pending, 暂存卡片数据 */ },
   //      onDone: (msgId) => { /* 合并为完整 Message, isStreaming = false */ },
   //      onError: (msg) => { /* 显示错误, isStreaming = false */ },
+  //      onSessionExpired: (expiredId) => { /* 创建新对话, 用原始 content 重新调用 sendMessage */ },
   //    })
 }
 ```
