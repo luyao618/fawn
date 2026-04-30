@@ -16,10 +16,11 @@ async def retrieve(
     query: str,
     top_k: int | None = None,
     threshold: float | None = None,
+    raw: bool = False,
 ) -> list[dict[str, Any]]:
     settings = get_settings()
-    top_k = top_k or settings.rag_top_k
-    threshold = threshold or settings.rag_similarity_threshold
+    top_k = top_k if top_k is not None else settings.rag_top_k
+    threshold = threshold if threshold is not None else settings.rag_similarity_threshold
 
     embeddings_model = get_embeddings()
     query_embedding = await embeddings_model.aembed_query(query)
@@ -39,7 +40,7 @@ async def retrieve(
 
     results = []
     for chunk, similarity in rows:
-        if similarity < threshold:
+        if not raw and similarity < threshold:
             continue
         results.append({
             "content": chunk.content,

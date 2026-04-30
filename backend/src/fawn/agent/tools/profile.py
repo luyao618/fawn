@@ -1,15 +1,15 @@
 import uuid
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
 
 from fawn.db.session import async_session_factory
 from fawn.models import ProfileItem
 
 
-def _context(config: RunnableConfig | None) -> dict[str, str]:
-    return dict((config or {}).get("configurable", {}))
+InjectedUserId = Annotated[str, InjectedState("user_id")]
+InjectedConversationId = Annotated[str, InjectedState("conversation_id")]
 
 
 @tool
@@ -17,18 +17,22 @@ async def update_user_profile(
     action: Literal["add", "update", "delete"],
     content: str | None = None,
     item_id: str | None = None,
-    config: RunnableConfig | None = None,
+    user_id: InjectedUserId = "",
+    conversation_id: InjectedConversationId = "",
 ) -> dict[str, Any]:
     """Add, update, or delete a user profile item."""
-    ctx = _context(config)
-    user_id = uuid.UUID(ctx["user_id"])
-    conversation_id = uuid.UUID(ctx["conversation_id"])
+    if not user_id:
+        return {"error": "missing user context"}
+    user_uuid = uuid.UUID(user_id)
+    conversation_uuid = uuid.UUID(conversation_id) if conversation_id else None
     async with async_session_factory() as db:
         if action == "add":
             if not content:
                 return {"error": "content is required"}
             item = ProfileItem(
-                user_id=user_id, content=content, source_conversation_id=conversation_id
+                user_id=user_uuid,
+                content=content,
+                source_conversation_id=conversation_uuid,
             )
             db.add(item)
             await db.commit()
@@ -37,7 +41,7 @@ async def update_user_profile(
         if not item_id:
             return {"error": "item_id is required"}
         item = await db.get(ProfileItem, uuid.UUID(item_id))
-        if item is None or item.user_id != user_id:
+        if item is None or item.user_id != user_uuid:
             return {"error": "profile item not found"}
         if action == "update":
             if not content:

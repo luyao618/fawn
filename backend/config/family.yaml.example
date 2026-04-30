@@ -14,3 +14,13 @@ family:
     permissions:
       can_upload_photos: true
       can_write_tracker: false
+
+baby:
+  name: Baby
+  gender: female
+  birth_date: "2026-01-01"
+  birth_weight_g: 3200
+  birth_height_cm: 50
+  birth_head_cm: 34
+  is_premature: false
+  gestational_weeks: 40

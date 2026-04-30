@@ -10,7 +10,7 @@ from fawn.db.session import get_db
 from fawn.dependencies import get_current_user, require_photo_uploader
 from fawn.models import User
 from fawn.services import album as album_service
-from fawn.services.profile import get_baby
+from fawn.services import profile as profile_service
 from fawn.services.storage import get_presigned_url
 
 router = APIRouter(prefix="/album", tags=["album"])
@@ -33,9 +33,9 @@ async def upload_photo(
     user: User = Depends(require_photo_uploader),
     db: AsyncSession = Depends(get_db),
 ):
-    baby = await get_baby(db)
-    content = await file.read()
     try:
+        baby = await profile_service.get_baby(db)
+        content = await file.read()
         photo = await album_service.upload_photo(
             db,
             user,
@@ -45,6 +45,8 @@ async def upload_photo(
             mime_type=file.content_type or "application/octet-stream",
             file_size=len(content),
         )
+    except profile_service.NotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except album_service.NotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _photo_to_read(photo)

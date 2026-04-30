@@ -1,0 +1,62 @@
+documents:
+  - title: "海蒂育儿大百科 0-1岁"
+    author: "Heidi Murkoff"
+    source: "南海出版公司"
+    publish_date: "2014-02-01"
+    doc_type: book_zh
+    path: "docs/books/parenting-books/海蒂育儿大百科_0-1岁_完整版.md"
+
+  - title: "美国儿科学会育儿百科（第六版）"
+    author: "斯蒂文·谢尔弗"
+    source: "AAP"
+    publish_date: "2016-05-01"
+    doc_type: book_zh
+    path: "docs/books/parenting-books/美国儿科学会育儿百科（第六版） - 斯蒂文·谢尔弗.txt"
+
+  - title: "IYCF Model Chapter"
+    author: "WHO"
+    source: "WHO"
+    publish_date: "2009-01-01"
+    doc_type: guide_en
+    path: "docs/books/WHO-feeding-guidelines/IYCF_model_chapter_2009.md"
+
+  - title: "WHO Newborn Health Recommendations"
+    author: "WHO"
+    source: "WHO"
+    publish_date: "2017-01-01"
+    doc_type: guide_en
+    path: "docs/books/WHO-feeding-guidelines/WHO-newborn-health-recommendations-2017.md"
+
+  - title: "CDC Developmental Milestones - 2 Months"
+    author: "CDC"
+    source: "CDC"
+    publish_date: "2026-02-16"
+    doc_type: checklist
+    path: "docs/books/CDC-developmental-milestones/milestones-2-months.md"
+    metadata:
+      age_months: 2
+
+  - title: "CDC Developmental Milestones - 4 Months"
+    author: "CDC"
+    source: "CDC"
+    publish_date: "2026-02-16"
+    doc_type: checklist
+    path: "docs/books/CDC-developmental-milestones/milestones-4-months.md"
+    metadata:
+      age_months: 4
+
+  - title: "CDC Developmental Milestones - 6 Months"
+    author: "CDC"
+    source: "CDC"
+    publish_date: "2026-02-16"
+    doc_type: checklist
+    path: "docs/books/CDC-developmental-milestones/milestones-6-months.md"
+    metadata:
+      age_months: 6
+
+  - title: "中国国家免疫规划疫苗接种程序（2021年版）"
+    author: "国家卫生健康委员会"
+    source: "NHC"
+    publish_date: "2021-03-01"
+    doc_type: checklist
+    path: "docs/books/CN-immunization-schedule/schedule.md"

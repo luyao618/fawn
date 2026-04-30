@@ -1,9 +1,9 @@
 import uuid
 from datetime import UTC, date as date_cls, datetime, timedelta
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
 from sqlalchemy import select
 
 from fawn.db.session import async_session_factory
@@ -11,8 +11,8 @@ from fawn.models import Baby, User
 from fawn.services import tracker as tracker_service
 
 
-def _context(config: RunnableConfig | None) -> dict[str, str]:
-    return dict((config or {}).get("configurable", {}))
+InjectedUserId = Annotated[str, InjectedState("user_id")]
+InjectedConversationId = Annotated[str, InjectedState("conversation_id")]
 
 
 async def _load_user(user_id: str) -> tuple[Any, Any, User]:
@@ -47,17 +47,27 @@ def _error(exc: Exception) -> str:
     return str(exc)
 
 
+def _missing_context(user_id: str, conversation_id: str | None = None) -> str | None:
+    if not user_id:
+        return "缺少当前用户上下文，请重新登录后再试"
+    if conversation_id is not None and not conversation_id:
+        return "缺少当前会话上下文，请重新开启对话后再试"
+    return None
+
+
 @tool
 async def record_growth(
     measurement_date: str,
     weight_g: int | None = None,
     height_cm: float | None = None,
     head_cm: float | None = None,
-    config: RunnableConfig | None = None,
+    user_id: InjectedUserId = "",
+    conversation_id: InjectedConversationId = "",
 ) -> dict[str, Any] | str:
     """Record baby growth data and calculate WHO percentiles."""
-    ctx = _context(config)
-    session, db, user = await _load_user(ctx["user_id"])
+    if error := _missing_context(user_id, conversation_id):
+        return error
+    session, db, user = await _load_user(user_id)
     try:
         record = await tracker_service.create_growth_record(
             db,
@@ -66,7 +76,7 @@ async def record_growth(
             weight_g=weight_g,
             height_cm=height_cm,
             head_cm=head_cm,
-            source_conversation_id=uuid.UUID(ctx["conversation_id"]),
+            source_conversation_id=uuid.UUID(conversation_id),
         )
         payload = _record_payload(record)
         payload["percentiles"] = {
@@ -94,11 +104,13 @@ async def record_feeding(
     amount_ml: int | None = None,
     duration_min: int | None = None,
     notes: str | None = None,
-    config: RunnableConfig | None = None,
+    user_id: InjectedUserId = "",
+    conversation_id: InjectedConversationId = "",
 ) -> dict[str, str] | str:
     """Record a feeding event."""
-    ctx = _context(config)
-    session, db, user = await _load_user(ctx["user_id"])
+    if error := _missing_context(user_id, conversation_id):
+        return error
+    session, db, user = await _load_user(user_id)
     try:
         record = await tracker_service.create_feeding_record(
             db,
@@ -108,7 +120,7 @@ async def record_feeding(
             amount_ml=amount_ml,
             duration_min=duration_min,
             notes=notes,
-            source_conversation_id=uuid.UUID(ctx["conversation_id"]),
+            source_conversation_id=uuid.UUID(conversation_id),
         )
         return _record_payload(record)
     except Exception as exc:
@@ -124,11 +136,13 @@ async def record_sleep(
     sleep_end: str | None = None,
     night_wakings: int = 0,
     notes: str | None = None,
-    config: RunnableConfig | None = None,
+    user_id: InjectedUserId = "",
+    conversation_id: InjectedConversationId = "",
 ) -> dict[str, str] | str:
     """Record a sleep event."""
-    ctx = _context(config)
-    session, db, user = await _load_user(ctx["user_id"])
+    if error := _missing_context(user_id, conversation_id):
+        return error
+    session, db, user = await _load_user(user_id)
     try:
         record = await tracker_service.create_sleep_record(
             db,
@@ -138,7 +152,7 @@ async def record_sleep(
             night_wakings=night_wakings,
             sleep_type=sleep_type,
             notes=notes,
-            source_conversation_id=uuid.UUID(ctx["conversation_id"]),
+            source_conversation_id=uuid.UUID(conversation_id),
         )
         return _record_payload(record)
     except Exception as exc:
@@ -153,11 +167,13 @@ async def record_health(
     record_type: Literal["vaccination", "illness", "checkup"],
     title: str,
     description: str | None = None,
-    config: RunnableConfig | None = None,
+    user_id: InjectedUserId = "",
+    conversation_id: InjectedConversationId = "",
 ) -> dict[str, str] | str:
     """Record a health event."""
-    ctx = _context(config)
-    session, db, user = await _load_user(ctx["user_id"])
+    if error := _missing_context(user_id, conversation_id):
+        return error
+    session, db, user = await _load_user(user_id)
     try:
         record = await tracker_service.create_health_record(
             db,
@@ -166,7 +182,7 @@ async def record_health(
             record_type=record_type,
             title=title,
             description=description,
-            source_conversation_id=uuid.UUID(ctx["conversation_id"]),
+            source_conversation_id=uuid.UUID(conversation_id),
         )
         return _record_payload(record)
     except Exception as exc:
@@ -180,11 +196,12 @@ async def update_tracker_record(
     record_type: Literal["growth", "feeding", "sleep", "health"],
     record_id: str,
     updates: dict[str, Any],
-    config: RunnableConfig | None = None,
+    user_id: InjectedUserId = "",
 ) -> dict[str, Any] | str:
     """Update a tracker record by id."""
-    ctx = _context(config)
-    session, db, user = await _load_user(ctx["user_id"])
+    if error := _missing_context(user_id):
+        return error
+    session, db, user = await _load_user(user_id)
     try:
         record = await tracker_service.update_tracker_record(
             db,
@@ -204,11 +221,12 @@ async def update_tracker_record(
 async def delete_tracker_record(
     record_type: Literal["growth", "feeding", "sleep", "health"],
     record_id: str,
-    config: RunnableConfig | None = None,
+    user_id: InjectedUserId = "",
 ) -> dict[str, Any] | str:
     """Delete a tracker record by id."""
-    ctx = _context(config)
-    session, db, user = await _load_user(ctx["user_id"])
+    if error := _missing_context(user_id):
+        return error
+    session, db, user = await _load_user(user_id)
     try:
         await tracker_service.delete_tracker_record(db, user, record_type, uuid.UUID(record_id))
         return {"record_id": record_id, "deleted": True}

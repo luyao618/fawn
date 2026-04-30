@@ -20,11 +20,10 @@ async def test_update_user_profile_add(db: AsyncSession, test_user: User):
 
     ctx = _make_ctx(test_user.id)
 
-    with patch("fawn.agent.tools.profile.async_session_factory", side_effect=mock_session), \
-         patch("fawn.agent.tools.profile._context", return_value=ctx):
+    with patch("fawn.agent.tools.profile.async_session_factory", side_effect=mock_session):
         from fawn.agent.tools.profile import update_user_profile
         result = await update_user_profile.ainvoke(
-            {"action": "add", "content": "Baby sleeps at 8pm"},
+            {"action": "add", "content": "Baby sleeps at 8pm", **ctx},
         )
 
     assert result["action"] == "add"
@@ -38,11 +37,10 @@ async def test_update_user_profile_add_no_content(db: AsyncSession, test_user: U
 
     ctx = _make_ctx(test_user.id)
 
-    with patch("fawn.agent.tools.profile.async_session_factory", side_effect=mock_session), \
-         patch("fawn.agent.tools.profile._context", return_value=ctx):
+    with patch("fawn.agent.tools.profile.async_session_factory", side_effect=mock_session):
         from fawn.agent.tools.profile import update_user_profile
         result = await update_user_profile.ainvoke(
-            {"action": "add", "content": None},
+            {"action": "add", "content": None, **ctx},
         )
 
     assert "error" in result
@@ -63,11 +61,10 @@ async def test_update_user_profile_delete(db: AsyncSession, test_user: User):
 
     ctx = _make_ctx(test_user.id)
 
-    with patch("fawn.agent.tools.profile.async_session_factory", side_effect=mock_session), \
-         patch("fawn.agent.tools.profile._context", return_value=ctx):
+    with patch("fawn.agent.tools.profile.async_session_factory", side_effect=mock_session):
         from fawn.agent.tools.profile import update_user_profile
         result = await update_user_profile.ainvoke(
-            {"action": "delete", "item_id": str(item.id)},
+            {"action": "delete", "item_id": str(item.id), **ctx},
         )
 
     assert result["action"] == "delete"
@@ -80,11 +77,10 @@ async def test_update_user_profile_not_found(db: AsyncSession, test_user: User):
 
     ctx = _make_ctx(test_user.id)
 
-    with patch("fawn.agent.tools.profile.async_session_factory", side_effect=mock_session), \
-         patch("fawn.agent.tools.profile._context", return_value=ctx):
+    with patch("fawn.agent.tools.profile.async_session_factory", side_effect=mock_session):
         from fawn.agent.tools.profile import update_user_profile
         result = await update_user_profile.ainvoke(
-            {"action": "delete", "item_id": str(uuid.uuid4())},
+            {"action": "delete", "item_id": str(uuid.uuid4()), **ctx},
         )
 
     assert "error" in result

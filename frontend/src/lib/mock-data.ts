@@ -414,6 +414,8 @@ export const mockProfileItems: ProfileItem[] = [
 
 export function mockSSEEventsFor(content: string, role: User['role'] = 'parent'): SSEEvent[] {
   const normalized = content.toLowerCase();
+  const isCorrection =
+    content.includes('不对') || content.includes('纠正') || (content.includes('不是') && !content.includes('是不是'));
 
   if (content.includes('发烧') || content.includes('39') || content.includes('高烧')) {
     return [
@@ -430,7 +432,7 @@ export function mockSSEEventsFor(content: string, role: User['role'] = 'parent')
     ];
   }
 
-  if (content.includes('不对') || content.includes('不是') || content.includes('纠正')) {
+  if (isCorrection) {
     return [
       { type: 'tool_call', name: 'update_tracker_record', args: { type: 'growth', field: 'weight_g' } },
       {
@@ -477,9 +479,8 @@ export function mockSSEEventsFor(content: string, role: User['role'] = 'parent')
       {
         type: 'token',
         content:
-          '已记录今天体重 4.2kg。按晨晨当前月龄估算约在 WHO P35，仍处在常见范围内。最近一周继续观察吃奶量、尿量和精神状态即可。',
+          '已记录今天体重 4.2kg。按晨晨当前月龄估算约在 WHO P35，仍处在常见范围内。最近一周继续观察吃奶量、尿量和精神状态即可。来源：《0-6月婴儿喂养与生长参考》第2章',
       },
-      { type: 'token', content: ' -- 来源：《0-6月婴儿喂养与生长参考》第2章' },
       { type: 'done', message_id: `msg-${Date.now()}`, message_type: 'data_card' },
     ];
   }

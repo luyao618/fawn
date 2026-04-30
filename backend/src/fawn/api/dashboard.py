@@ -1,7 +1,7 @@
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,7 @@ from fawn.api.schemas import (
 from fawn.db.session import get_db
 from fawn.dependencies import get_current_user
 from fawn.models import FeedingRecord, GrowthRecord, SleepRecord, User, WhoGrowthReference
-from fawn.services.tracker import get_default_baby, lms_value_for_z
+from fawn.services.tracker import NotFound, get_default_baby, lms_value_for_z
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -49,7 +49,10 @@ async def summary(
     _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DashboardSummary:
-    baby = await get_default_baby(db)
+    try:
+        baby = await get_default_baby(db)
+    except NotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     today = date.today()
     age_days = (today - baby.birth_date).days
 
@@ -119,7 +122,10 @@ async def growth_chart(
     _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GrowthChartData:
-    baby = await get_default_baby(db)
+    try:
+        baby = await get_default_baby(db)
+    except NotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     records = list(
         (
             await db.execute(select(GrowthRecord).order_by(GrowthRecord.measurement_date.asc()))

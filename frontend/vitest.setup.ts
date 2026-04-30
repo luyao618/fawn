@@ -23,6 +23,11 @@ class ResizeObserverMock {
 
 global.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
 
+Object.defineProperty(Element.prototype, 'scrollIntoView', {
+  writable: true,
+  value: vi.fn(),
+});
+
 Object.defineProperty(URL, 'createObjectURL', {
   writable: true,
   value: vi.fn((file: File) => `/mock-object-url/${file.name}`),

@@ -388,6 +388,8 @@ CREATE TABLE knowledge_documents (
     author       VARCHAR(200),
     source       VARCHAR(500) NOT NULL,
     publish_date DATE,
+    doc_type     VARCHAR(50),
+    document_metadata JSONB NOT NULL DEFAULT '{}',
     file_key     VARCHAR(500) NOT NULL,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -1221,6 +1223,7 @@ MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
+OPENAI_API_BASE=https://api.siliconflow.cn/v1
 JWT_SECRET=your-secret-key-here
 ```
 

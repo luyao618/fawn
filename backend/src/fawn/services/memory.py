@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -50,16 +51,19 @@ async def _generate_summary(messages: list[Message]) -> tuple[str, list[str]]:
         return "", []
     try:
         llm = create_chat_model("summary")
-        response = await llm.ainvoke(
-            [
-                HumanMessage(
-                    content=(
-                        "Summarize this family baby-care conversation in Chinese. "
-                        "Return JSON with keys summary and key_topics.\n\n"
-                        f"{transcript}"
+        response = await asyncio.wait_for(
+            llm.ainvoke(
+                [
+                    HumanMessage(
+                        content=(
+                            "Summarize this family baby-care conversation in Chinese. "
+                            "Return JSON with keys summary and key_topics.\n\n"
+                            f"{transcript}"
+                        )
                     )
-                )
-            ]
+                ]
+            ),
+            timeout=get_settings().llm.request_timeout_seconds,
         )
         raw = (
             response.content
@@ -81,16 +85,19 @@ async def _extract_profile_items(messages: list[Message]) -> list[str]:
         return []
     try:
         llm = create_chat_model("summary")
-        response = await llm.ainvoke(
-            [
-                HumanMessage(
-                    content=(
-                        "Extract durable, factual baby-care related user profile facts from the transcript. "
-                        "Avoid subjective inference. Return a JSON array of strings only.\n\n"
-                        f"{transcript}"
+        response = await asyncio.wait_for(
+            llm.ainvoke(
+                [
+                    HumanMessage(
+                        content=(
+                            "Extract durable, factual baby-care related user profile facts from the transcript. "
+                            "Avoid subjective inference. Return a JSON array of strings only.\n\n"
+                            f"{transcript}"
+                        )
                     )
-                )
-            ]
+                ]
+            ),
+            timeout=get_settings().llm.request_timeout_seconds,
         )
         raw = (
             response.content
@@ -124,7 +131,10 @@ async def finalize_conversation(db: AsyncSession, conversation_id: uuid.UUID) ->
         select(ConversationSummary).where(ConversationSummary.conversation_id == conversation_id)
     )
     if existing_summary is None:
-        summary, key_topics = await _generate_summary(messages)
+        (summary, key_topics), profile_items = await asyncio.gather(
+            _generate_summary(messages),
+            _extract_profile_items(messages),
+        )
         db.add(
             ConversationSummary(
                 conversation_id=conversation_id,
@@ -132,8 +142,10 @@ async def finalize_conversation(db: AsyncSession, conversation_id: uuid.UUID) ->
                 key_topics=key_topics,
             )
         )
+    else:
+        profile_items = await _extract_profile_items(messages)
 
-    for content in await _extract_profile_items(messages):
+    for content in profile_items:
         db.add(
             ProfileItem(
                 user_id=conversation.user_id,

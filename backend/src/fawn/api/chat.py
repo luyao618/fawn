@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import json
+import logging
 import mimetypes
 import uuid
 from pathlib import Path
@@ -31,6 +33,7 @@ from fawn.services.memory import check_session_timeout, finalize_conversation
 from fawn.services.storage import get_bytes, put_bytes
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+logger = logging.getLogger(__name__)
 
 
 async def _get_user_conversation(
@@ -277,6 +280,12 @@ async def send_message(
 
         baby, profile_items, summaries = await _prompt_context(db, user)
         system_prompt = build_system_prompt(user, baby, profile_items, summaries)
+        if not get_settings().llm.tool_calling_enabled:
+            system_prompt += (
+                "\n\n## 当前运行模式\n"
+                "- 后端当前未启用工具调用。不要声称已经写入或查询系统记录。\n"
+                "- 用户提供需要记录的数据时，请用自然语言确认并提示可到对应记录页手动填写。"
+            )
         response_text = ""
         try:
             graph = await get_agent_graph()
@@ -298,32 +307,38 @@ async def send_message(
                     "user_role": user.role,
                 }
             }
-            async for event in graph.astream_events(input_state, config=config, version="v2"):
-                kind = event.get("event")
-                if kind == "on_chat_model_stream":
-                    chunk = event.get("data", {}).get("chunk")
-                    token = getattr(chunk, "content", "")
-                    if isinstance(token, str) and token:
-                        response_text += token
-                        yield _sse({"type": "token", "content": token})
-                elif kind == "on_tool_start":
-                    yield _sse(
-                        {
-                            "type": "tool_call",
-                            "name": event.get("name"),
-                            "args": event.get("data", {}).get("input", {}),
-                        }
-                    )
-                elif kind == "on_tool_end":
-                    yield _sse(
-                        {
-                            "type": "tool_result",
-                            "name": event.get("name"),
-                            "result": event.get("data", {}).get("output", ""),
-                        }
-                    )
+            async with asyncio.timeout(get_settings().llm.request_timeout_seconds):
+                async for event in graph.astream_events(input_state, config=config, version="v2"):
+                    kind = event.get("event")
+                    if kind == "on_chat_model_stream":
+                        chunk = event.get("data", {}).get("chunk")
+                        token = getattr(chunk, "content", "")
+                        if isinstance(token, str) and token:
+                            response_text += token
+                            yield _sse({"type": "token", "content": token})
+                    elif kind == "on_tool_start":
+                        yield _sse(
+                            {
+                                "type": "tool_call",
+                                "name": event.get("name"),
+                                "args": event.get("data", {}).get("input", {}),
+                            }
+                        )
+                    elif kind == "on_tool_end":
+                        yield _sse(
+                            {
+                                "type": "tool_result",
+                                "name": event.get("name"),
+                                "result": event.get("data", {}).get("output", ""),
+                            }
+                        )
+        except TimeoutError:
+            logger.warning("Chat response timed out for conversation %s", conversation_id)
+            yield _sse({"type": "error", "message": "模型响应超时，请稍后重试"})
+            return
         except Exception as exc:
-            yield _sse({"type": "error", "message": str(exc)})
+            logger.warning("Chat response failed for conversation %s", conversation_id, exc_info=True)
+            yield _sse({"type": "error", "message": str(exc) or exc.__class__.__name__})
             return
 
         assistant_message = Message(

@@ -1,0 +1,155 @@
+questions:
+  # feeding (6)
+  - query: "宝宝3个月，每天应该吃多少奶？"
+    category: feeding
+    expected_source: "海蒂育儿大百科 0-1岁"
+    expected_keywords: ["奶量", "毫升", "次"]
+
+  - query: "exclusive breastfeeding WHO recommendation"
+    category: feeding
+    expected_source: "IYCF Model Chapter"
+    expected_keywords: ["exclusive", "6 months"]
+
+  - query: "什么时候可以给宝宝添加辅食？"
+    category: feeding
+    expected_source: "海蒂育儿大百科 0-1岁"
+    expected_keywords: ["辅食", "6个月", "添加"]
+
+  - query: "母乳喂养的好处有哪些？"
+    category: feeding
+    expected_source: "IYCF Model Chapter"
+    expected_keywords: ["母乳", "breastfeeding", "营养"]
+
+  - query: "complementary feeding introduction guidelines"
+    category: feeding
+    expected_source: "IYCF Model Chapter"
+    expected_keywords: ["complementary", "6 months", "solid"]
+
+  - query: "新生儿喂奶频率多久一次合适？"
+    category: feeding
+    expected_source: "美国儿科学会育儿百科（第六版）"
+    expected_keywords: ["喂奶", "频率", "按需"]
+
+  # sleep (6)
+  - query: "新生儿每天应该睡多少小时？"
+    category: sleep
+    expected_source: "海蒂育儿大百科 0-1岁"
+    expected_keywords: ["睡眠", "小时", "新生儿"]
+
+  - query: "宝宝夜醒频繁怎么办？"
+    category: sleep
+    expected_source: "海蒂育儿大百科 0-1岁"
+    expected_keywords: ["夜醒", "睡眠", "安抚"]
+
+  - query: "婴儿安全睡眠环境如何布置？"
+    category: sleep
+    expected_source: "美国儿科学会育儿百科（第六版）"
+    expected_keywords: ["仰睡", "安全", "婴儿床"]
+
+  - query: "safe sleep practices for newborns"
+    category: sleep
+    expected_source: "WHO Newborn Health Recommendations"
+    expected_keywords: ["safe", "sleep", "position"]
+
+  - query: "2个月宝宝睡眠规律如何培养？"
+    category: sleep
+    expected_source: "美国儿科学会育儿百科（第六版）"
+    expected_keywords: ["睡眠", "规律", "作息"]
+
+  - query: "宝宝趴睡有危险吗？"
+    category: sleep
+    expected_source: "美国儿科学会育儿百科（第六版）"
+    expected_keywords: ["趴睡", "仰睡", "猝死"]
+
+  # development (6)
+  - query: "4个月宝宝应该会什么？"
+    category: development
+    expected_source: "CDC Developmental Milestones - 4 Months"
+    expected_keywords: ["抬头", "社交"]
+
+  - query: "2 month old baby milestones"
+    category: development
+    expected_source: "CDC Developmental Milestones - 2 Months"
+    expected_keywords: ["smile", "social", "head"]
+
+  - query: "6个月宝宝发育里程碑"
+    category: development
+    expected_source: "CDC Developmental Milestones - 6 Months"
+    expected_keywords: ["坐", "翻身", "发育"]
+
+  - query: "什么时候宝宝会翻身？"
+    category: development
+    expected_source: "CDC Developmental Milestones - 4 Months"
+    expected_keywords: ["翻身", "月龄", "发育"]
+
+  - query: "6 month developmental milestones sitting"
+    category: development
+    expected_source: "CDC Developmental Milestones - 6 Months"
+    expected_keywords: ["sit", "months", "milestone"]
+
+  - query: "2个月宝宝能看多远？视力发育如何？"
+    category: development
+    expected_source: "CDC Developmental Milestones - 2 Months"
+    expected_keywords: ["视力", "眼神", "追视"]
+
+  # symptom (6)
+  - query: "新生儿黄疸多久能消退？"
+    category: symptom
+    expected_source: "美国儿科学会育儿百科（第六版）"
+    expected_keywords: ["黄疸", "胆红素"]
+
+  - query: "宝宝发烧多少度需要去医院？"
+    category: symptom
+    expected_source: "美国儿科学会育儿百科（第六版）"
+    expected_keywords: ["发烧", "体温", "就医"]
+
+  - query: "宝宝湿疹反复怎么办？"
+    category: symptom
+    expected_source: "美国儿科学会育儿百科（第六版）"
+    expected_keywords: ["湿疹", "皮肤", "保湿"]
+
+  - query: "婴儿肠绞痛的症状和处理方法"
+    category: symptom
+    expected_source: "海蒂育儿大百科 0-1岁"
+    expected_keywords: ["肠绞痛", "哭闹", "腹部"]
+
+  - query: "newborn jaundice treatment guidelines"
+    category: symptom
+    expected_source: "WHO Newborn Health Recommendations"
+    expected_keywords: ["jaundice", "bilirubin", "phototherapy"]
+
+  - query: "宝宝鼻塞流鼻涕怎么处理？"
+    category: symptom
+    expected_source: "美国儿科学会育儿百科（第六版）"
+    expected_keywords: ["鼻塞", "感冒", "清理"]
+
+  # health (6)
+  - query: "宝宝2个月需要打什么疫苗？"
+    category: health
+    expected_source: "中国国家免疫规划疫苗接种程序（2021年版）"
+    expected_keywords: ["脊灰", "疫苗"]
+
+  - query: "宝宝4个月疫苗接种计划"
+    category: health
+    expected_source: "中国国家免疫规划疫苗接种程序（2021年版）"
+    expected_keywords: ["疫苗", "接种", "月龄"]
+
+  - query: "宝宝6个月需要打哪些疫苗？"
+    category: health
+    expected_source: "中国国家免疫规划疫苗接种程序（2021年版）"
+    expected_keywords: ["疫苗", "乙肝", "流感"]
+
+  - query: "newborn care essential interventions"
+    category: health
+    expected_source: "WHO Newborn Health Recommendations"
+    expected_keywords: ["newborn", "care", "essential"]
+
+  - query: "婴儿体重增长正常范围是多少？"
+    category: health
+    expected_source: "美国儿科学会育儿百科（第六版）"
+    expected_keywords: ["体重", "增长", "正常"]
+
+  - query: "宝宝需要补充维生素D吗？"
+    category: health
+    expected_source: "美国儿科学会育儿百科（第六版）"
+    expected_keywords: ["维生素D", "补充", "母乳"]

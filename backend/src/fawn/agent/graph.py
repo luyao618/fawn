@@ -23,7 +23,11 @@ def _should_continue(state: AgentState) -> str:
 
 
 def _build_graph(checkpointer: Any | None = None) -> Any:
-    model = create_chat_model("default").bind_tools(TOOLS)
+    settings = get_settings()
+    model = create_chat_model("default")
+    tools_enabled = settings.llm.tool_calling_enabled
+    if tools_enabled:
+        model = model.bind_tools(TOOLS)
 
     async def agent_node(state: AgentState) -> dict[str, Any]:
         response = await model.ainvoke(state["messages"])
@@ -31,10 +35,13 @@ def _build_graph(checkpointer: Any | None = None) -> Any:
 
     builder = StateGraph(AgentState)
     builder.add_node("agent", agent_node)
-    builder.add_node("tools", ToolNode(TOOLS))
     builder.set_entry_point("agent")
-    builder.add_conditional_edges("agent", _should_continue, {"tools": "tools", END: END})
-    builder.add_edge("tools", "agent")
+    if tools_enabled:
+        builder.add_node("tools", ToolNode(TOOLS))
+        builder.add_conditional_edges("agent", _should_continue, {"tools": "tools", END: END})
+        builder.add_edge("tools", "agent")
+    else:
+        builder.add_edge("agent", END)
     return builder.compile(checkpointer=checkpointer)
 
 

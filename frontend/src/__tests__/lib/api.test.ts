@@ -61,7 +61,10 @@ describe('api mock layer', () => {
   it('returns the five required mock SSE scenarios', async () => {
     await useAuthStore.getState().login('mama', 'password');
     const growth = await collectSSE(await api.sendMessage('conv', '宝宝今天体重4.2kg，是不是偏轻了？'));
-    expect(growth.map((event) => event.type)).toEqual(['tool_call', 'tool_result', 'token', 'token', 'done']);
+    expect(growth.map((event) => event.type)).toEqual(['tool_call', 'tool_result', 'token', 'done']);
+    expect(growth.find((event) => event.type === 'token')).toMatchObject({
+      content: expect.stringContaining('来源'),
+    });
 
     const correction = await collectSSE(await api.sendMessage('conv', '不对，是4.6kg'));
     expect(correction.map((event) => event.type)).toEqual(['tool_call', 'tool_result', 'token', 'done']);

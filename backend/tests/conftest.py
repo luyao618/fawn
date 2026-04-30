@@ -41,7 +41,7 @@ def _strip_pg_casts_for_sqlite(metadata):
                         col.server_default.arg = sa_text(cleaned)
 
 
-TEST_DATABASE_URL = "sqlite+aiosqlite:///file::memory:?cache=shared"
+TEST_DATABASE_URL = "sqlite+aiosqlite:///file:fawn-test?mode=memory&cache=shared&uri=true"
 
 test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 

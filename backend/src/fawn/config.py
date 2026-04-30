@@ -13,11 +13,13 @@ class LLMConfig(BaseSettings):
     summary_model: str | None = None
     vision_provider: str | None = None
     vision_model: str | None = None
-    embedding_model: str = "BAAI/bge-large-zh-v1.5"
+    embedding_model: str = "BAAI/bge-m3"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     openai_api_base: str = ""
     embedding_dimensions: int = 1024
+    request_timeout_seconds: float = 30.0
+    tool_calling_enabled: bool = False
 
 
 class Settings(BaseSettings):

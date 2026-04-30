@@ -14,12 +14,12 @@ def create_chat_model(purpose: str = "default") -> BaseChatModel:
     model = getattr(config, f"{purpose}_model", None) or config.default_model
 
     if provider == "anthropic":
-        kwargs = {"model": model}
+        kwargs = {"model": model, "timeout": config.request_timeout_seconds}
         if config.anthropic_api_key:
             kwargs["api_key"] = config.anthropic_api_key
         return ChatAnthropic(**kwargs)
     if provider == "openai":
-        kwargs = {"model": model}
+        kwargs = {"model": model, "timeout": config.request_timeout_seconds}
         if config.openai_api_key:
             kwargs["api_key"] = config.openai_api_key
         if config.openai_api_base:

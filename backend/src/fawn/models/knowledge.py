@@ -2,8 +2,8 @@ import uuid
 from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text, func, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from fawn.config import get_settings
@@ -23,6 +23,9 @@ class KnowledgeDocument(UUIDMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+    doc_type: Mapped[str | None] = mapped_column(String(50))
+    document_metadata: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
 
     chunks = relationship("KnowledgeChunk", back_populates="document", cascade="all, delete-orphan")
 
