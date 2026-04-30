@@ -22,5 +22,7 @@ def create_chat_model(purpose: str = "default") -> BaseChatModel:
         kwargs = {"model": model}
         if config.openai_api_key:
             kwargs["api_key"] = config.openai_api_key
+        if config.openai_api_base:
+            kwargs["base_url"] = config.openai_api_base
         return ChatOpenAI(**kwargs)
     raise ValueError(f"Unknown provider: {provider}")

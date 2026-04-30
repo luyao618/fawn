@@ -6,7 +6,10 @@ from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text,
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from fawn.config import get_settings
 from fawn.models.base import Base, UUIDMixin
+
+_EMBEDDING_DIM = get_settings().llm.embedding_dimensions
 
 
 class KnowledgeDocument(UUIDMixin, Base):
@@ -45,7 +48,7 @@ class KnowledgeChunk(UUIDMixin, Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     chapter_title: Mapped[str | None] = mapped_column(String(500))
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    embedding: Mapped[list[float]] = mapped_column(Vector(1536), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(_EMBEDDING_DIM), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

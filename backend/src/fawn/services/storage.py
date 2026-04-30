@@ -46,3 +46,14 @@ def get_bytes(storage_key: str) -> bytes:
     finally:
         response.close()
         response.release_conn()
+
+
+def get_presigned_url(storage_key: str, expires: int = 3600) -> str:
+    settings = get_settings()
+    client = get_minio_client()
+    from datetime import timedelta
+    return client.presigned_get_object(
+        settings.minio_bucket,
+        storage_key.lstrip("/"),
+        expires=timedelta(seconds=expires),
+    )

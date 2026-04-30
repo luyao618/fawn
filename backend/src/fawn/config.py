@@ -16,6 +16,8 @@ class LLMConfig(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    openai_api_base: str = ""
+    embedding_dimensions: int = 1024
 
 
 class Settings(BaseSettings):
