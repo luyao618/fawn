@@ -287,27 +287,23 @@ pg_dump --data-only --table=knowledge_documents --table=knowledge_chunks \
 
 ### 6.2 部署阶段（Docker Compose）
 
-PostgreSQL 容器初始化目录 `/docker-entrypoint-initdb.d/` 自动执行 SQL 文件：
+与现有初始化方式一致，知识库 seed 加入 backend 容器的启动命令链中：
 
 ```yaml
-# docker-compose.yml
-services:
-  db:
-    image: pgvector/pgvector:pg17
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backend/seeds:/docker-entrypoint-initdb.d/seeds
+# docker-compose.yml (backend service command)
+command: >
+  sh -c "alembic upgrade head &&
+         python -m scripts.seed_users --idempotent &&
+         python -m scripts.seed_who_data --idempotent &&
+         python -m scripts.seed_knowledge --idempotent &&
+         uvicorn fawn.main:app --host 0.0.0.0 --port 8000"
 ```
 
-初始化脚本执行顺序通过文件名前缀控制：
+`scripts/seed_knowledge.py` 逻辑：检查 `knowledge_documents` 表是否已有数据，若为空则加载 `backend/seeds/knowledge_seed.sql`。
 
-```
-backend/seeds/
-  01_run_migrations.sh    # Alembic 迁移建表
-  02_knowledge_seed.sql   # 加载知识库数据
-```
+PostgreSQL 镜像保持 `pgvector/pgvector:pg16`，与 BACKEND-DESIGN-V2.md 一致。
 
-`docker compose up` 后，PostgreSQL 自动建表并加载知识库，FastAPI 启动即可使用。
+`docker compose up` 后，backend 容器依次完成迁移、用户/WHO/知识库初始化，然后启动 API 服务。
 
 ### 6.3 知识库更新流程
 
@@ -325,7 +321,7 @@ backend/seeds/
 
 - `knowledge_seed.sql` 预计大小 30-50MB（原始文本 + 1024 维 embeddings），Git 可接受
 - 如果未来超过 100MB，改用 Git LFS 或外部下载
-- `postgres_data` volume 存在时 initdb 不重复执行，避免重复加载
+- `seed_knowledge.py` 幂等设计：已有数据时跳过，与 `seed_users.py`、`seed_who_data.py` 风格一致
 
 ---
 

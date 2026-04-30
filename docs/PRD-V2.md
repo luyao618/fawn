@@ -61,7 +61,7 @@
 | 主力大模型 | Claude / GPT（通过 LangChain ChatModel 抽象，可切换） |
 | 主数据库 | PostgreSQL + pgvector |
 | 对象存储 | MinIO |
-| Embedding | text-embedding-3-small 或 bge-m3 |
+| Embedding | BAAI/bge-m3（通过 SiliconFlow API） |
 
 > 各组件的详细配置和实现方案见 [后端设计 Spec](BACKEND-DESIGN-V2.md) 和 [前端设计 Spec](FRONTEND-DESIGN-V2.md)。
 

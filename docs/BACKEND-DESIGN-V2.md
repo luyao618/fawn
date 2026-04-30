@@ -398,7 +398,7 @@ CREATE TABLE knowledge_chunks (
     content       TEXT NOT NULL,
     chapter_title VARCHAR(500),
     chunk_index   INTEGER NOT NULL,
-    embedding     vector(1536) NOT NULL,
+    embedding     vector(1024) NOT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -407,7 +407,7 @@ CREATE INDEX idx_chunks_embedding ON knowledge_chunks
     USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 ```
 
-- MVP 固定使用 `text-embedding-3-small`（1536 维）。切换 Embedding 模型需重建 `knowledge_chunks` 表并重新导入知识库
+- 使用 `BAAI/bge-m3`（1024 维），通过 SiliconFlow API 调用（兼容 OpenAI API 格式）。切换 Embedding 模型需重建 `knowledge_chunks` 表并重新导入知识库
 - IVFFlat 索引在数据量小时（< 10 万条）性能足够，无需 HNSW
 
 ---
@@ -891,7 +891,7 @@ class LLMConfig(BaseSettings):
     summary_model: str | None = None
     vision_provider: str | None = None           # 照片分析
     vision_model: str | None = None
-    embedding_model: str = "text-embedding-3-small"  # MVP 固定，切换需重建知识库
+    embedding_model: str = "BAAI/bge-m3"  # 通过 SiliconFlow API 调用，切换需重建知识库
 
     # API Keys
     anthropic_api_key: str = ""
@@ -931,18 +931,20 @@ def create_chat_model(purpose: str = "default") -> BaseChatModel:
 ### 8.1 离线导入流程
 
 ```
-PDF 文件 → 文档解析（PyMuPDF / pdfplumber）
-    → 按段落切片（保留章节标题作为元数据）
-    → Embedding（text-embedding-3-small，1536 维）
+PDF / Markdown / TXT 文件 → 文档解析（PyMuPDF / 纯文本）
+    → 按 doc_type 分策略切片（保留章节标题作为元数据）
+    → Embedding（BAAI/bge-m3，1024 维，SiliconFlow API）
     → 写入 knowledge_chunks 表（含 vector）
 ```
 
-通过 `scripts/ingest_knowledge.py` 脚本执行。支持增量导入（按 document_id 去重）。
+通过 `scripts/ingest_knowledge.py` 脚本执行。支持增量导入（按 title + source 去重）。
 
-切片策略：
-- 按段落分割，单个 chunk 目标 300-500 字
+切片策略（按 doc_type 区分）：
+- `book_zh`（中文育儿书）：按 Markdown heading 拆分章节，章节内切片，chunk_size=500 字符，overlap=80 字符
+- `guide_en`（英文 WHO 指南）：按 Markdown heading 拆分，chunk_size=800 字符，overlap=120 字符
+- `checklist`（短结构化文档，如 CDC 里程碑、免疫计划）：整篇作为单个 chunk 入库，不切片
 - 每个 chunk 保留所属章节标题作为 `chapter_title` 字段
-- 相邻 chunk 之间有 50 字重叠，减少语义断裂
+- 详见 `docs/superpowers/specs/2026-04-30-knowledge-base-design.md` §3
 
 ### 8.2 在线检索
 
