@@ -66,6 +66,15 @@ async def create_conversation(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ConversationRead:
+    active = (
+        await db.execute(
+            select(Conversation)
+            .where(Conversation.user_id == user.id, Conversation.is_active.is_(True))
+        )
+    ).scalars().all()
+    for old in active:
+        await finalize_conversation(db, old.id)
+
     conversation = Conversation(user_id=user.id)
     db.add(conversation)
     await db.commit()

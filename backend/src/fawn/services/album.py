@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import base64
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -9,6 +12,8 @@ from sqlalchemy.orm import selectinload
 
 from fawn.models import Baby, Photo, PhotoTag, User
 from fawn.services.storage import put_bytes, get_presigned_url
+
+logger = logging.getLogger(__name__)
 
 
 class AlbumError(Exception):
@@ -21,6 +26,60 @@ class NotFound(AlbumError):
 
 class PermissionDenied(AlbumError):
     pass
+
+
+async def _auto_tag_photo(photo_id: uuid.UUID, image_bytes: bytes, mime_type: str) -> None:
+    """Call Vision model to generate scene/milestone tags for a photo."""
+    try:
+        from fawn.db.session import async_session_factory
+        from fawn.llm.factory import create_chat_model
+        vision_llm = create_chat_model("vision")
+        b64 = base64.b64encode(image_bytes).decode()
+        data_url = f"data:{mime_type};base64,{b64}"
+        prompt = [
+            {
+                "type": "text",
+                "text": (
+                    "Analyze this baby/child photo. Return a JSON object with:\n"
+                    '- "scenes": list of scene tags (e.g. "outdoor", "bath", "feeding", "sleeping", "playing")\n'
+                    '- "milestones": list of developmental milestone tags if any (e.g. "first_smile", "sitting", "crawling", "walking", "first_tooth")\n'
+                    "Only include tags you are confident about. Return valid JSON only, no markdown."
+                ),
+            },
+            {"type": "image_url", "image_url": {"url": data_url}},
+        ]
+        from langchain_core.messages import HumanMessage
+        response = await vision_llm.ainvoke([HumanMessage(content=prompt)])
+        import json
+        text = response.content.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1].rsplit("```", 1)[0]
+        tags_data = json.loads(text)
+
+        async with async_session_factory() as db:
+            for scene in tags_data.get("scenes", []):
+                tag = PhotoTag(
+                    photo_id=photo_id,
+                    tag_type="scene",
+                    tag_value=scene,
+                    confidence=0.8,
+                    is_confirmed=False,
+                )
+                db.add(tag)
+
+            for milestone in tags_data.get("milestones", []):
+                tag = PhotoTag(
+                    photo_id=photo_id,
+                    tag_type="milestone",
+                    tag_value=milestone,
+                    confidence=0.7,
+                    is_confirmed=False,
+                )
+                db.add(tag)
+
+            await db.commit()
+    except Exception:
+        logger.warning("Vision auto-tagging failed for photo %s", photo_id, exc_info=True)
 
 
 async def upload_photo(
@@ -56,6 +115,9 @@ async def upload_photo(
     db.add(photo)
     await db.commit()
     await db.refresh(photo, attribute_names=["tags"])
+
+    asyncio.create_task(_auto_tag_photo(photo.id, file_bytes, mime_type))
+
     return photo
 
 

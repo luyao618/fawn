@@ -19,6 +19,8 @@ COPY --from=builder /usr/local/bin/alembic /usr/local/bin/alembic
 COPY --from=builder /app/src/ src/
 COPY alembic/ alembic/
 COPY alembic.ini .
+COPY scripts/ scripts/
+COPY config/ config/
 COPY docker/entrypoint.sh .
 
 ENV PYTHONPATH=/app/src

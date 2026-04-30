@@ -75,6 +75,7 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000/api
+      NEXT_PUBLIC_USE_MOCK: "false"
     depends_on:
       - backend
 

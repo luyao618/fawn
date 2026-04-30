@@ -13,7 +13,7 @@ class LLMConfig(BaseSettings):
     summary_model: str | None = None
     vision_provider: str | None = None
     vision_model: str | None = None
-    embedding_model: str = "text-embedding-3-small"
+    embedding_model: str = "BAAI/bge-large-zh-v1.5"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     openai_api_base: str = ""

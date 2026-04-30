@@ -299,7 +299,7 @@ def upgrade() -> None:
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("chapter_title", sa.String(500), nullable=True),
         sa.Column("chunk_index", sa.Integer(), nullable=False),
-        sa.Column("embedding", Vector(1536), nullable=False),
+        sa.Column("embedding", Vector(1024), nullable=False),
         created_at(),
         sa.ForeignKeyConstraint(["document_id"], ["knowledge_documents.id"], ondelete="CASCADE"),
     )
