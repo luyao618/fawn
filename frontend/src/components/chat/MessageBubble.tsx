@@ -1,4 +1,5 @@
 import { DataCard } from './DataCard';
+import { MarkdownMessage } from './MarkdownMessage';
 import { SafetyAlert } from './SafetyAlert';
 import { Avatar } from '@/components/ui/Avatar';
 import { cn } from '@/lib/utils';
@@ -41,7 +42,7 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
       {!isUser ? <Avatar label="Fawn Agent" role="agent" /> : null}
       <div
         className={cn(
-          'animate-[bubble-in_200ms_ease-out] whitespace-pre-wrap break-words px-4 py-3 text-base leading-normal',
+          'animate-[bubble-in_200ms_ease-out] break-words px-4 py-3 text-base leading-normal',
           'max-w-[75vw] max-[374px]:max-w-[85vw]',
           isUser
             ? 'rounded-bubble rounded-tr bg-fawn-amber text-white'
@@ -52,7 +53,7 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
           <img src={imageUrl} alt={message.content} className="max-h-64 rounded-xl object-cover" />
         ) : (
           <>
-            {message.content}
+            {isUser ? <span className="whitespace-pre-wrap">{message.content}</span> : <MarkdownMessage content={message.content} />}
             {isStreaming ? <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-mid-gray align-middle" /> : null}
           </>
         )}
