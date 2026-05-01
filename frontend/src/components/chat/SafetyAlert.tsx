@@ -1,4 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
+import { MarkdownMessage } from './MarkdownMessage';
 
 export function SafetyAlert({ content }: { content: string }) {
   return (
@@ -6,7 +7,7 @@ export function SafetyAlert({ content }: { content: string }) {
       <div className="flex gap-2">
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-safety-red" aria-hidden />
         <div>
-          <p className="whitespace-pre-wrap text-base leading-normal">{content}</p>
+          <MarkdownMessage content={content} className="text-base leading-normal" />
           <p className="mt-2 text-sm font-semibold text-safety-red">建议尽快咨询医生或就医</p>
         </div>
       </div>

@@ -13,7 +13,7 @@ class LLMConfig(BaseSettings):
     summary_model: str | None = None
     vision_provider: str | None = None
     vision_model: str | None = None
-    embedding_model: str = "BAAI/bge-m3"
+    embedding_model: str = "text-embedding-3-small"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     openai_api_base: str = ""
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     session_timeout_minutes: int = 30
 
     rag_top_k: int = 5
-    rag_similarity_threshold: float = 0.7
+    rag_similarity_threshold: float = 0.4
 
 
 @lru_cache

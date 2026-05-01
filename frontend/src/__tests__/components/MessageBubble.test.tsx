@@ -49,9 +49,34 @@ describe('MessageBubble', () => {
     expect(screen.getByText('生长记录')).toBeInTheDocument();
   });
 
+  it('renders assistant markdown without affecting structured cards', () => {
+    render(
+      <MessageBubble
+        message={{
+          ...base,
+          content:
+            '好的，**马上帮你记录**。\n\n1. **喂奶时间**：12:10\n2. **喂奶方式**：母乳\n\n| 项目 | 内容 |\n|---|---|\n| 时间 | 12:10 |\n| 类型 | 母乳 |',
+          message_type: 'data_card',
+          metadata: { type: 'feeding', data: { total_ml: 10, count: 1, last_feed_time: '12:10' } },
+        }}
+      />,
+    );
+
+    expect(screen.getByText('马上帮你记录').tagName).toBe('STRONG');
+    expect(screen.getByText('喂奶时间').tagName).toBe('STRONG');
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.getByText('喂养统计')).toBeInTheDocument();
+  });
+
+  it('keeps user messages as plain text even when they contain markdown markers', () => {
+    render(<MessageBubble message={{ ...base, role: 'user', content: '**不要格式化**' }} />);
+    expect(screen.getByText('**不要格式化**')).toBeInTheDocument();
+    expect(screen.queryByText('不要格式化')).not.toBeInTheDocument();
+  });
+
   it('renders safety alerts with safety copy', () => {
-    render(<MessageBubble message={{ ...base, message_type: 'safety_alert', content: '请尽快就医' }} />);
-    expect(screen.getByText('请尽快就医')).toBeInTheDocument();
+    render(<MessageBubble message={{ ...base, message_type: 'safety_alert', content: '**请尽快就医**' }} />);
+    expect(screen.getByText('请尽快就医').tagName).toBe('STRONG');
     expect(screen.getByText('建议尽快咨询医生或就医')).toBeInTheDocument();
   });
 });
