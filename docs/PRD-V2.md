@@ -58,12 +58,17 @@
 | Agent 编排 | LangGraph |
 | 后端框架 | FastAPI |
 | 前端框架 | Next.js (React) |
-| 主力大模型 | Claude / GPT（通过 LangChain ChatModel 抽象，可切换） |
+| 主力大模型 | Claude / GPT（通过 LangChain ChatModel 抽象和环境变量配置切换；当前本地部署走 raven 的 OpenAI-compatible 代理） |
 | 主数据库 | PostgreSQL + pgvector |
 | 对象存储 | MinIO |
-| Embedding | BAAI/bge-m3（通过 SiliconFlow API） |
+| Embedding | text-embedding-3-small（通过 raven/OpenAI-compatible API，1024 维） |
 
 > 各组件的详细配置和实现方案见 [后端设计 Spec](BACKEND-DESIGN-V2.md) 和 [前端设计 Spec](FRONTEND-DESIGN-V2.md)。
+
+**当前模型调用配置基线：**
+- 对话、摘要、视觉模型均通过 provider/model 环境变量配置；本地部署使用 `DEFAULT_PROVIDER=openai`、`DEFAULT_MODEL=claude-sonnet-4.6`，由 `OPENAI_API_BASE=http://host.docker.internal:7024/v1` 指向 raven 代理。
+- Embedding 模型需在同一 OpenAI-compatible 代理上可用；当前基线为 `EMBEDDING_MODEL=text-embedding-3-small`、`EMBEDDING_DIMENSIONS=1024`。
+- RAG 检索阈值按当前 embedding 实测效果设为 `RAG_SIMILARITY_THRESHOLD=0.4`。更换 embedding 模型或维度后，需重新导入/重建知识库向量，并重新校准阈值。
 
 ---
 
