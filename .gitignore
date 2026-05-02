@@ -3,3 +3,6 @@
 .omc/
 node_modules/
 *.tsbuildinfo
+.figma.env
+.figma-assets/
+.superpowers/
