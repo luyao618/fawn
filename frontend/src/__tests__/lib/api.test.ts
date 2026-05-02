@@ -35,6 +35,66 @@ describe('api mock layer', () => {
     expect((await api.getPhotos()).items[0].tags.length).toBeGreaterThan(0);
   });
 
+  it('creates tracker records in mock mode and refreshes derived dashboard data', async () => {
+    const login = await api.login({ username: 'mama', password: 'password' });
+    window.localStorage.setItem('access_token', login.access_token);
+    const beforeSummary = await api.getDashboardSummary();
+
+    const growth = await api.createGrowthRecord({
+      measurement_date: '2026-05-02',
+      weight_g: 6300,
+      height_cm: 62,
+    });
+    expect((await api.getGrowthRecords()).some((record) => record.id === growth.id)).toBe(true);
+    expect((await api.getGrowthChart()).records.some((record) => record.date === '2026-05-02')).toBe(true);
+    expect((await api.getDashboardSummary()).latest_growth?.date).toBe('2026-05-02');
+
+    const feeding = await api.createFeedingRecord({
+      feed_time: '2026-04-29T15:30:00+08:00',
+      feed_type: 'formula',
+      amount_ml: 80,
+    });
+    expect((await api.getFeedingRecords()).some((record) => record.id === feeding.id)).toBe(true);
+    expect((await api.getDashboardSummary()).today_feeding).toMatchObject({
+      total_ml: beforeSummary.today_feeding.total_ml + 80,
+      count: beforeSummary.today_feeding.count + 1,
+      last_feed_time: '2026-04-29T15:30:00+08:00',
+    });
+
+    const beforeSleep = await api.getDashboardSummary();
+    const sleep = await api.createSleepRecord({
+      sleep_start: '2026-04-29T16:00:00+08:00',
+      sleep_end: '2026-04-29T17:30:00+08:00',
+      sleep_type: 'nap',
+      night_wakings: 0,
+    });
+    expect((await api.getSleepRecords()).some((record) => record.id === sleep.id)).toBe(true);
+    expect((await api.getDashboardSummary()).today_sleep.total_hours).toBe(
+      Number((beforeSleep.today_sleep.total_hours + 1.5).toFixed(1)),
+    );
+
+    const health = await api.createHealthRecord({
+      record_date: '2026-05-02',
+      record_type: 'checkup',
+      title: '儿保复查',
+      description: '状态稳定',
+    });
+    expect((await api.getHealthRecords()).some((record) => record.id === health.id)).toBe(true);
+  });
+
+  it('rejects tracker creation for mock users without write permission', async () => {
+    const login = await api.login({ username: 'nainai', password: 'password' });
+    window.localStorage.setItem('access_token', login.access_token);
+
+    await expect(
+      api.createFeedingRecord({
+        feed_time: '2026-04-29T15:30:00+08:00',
+        feed_type: 'breast',
+        duration_min: 10,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
   it('throws ApiError for non-401 mock errors', async () => {
     await expect(api.getConversation('missing')).rejects.toBeInstanceOf(ApiError);
     await expect(api.getConversation('missing')).rejects.toMatchObject({ status: 404 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { formatDateTime } from '@/lib/utils';
@@ -31,16 +31,24 @@ export function ProfileItemList({ items, onEdit, onDelete }: ProfileItemListProp
 
   return (
     <Card>
-      <h2 className="mb-3 text-[17px] font-semibold">我的画像</h2>
+      <div className="mb-4 flex items-center gap-3">
+        <span className="grid h-11 w-11 place-items-center rounded-2xl bg-nursery-butter text-warning-amber">
+          <Sparkles className="h-5 w-5" aria-hidden />
+        </span>
+        <div>
+          <p className="text-sm text-dark-gray">个性化记忆</p>
+          <h2 className="text-[17px] font-semibold text-soft-charcoal">我的画像</h2>
+        </div>
+      </div>
       <div className="space-y-3">
         {items.map((item) => (
-          <div key={item.id} className="rounded-xl border border-oat-border bg-warm-cream p-3">
+          <div key={item.id} className="rounded-2xl border border-white/70 bg-warm-gray p-3">
             {editingId === item.id ? (
               <form onSubmit={submit} className="space-y-2">
                 <textarea
                   value={content}
                   onChange={(event) => setContent(event.target.value)}
-                  className="min-h-24 w-full rounded-xl border border-oat-border bg-white p-3 outline-none focus:border-fawn-amber"
+                  className="min-h-24 w-full rounded-2xl border border-oat-border bg-white p-3 outline-none focus:border-fawn-amber"
                 />
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="text" onClick={() => setEditingId(null)}>

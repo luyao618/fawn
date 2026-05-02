@@ -3,22 +3,29 @@
 @tailwind utilities;
 
 :root {
-  --color-canvas: #FFF9F4;
+  --color-canvas: #F8F9FF;
   --color-card: #FFFFFF;
-  --color-brand: #D4956A;
-  --color-brand-light: #F2DFD0;
-  --color-text-primary: #2C2C2E;
-  --color-text-secondary: #636366;
-  --color-text-placeholder: #8E8E93;
-  --color-border: #E5DED5;
-  --color-bubble-agent: #F2EDE8;
-  --color-bubble-user: #D4956A;
-  --color-safety: #E25B45;
-  --color-safety-bg: #FDEEEB;
-  --color-success: #7FB685;
-  --radius-card: 16px;
+  --color-brand: #416656;
+  --color-brand-strong: #294E3F;
+  --color-brand-light: #ECFDF5;
+  --color-mint: #DDF7EA;
+  --color-butter: #FFFBEB;
+  --color-powder: #D5E3FC;
+  --color-sky-soft: #D3E5F1;
+  --color-text-primary: #0D1C2E;
+  --color-text-secondary: #5F665F;
+  --color-text-placeholder: #8A918A;
+  --color-border: #E6EEFF;
+  --color-bubble-agent: #FFFFFF;
+  --color-bubble-user: #416656;
+  --color-safety: #BA1A1A;
+  --color-safety-bg: #FFDAD6;
+  --color-success: #059669;
+  --radius-card: 28px;
   --radius-bubble: 20px;
-  --radius-input: 20px;
+  --radius-input: 9999px;
+  --topbar-height: 80px;
+  --tabbar-height: 92px;
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --transition-fast: 150ms ease-out;
   --transition-page: 250ms ease-in-out;
@@ -31,13 +38,13 @@
 
 html {
   min-height: 100%;
-  background: var(--color-canvas);
+  background: linear-gradient(180deg, #f8f9ff 0%, #ffffff 46%, #f4fbf7 100%);
 }
 
 body {
   min-height: 100vh;
   margin: 0;
-  background: var(--color-canvas);
+  background: linear-gradient(180deg, #f8f9ff 0%, #ffffff 46%, #f4fbf7 100%);
   color: var(--color-text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -88,7 +95,10 @@ img {
   max-width: 428px;
   min-height: 100vh;
   margin: 0 auto;
-  background: var(--color-canvas);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, 0.72) 0%, rgba(255, 255, 255, 0) 30%),
+    linear-gradient(180deg, var(--color-canvas) 0%, #ffffff 58%, #f7fbf8 100%);
+  box-shadow: 0 0 80px rgba(13, 28, 46, 0.06);
 }
 
 .safe-bottom {

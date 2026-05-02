@@ -79,6 +79,13 @@ export interface GrowthRecord {
   head_percentile: number | null;
 }
 
+export interface GrowthRecordCreate {
+  measurement_date: string;
+  weight_g?: number | null;
+  height_cm?: number | null;
+  head_cm?: number | null;
+}
+
 export interface FeedingRecord {
   id: string;
   feed_time: string;
@@ -86,6 +93,14 @@ export interface FeedingRecord {
   amount_ml: number | null;
   duration_min: number | null;
   notes: string | null;
+}
+
+export interface FeedingRecordCreate {
+  feed_time: string;
+  feed_type: 'breast' | 'formula' | 'solid';
+  amount_ml?: number | null;
+  duration_min?: number | null;
+  notes?: string | null;
 }
 
 export interface SleepRecord {
@@ -97,12 +112,27 @@ export interface SleepRecord {
   notes: string | null;
 }
 
+export interface SleepRecordCreate {
+  sleep_start: string;
+  sleep_end?: string | null;
+  night_wakings?: number;
+  sleep_type: 'nap' | 'night';
+  notes?: string | null;
+}
+
 export interface HealthRecord {
   id: string;
   record_date: string;
   record_type: 'vaccination' | 'illness' | 'checkup';
   title: string;
   description: string | null;
+}
+
+export interface HealthRecordCreate {
+  record_date: string;
+  record_type: 'vaccination' | 'illness' | 'checkup';
+  title: string;
+  description?: string | null;
 }
 
 export interface DashboardSummary {

@@ -2,9 +2,9 @@ import { Avatar } from '@/components/ui/Avatar';
 
 export function TypingIndicator() {
   return (
-    <div className="flex items-start gap-2">
+    <div className="flex items-start gap-3">
       <Avatar label="Fawn Agent" role="agent" />
-      <div className="flex h-11 items-center gap-1 rounded-bubble rounded-tl bg-warm-gray px-4">
+      <div className="flex h-11 items-center gap-1 rounded-[22px] rounded-bl-md bg-white px-4 shadow-card">
         {[0, 150, 300].map((delay) => (
           <span
             key={delay}

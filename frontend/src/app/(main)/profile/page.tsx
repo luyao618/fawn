@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { ShieldCheck, UsersRound } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { FamilyMemberManager } from '@/components/profile/FamilyMemberManager';
@@ -50,12 +51,43 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="space-y-4 px-4 py-4">
-      <Card className="flex items-center gap-4">
+    <div className="space-y-5 px-4 py-4">
+      <Card className="bg-gradient-to-br from-white to-fawn-amber-light">
+        <div className="flex items-center gap-4">
         <Avatar label={user?.display_name ?? '用户'} role={user?.role ?? 'family'} size="lg" src={user?.avatar_url} />
-        <div>
-          <p className="text-lg font-semibold">{user?.display_name ?? '家庭成员'}</p>
-          <p className="text-sm text-dark-gray">{roleLabel(user?.role ?? 'family')}</p>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-fawn-amber">家庭与隐私</p>
+            <h2 className="mt-1 truncate text-2xl font-semibold leading-tight text-soft-charcoal">
+              {user?.display_name ?? '家庭成员'}
+            </h2>
+            <p className="mt-1 text-sm text-dark-gray">{roleLabel(user?.role ?? 'family')}</p>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="mb-3 flex items-center gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-nursery-mint text-brand-strong">
+            <ShieldCheck className="h-5 w-5" aria-hidden />
+          </span>
+          <div>
+            <p className="text-sm text-dark-gray">当前权限</p>
+            <h2 className="text-[17px] font-semibold text-soft-charcoal">家庭数据边界</h2>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-2xl bg-warm-gray p-3">
+            <p className="text-dark-gray">相册上传</p>
+            <p className="mt-1 font-semibold text-soft-charcoal">
+              {user?.role === 'admin' || user?.role === 'parent' || user?.permissions.can_upload_photos ? '允许' : '关闭'}
+            </p>
+          </div>
+          <div className="rounded-2xl bg-warm-gray p-3">
+            <p className="text-dark-gray">记录写入</p>
+            <p className="mt-1 font-semibold text-soft-charcoal">
+              {user?.role === 'admin' || user?.role === 'parent' || user?.permissions.can_write_tracker ? '允许' : '关闭'}
+            </p>
+          </div>
         </div>
       </Card>
 
@@ -69,7 +101,15 @@ export default function ProfilePage() {
           />
         ) : (
           <Card>
-            <h2 className="mb-3 text-[17px] font-semibold">宝宝档案</h2>
+            <div className="mb-3 flex items-center gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-nursery-powder text-info-blue">
+                <UsersRound className="h-5 w-5" aria-hidden />
+              </span>
+              <div>
+                <p className="text-sm text-dark-gray">宝宝档案</p>
+                <h2 className="text-[17px] font-semibold text-soft-charcoal">{baby.name}</h2>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <p className="text-dark-gray">姓名</p>

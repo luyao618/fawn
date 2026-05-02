@@ -3,11 +3,11 @@ import { cn } from '@/lib/utils';
 import type { UserRole } from '@/lib/types';
 
 const ringByRole: Record<UserRole | 'agent' | 'baby', string> = {
-  admin: 'ring-info-blue',
-  parent: 'ring-fawn-amber',
-  family: 'ring-role-grandma',
-  agent: 'ring-mid-gray',
-  baby: 'ring-sage-green',
+  admin: 'bg-info-blue-light text-info-blue ring-white',
+  parent: 'bg-nursery-butter text-brand-strong ring-white',
+  family: 'bg-white text-role-grandma ring-nursery-powder',
+  agent: 'bg-nursery-mint text-brand-strong ring-white',
+  baby: 'bg-nursery-powder text-info-blue ring-white',
 };
 
 interface AvatarProps {
@@ -31,7 +31,7 @@ export function Avatar({ src, label, role = 'family', size = 'sm', className }: 
   return (
     <div
       className={cn(
-        'grid shrink-0 place-items-center overflow-hidden rounded-full bg-warm-gray text-dark-gray ring-2',
+        'grid shrink-0 place-items-center overflow-hidden rounded-full shadow-card ring-2',
         ringByRole[role],
         sizeClass[size],
         className,

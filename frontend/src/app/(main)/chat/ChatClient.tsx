@@ -62,13 +62,13 @@ export function ChatClient() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-warm-cream">
+    <div className="flex h-[100dvh] flex-col bg-transparent pb-[calc(100px+var(--safe-area-bottom))]">
       <TopBar
-        title="Fawn"
+        title="Fawn 管家"
         rightAction={
           <Link
             href="/history"
-            className="flex min-h-11 items-center gap-1 rounded-full px-2 text-sm font-semibold text-fawn-amber"
+            className="flex min-h-11 items-center gap-1 rounded-full bg-white/80 px-3 text-sm font-semibold text-fawn-amber shadow-card"
           >
             <Clock className="h-4 w-4" aria-hidden />
             历史
@@ -76,7 +76,10 @@ export function ChatClient() {
         }
       />
       {messages.length === 0 && !isStreaming ? (
-        <div className="px-4 py-3 text-sm text-dark-gray">可以直接发送体重、喂养、睡眠或健康问题。</div>
+        <div className="mx-4 my-3 rounded-card bg-white/90 p-4 text-sm leading-6 text-dark-gray shadow-card ring-1 ring-white/70">
+          <p className="text-base font-semibold text-soft-charcoal">今天想先记录什么？</p>
+          <p className="mt-1">可以直接发送体重、喂养、睡眠或健康问题，我会整理成家庭可读的记录。</p>
+        </div>
       ) : null}
       <MessageList
         messages={messages}

@@ -18,5 +18,7 @@ describe('dashboard page', () => {
     expect(screen.getByText('喂养统计')).toBeInTheDocument();
     expect(screen.getByText('睡眠统计')).toBeInTheDocument();
     expect(screen.getByText('健康时间线')).toBeInTheDocument();
+    expect(screen.getByText('最近记录')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /去记录/ })).toHaveAttribute('href', '/record');
   });
 });

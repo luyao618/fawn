@@ -6,9 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.api.schemas import (
+    FeedingRecordCreate,
     FeedingRecordRead,
+    GrowthRecordCreate,
     GrowthRecordRead,
+    HealthRecordCreate,
     HealthRecordRead,
+    SleepRecordCreate,
     SleepRecordRead,
     TrackerUpdate,
 )
@@ -19,6 +23,10 @@ from fawn.services.tracker import (
     NotFound,
     PermissionDenied,
     ValidationError,
+    create_feeding_record,
+    create_growth_record,
+    create_health_record,
+    create_sleep_record,
     delete_tracker_record,
     query_records,
     update_tracker_record,
@@ -119,6 +127,58 @@ async def list_health(
     offset: int = Query(0, ge=0),
 ) -> list[HealthRecordRead]:
     return await _list_records("health", date_value, from_date, to_date, limit, offset, db)
+
+
+@router.post("/growth", response_model=GrowthRecordRead, status_code=status.HTTP_201_CREATED)
+async def create_growth(
+    body: GrowthRecordCreate,
+    user: User = Depends(require_tracker_writer),
+    db: AsyncSession = Depends(get_db),
+) -> GrowthRecordRead:
+    try:
+        record = await create_growth_record(db, user, **body.model_dump())
+    except Exception as exc:
+        raise _service_error(exc) from exc
+    return GrowthRecordRead.model_validate(record)
+
+
+@router.post("/feeding", response_model=FeedingRecordRead, status_code=status.HTTP_201_CREATED)
+async def create_feeding(
+    body: FeedingRecordCreate,
+    user: User = Depends(require_tracker_writer),
+    db: AsyncSession = Depends(get_db),
+) -> FeedingRecordRead:
+    try:
+        record = await create_feeding_record(db, user, **body.model_dump())
+    except Exception as exc:
+        raise _service_error(exc) from exc
+    return FeedingRecordRead.model_validate(record)
+
+
+@router.post("/sleep", response_model=SleepRecordRead, status_code=status.HTTP_201_CREATED)
+async def create_sleep(
+    body: SleepRecordCreate,
+    user: User = Depends(require_tracker_writer),
+    db: AsyncSession = Depends(get_db),
+) -> SleepRecordRead:
+    try:
+        record = await create_sleep_record(db, user, **body.model_dump())
+    except Exception as exc:
+        raise _service_error(exc) from exc
+    return SleepRecordRead.model_validate(record)
+
+
+@router.post("/health", response_model=HealthRecordRead, status_code=status.HTTP_201_CREATED)
+async def create_health(
+    body: HealthRecordCreate,
+    user: User = Depends(require_tracker_writer),
+    db: AsyncSession = Depends(get_db),
+) -> HealthRecordRead:
+    try:
+        record = await create_health_record(db, user, **body.model_dump())
+    except Exception as exc:
+        raise _service_error(exc) from exc
+    return HealthRecordRead.model_validate(record)
 
 
 @router.patch("/{record_type}/{record_id}")

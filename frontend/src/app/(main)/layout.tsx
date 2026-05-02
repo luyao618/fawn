@@ -8,16 +8,17 @@ import { TopBar } from '@/components/layout/TopBar';
 
 const titleByPath: Array<[string, string]> = [
   ['/history', '历史对话'],
-  ['/dashboard', '数据看板'],
+  ['/dashboard', '成长'],
+  ['/record', '记录'],
   ['/album', '相册'],
-  ['/profile', '我的'],
+  ['/profile', '家庭'],
 ];
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isChat = pathname.startsWith('/chat');
-  const showTabBar = !isChat;
+  const showTopBar = !isChat;
   const title = useMemo(() => {
     return titleByPath.find(([path]) => pathname.startsWith(path))?.[1] ?? 'Fawn';
   }, [pathname]);
@@ -25,11 +26,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   return (
     <AuthGuard>
       <div className="mobile-shell relative">
-        {!isChat ? (
+        {showTopBar ? (
           <TopBar title={title} onBack={pathname.startsWith('/history') ? () => router.push('/chat') : undefined} />
         ) : null}
-        <main className={showTabBar ? 'pb-[calc(65px+var(--safe-area-bottom))]' : ''}>{children}</main>
-        {showTabBar ? <TabBar currentPath={pathname} /> : null}
+        <main className={isChat ? '' : 'pb-[calc(108px+var(--safe-area-bottom))]'}>{children}</main>
+        <TabBar currentPath={pathname} />
       </div>
     </AuthGuard>
   );

@@ -38,10 +38,10 @@ export function ChatInput({ onSend, onAttach, disabled, attachedImage, onRemoveI
   }
 
   return (
-    <form onSubmit={submit} className="border-t border-oat-border bg-white px-3 py-2 safe-bottom">
+    <form onSubmit={submit} className="bg-transparent px-4 pb-3 pt-2">
       {attachedImage ? (
-        <div className="mb-2 flex items-center gap-2">
-          <img src={attachedImage} alt="已选择图片" className="h-16 w-16 rounded-xl object-cover" />
+        <div className="mb-2 flex items-center gap-2 rounded-2xl bg-white/90 p-2 shadow-card">
+          <img src={attachedImage} alt="已选择图片" className="h-16 w-16 rounded-2xl object-cover" />
           <button
             type="button"
             onClick={onRemoveImage}
@@ -53,13 +53,13 @@ export function ChatInput({ onSend, onAttach, disabled, attachedImage, onRemoveI
         </div>
       ) : null}
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-2 rounded-[30px] bg-white p-2 shadow-float ring-1 ring-white/70">
         <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
         <button
           type="button"
           disabled={disabled || isUploading}
           onClick={() => inputRef.current?.click()}
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-dark-gray disabled:text-mid-gray"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-warm-gray text-dark-gray disabled:text-mid-gray"
           aria-label="选择图片"
         >
           <ImagePlus className="h-6 w-6" />
@@ -77,7 +77,7 @@ export function ChatInput({ onSend, onAttach, disabled, attachedImage, onRemoveI
           disabled={!canSend}
           className={cn(
             'grid h-11 w-11 shrink-0 place-items-center rounded-full text-white transition-colors',
-            canSend ? 'bg-fawn-amber' : 'bg-oat-border text-mid-gray',
+            canSend ? 'bg-fawn-amber shadow-card' : 'bg-oat-border text-mid-gray',
           )}
           aria-label="发送"
         >

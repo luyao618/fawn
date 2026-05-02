@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { BarChart2, Image, MessageCircle, User } from 'lucide-react';
+import { BarChart2, Bot, ClipboardList, Image, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TabBarProps {
@@ -9,16 +9,17 @@ interface TabBarProps {
 }
 
 const tabs = [
-  { label: '对话', href: '/chat', icon: MessageCircle },
-  { label: '数据', href: '/dashboard', icon: BarChart2 },
+  { label: '管家', href: '/chat', icon: Bot },
+  { label: '成长', href: '/dashboard', icon: BarChart2 },
+  { label: '记录', href: '/record', icon: ClipboardList },
   { label: '相册', href: '/album', icon: Image },
-  { label: '我的', href: '/profile', icon: User },
+  { label: '家庭', href: '/profile', icon: Users },
 ];
 
 export function TabBar({ currentPath }: TabBarProps) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-mobile border-t border-oat-border bg-white safe-bottom">
-      <div className="grid h-[49px] grid-cols-4">
+    <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-mobile px-3 pb-[calc(10px+var(--safe-area-bottom))]">
+      <div className="grid h-[78px] grid-cols-5 items-center gap-1 rounded-t-[30px] border border-white/70 bg-white/90 px-2 pt-2 shadow-tabbar backdrop-blur-xl">
         {tabs.map((tab) => {
           const active =
             currentPath === tab.href ||
@@ -30,12 +31,12 @@ export function TabBar({ currentPath }: TabBarProps) {
               key={tab.href}
               href={tab.href}
               className={cn(
-                'flex min-h-[49px] flex-col items-center justify-center gap-0.5 text-[10px] font-medium leading-tight transition-colors',
-                active ? 'text-fawn-amber' : 'text-mid-gray',
+                'flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[11px] font-semibold leading-tight transition-colors',
+                active ? 'bg-nursery-mint text-brand-strong shadow-card' : 'text-mid-gray',
               )}
             >
-              <Icon className="h-6 w-6" strokeWidth={1.7} aria-hidden />
-              <span>{tab.label}</span>
+              <Icon className="h-5 w-5" strokeWidth={1.8} aria-hidden />
+              <span className="truncate">{tab.label}</span>
             </Link>
           );
         })}

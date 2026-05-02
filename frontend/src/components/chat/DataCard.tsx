@@ -21,7 +21,7 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
 }
 
 export function DataCard({ type, data }: DataCardProps) {
-  const iconClass = 'h-5 w-5 text-fawn-amber';
+  const iconClass = 'h-5 w-5 text-brand-strong';
   const title = {
     growth: '生长记录',
     feeding: '喂养统计',
@@ -34,7 +34,7 @@ export function DataCard({ type, data }: DataCardProps) {
     typeof data.weight_g === 'number' ? `${(data.weight_g / 1000).toFixed(1)}kg` : value(data, 'weight_g');
 
   return (
-    <div className="mt-3 max-w-[85vw] rounded-xl border border-oat-border bg-white p-3 shadow-card">
+    <div className="mt-3 max-w-[85vw] rounded-2xl border border-oat-border bg-white p-3 shadow-card">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-soft-charcoal">
         <Icon className={iconClass} aria-hidden />
         {title}

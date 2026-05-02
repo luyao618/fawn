@@ -128,6 +128,13 @@ class GrowthRecordRead(BaseModel):
     head_percentile: float | None = None
 
 
+class GrowthRecordCreate(BaseModel):
+    measurement_date: date
+    weight_g: int | None = Field(default=None, gt=0)
+    height_cm: float | None = Field(default=None, gt=0)
+    head_cm: float | None = Field(default=None, gt=0)
+
+
 class FeedingRecordRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -136,6 +143,14 @@ class FeedingRecordRead(BaseModel):
     feed_type: Literal["breast", "formula", "solid"]
     amount_ml: int | None = None
     duration_min: int | None = None
+    notes: str | None = None
+
+
+class FeedingRecordCreate(BaseModel):
+    feed_time: datetime
+    feed_type: Literal["breast", "formula", "solid"]
+    amount_ml: int | None = Field(default=None, gt=0)
+    duration_min: int | None = Field(default=None, gt=0)
     notes: str | None = None
 
 
@@ -150,6 +165,14 @@ class SleepRecordRead(BaseModel):
     notes: str | None = None
 
 
+class SleepRecordCreate(BaseModel):
+    sleep_start: datetime
+    sleep_end: datetime | None = None
+    night_wakings: int = Field(default=0, ge=0)
+    sleep_type: Literal["nap", "night"]
+    notes: str | None = None
+
+
 class HealthRecordRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -157,6 +180,13 @@ class HealthRecordRead(BaseModel):
     record_date: date
     record_type: Literal["vaccination", "illness", "checkup"]
     title: str
+    description: str | None = None
+
+
+class HealthRecordCreate(BaseModel):
+    record_date: date
+    record_type: Literal["vaccination", "illness", "checkup"]
+    title: str = Field(min_length=1, max_length=200)
     description: str | None = None
 
 

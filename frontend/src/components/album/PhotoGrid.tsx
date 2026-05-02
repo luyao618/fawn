@@ -24,11 +24,22 @@ function groupPhotos(photos: Photo[], view: PhotoGridProps['view']) {
 
 export function PhotoGrid({ photos, view, onPhotoClick }: PhotoGridProps) {
   const groups = groupPhotos(photos, view);
+  if (photos.length === 0) {
+    return (
+      <div className="rounded-card bg-white/85 p-6 text-center text-sm leading-6 text-dark-gray shadow-card ring-1 ring-white/70">
+        还没有照片。上传后，这里会按时间、场景或里程碑自动整理。
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       {Object.entries(groups).map(([group, items]) => (
         <section key={group}>
-          <h2 className="mb-2 text-sm font-semibold text-dark-gray">{group}</h2>
+          <div className="mb-2 flex items-center justify-between px-1">
+            <h2 className="text-sm font-semibold text-dark-gray">{group}</h2>
+            <span className="text-xs text-mid-gray">{items.length} 张</span>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             {items.map((photo) => {
               const label =
@@ -40,10 +51,10 @@ export function PhotoGrid({ photos, view, onPhotoClick }: PhotoGridProps) {
                   type="button"
                   key={photo.id}
                   onClick={() => onPhotoClick(photo)}
-                  className="relative aspect-square overflow-hidden rounded-xl bg-warm-gray text-left"
+                  className="relative aspect-[4/5] overflow-hidden rounded-card bg-warm-gray text-left shadow-card"
                 >
                   <img src={photo.storage_url} alt={photo.original_filename} className="h-full w-full object-cover" />
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent p-2 pt-8 text-white">
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 pt-10 text-white">
                     <p className="truncate text-xs">{formatDate(photo.taken_at ?? photo.uploaded_at)}</p>
                     <p className="truncate text-sm font-semibold">{label}</p>
                   </div>

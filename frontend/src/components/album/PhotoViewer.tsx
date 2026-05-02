@@ -23,13 +23,13 @@ export function PhotoViewer({ photo, onClose, onConfirmTag }: PhotoViewerProps) 
       </button>
       <div className="flex h-full flex-col">
         <div className="grid flex-1 place-items-center p-4">
-          <img src={photo.storage_url} alt={photo.original_filename} className="max-h-full rounded-xl object-contain" />
+          <img src={photo.storage_url} alt={photo.original_filename} className="max-h-full rounded-card object-contain" />
         </div>
         <div className="max-h-64 overflow-y-auto rounded-t-card bg-white p-4 text-soft-charcoal">
           <h2 className="mb-3 text-[17px] font-semibold">AI 标签</h2>
           <div className="space-y-2">
             {photo.tags.map((tag) => (
-              <div key={tag.id} className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-warm-gray px-3 py-2">
+              <div key={tag.id} className="flex min-h-11 items-center justify-between gap-3 rounded-2xl bg-warm-gray px-3 py-2">
                 <div>
                   <p className="text-sm font-semibold">
                     {tag.tag_value}

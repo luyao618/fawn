@@ -23,10 +23,13 @@ import type {
   Baby,
   Conversation,
   DashboardSummary,
+  FeedingRecordCreate,
   FeedingRecord,
   FeedingStatsData,
+  GrowthRecordCreate,
   GrowthChartData,
   GrowthRecord,
+  HealthRecordCreate,
   HealthRecord,
   LoginRequest,
   LoginResponse,
@@ -36,6 +39,7 @@ import type {
   Photo,
   PhotoTag,
   ProfileItem,
+  SleepRecordCreate,
   SleepRecord,
   SleepStatsData,
   TrackerType,
@@ -115,6 +119,116 @@ function recordMatchesType(type: TrackerType) {
   if (type === 'feeding') return mockFeedingRecords;
   if (type === 'sleep') return mockSleepRecords;
   return mockHealthRecords;
+}
+
+function dateKey(value: string) {
+  return value.slice(0, 10);
+}
+
+function currentMockDate() {
+  return dateKey(currentMockTime());
+}
+
+function ensureMockTrackerWrite() {
+  const user = tokenToUser(getAuthToken());
+  if (!user) {
+    onUnauthorized();
+    throw new ApiError(401, '登录已过期，请重新登录');
+  }
+  if (user.role !== 'admin' && user.role !== 'parent' && !user.permissions.can_write_tracker) {
+    throw new ApiError(403, '没有记录权限');
+  }
+}
+
+function refreshMockGrowthViews(record: GrowthRecord) {
+  mockGrowthChart.records = mockGrowthRecords
+    .map((item) => ({
+      date: item.measurement_date,
+      weight_g: item.weight_g,
+      height_cm: item.height_cm,
+      head_cm: item.head_cm,
+    }))
+    .sort((left, right) => left.date.localeCompare(right.date));
+
+  const latest = mockGrowthRecords.reduce((current, item) => {
+    return item.measurement_date > current.measurement_date ? item : current;
+  }, mockGrowthRecords[0]);
+
+  if (latest?.id === record.id || latest?.measurement_date === record.measurement_date) {
+    mockDashboardSummary.latest_growth = latest.weight_g
+      ? {
+          date: latest.measurement_date,
+          weight_g: latest.weight_g,
+          weight_percentile: latest.weight_percentile ?? 0,
+          height_cm: latest.height_cm ?? 0,
+          height_percentile: latest.height_percentile ?? 0,
+        }
+      : null;
+  }
+}
+
+function refreshMockFeedingViews(record: FeedingRecord) {
+  const date = dateKey(record.feed_time);
+  const amount = record.amount_ml ?? 0;
+  const daily = mockFeedingStats.daily.find((item) => item.date === date);
+  if (daily) {
+    daily.total_ml += amount;
+    daily.count += 1;
+  } else {
+    mockFeedingStats.daily.push({ date, total_ml: amount, count: 1 });
+    mockFeedingStats.daily.sort((left, right) => left.date.localeCompare(right.date));
+  }
+  mockFeedingStats.average_daily_ml = Math.round(
+    mockFeedingStats.daily.reduce((total, item) => total + item.total_ml, 0) / mockFeedingStats.daily.length,
+  );
+  mockFeedingStats.average_daily_count = Number(
+    (
+      mockFeedingStats.daily.reduce((total, item) => total + item.count, 0) / mockFeedingStats.daily.length
+    ).toFixed(1),
+  );
+
+  if (date === currentMockDate()) {
+    mockDashboardSummary.today_feeding.total_ml += amount;
+    mockDashboardSummary.today_feeding.count += 1;
+    if (
+      !mockDashboardSummary.today_feeding.last_feed_time ||
+      record.feed_time > mockDashboardSummary.today_feeding.last_feed_time
+    ) {
+      mockDashboardSummary.today_feeding.last_feed_time = record.feed_time;
+    }
+  }
+}
+
+function refreshMockSleepViews(record: SleepRecord) {
+  const date = dateKey(record.sleep_start);
+  const start = new Date(record.sleep_start).getTime();
+  const end = record.sleep_end ? new Date(record.sleep_end).getTime() : start;
+  const hours = Math.max(0, (end - start) / 1000 / 60 / 60);
+  const daily = mockSleepStats.daily.find((item) => item.date === date);
+  if (daily) {
+    daily.total_hours = Number((daily.total_hours + hours).toFixed(1));
+    daily.night_wakings += record.night_wakings;
+  } else {
+    mockSleepStats.daily.push({ date, total_hours: Number(hours.toFixed(1)), night_wakings: record.night_wakings });
+    mockSleepStats.daily.sort((left, right) => left.date.localeCompare(right.date));
+  }
+  mockSleepStats.average_daily_hours = Number(
+    (
+      mockSleepStats.daily.reduce((total, item) => total + item.total_hours, 0) / mockSleepStats.daily.length
+    ).toFixed(1),
+  );
+  mockSleepStats.average_night_wakings = Number(
+    (
+      mockSleepStats.daily.reduce((total, item) => total + item.night_wakings, 0) / mockSleepStats.daily.length
+    ).toFixed(1),
+  );
+
+  if (date === currentMockDate()) {
+    mockDashboardSummary.today_sleep.total_hours = Number(
+      (mockDashboardSummary.today_sleep.total_hours + hours).toFixed(1),
+    );
+    mockDashboardSummary.today_sleep.night_wakings += record.night_wakings;
+  }
 }
 
 export class ApiClient {
@@ -282,6 +396,98 @@ export class ApiClient {
     if (!isMockMode()) return this.request('/tracker/health');
     await delay();
     return clone(mockHealthRecords);
+  }
+
+  async createGrowthRecord(data: GrowthRecordCreate): Promise<GrowthRecord> {
+    if (!isMockMode()) {
+      return this.request('/tracker/growth', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    }
+
+    await delay();
+    ensureMockTrackerWrite();
+    const record: GrowthRecord = {
+      id: `growth-${Date.now()}`,
+      measurement_date: data.measurement_date,
+      weight_g: data.weight_g ?? null,
+      height_cm: data.height_cm ?? null,
+      head_cm: data.head_cm ?? null,
+      weight_percentile: null,
+      height_percentile: null,
+      head_percentile: null,
+    };
+    mockGrowthRecords.unshift(record);
+    refreshMockGrowthViews(record);
+    return clone(record);
+  }
+
+  async createFeedingRecord(data: FeedingRecordCreate): Promise<FeedingRecord> {
+    if (!isMockMode()) {
+      return this.request('/tracker/feeding', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    }
+
+    await delay();
+    ensureMockTrackerWrite();
+    const record: FeedingRecord = {
+      id: `feeding-${Date.now()}`,
+      feed_time: data.feed_time,
+      feed_type: data.feed_type,
+      amount_ml: data.amount_ml ?? null,
+      duration_min: data.duration_min ?? null,
+      notes: data.notes ?? null,
+    };
+    mockFeedingRecords.unshift(record);
+    refreshMockFeedingViews(record);
+    return clone(record);
+  }
+
+  async createSleepRecord(data: SleepRecordCreate): Promise<SleepRecord> {
+    if (!isMockMode()) {
+      return this.request('/tracker/sleep', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    }
+
+    await delay();
+    ensureMockTrackerWrite();
+    const record: SleepRecord = {
+      id: `sleep-${Date.now()}`,
+      sleep_start: data.sleep_start,
+      sleep_end: data.sleep_end ?? null,
+      night_wakings: data.night_wakings ?? 0,
+      sleep_type: data.sleep_type,
+      notes: data.notes ?? null,
+    };
+    mockSleepRecords.unshift(record);
+    refreshMockSleepViews(record);
+    return clone(record);
+  }
+
+  async createHealthRecord(data: HealthRecordCreate): Promise<HealthRecord> {
+    if (!isMockMode()) {
+      return this.request('/tracker/health', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    }
+
+    await delay();
+    ensureMockTrackerWrite();
+    const record: HealthRecord = {
+      id: `health-${Date.now()}`,
+      record_date: data.record_date,
+      record_type: data.record_type,
+      title: data.title,
+      description: data.description ?? null,
+    };
+    mockHealthRecords.unshift(record);
+    return clone(record);
   }
 
   async updateTrackerRecord(

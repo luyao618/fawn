@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { Baby as BabyIcon, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { roleLabel } from '@/lib/utils';
@@ -12,6 +13,9 @@ interface FamilyMemberManagerProps {
   onUpdatePermissions: (id: string, permissions: UserPermissions) => Promise<void>;
   onUpdateBaby: (data: Partial<Baby>) => Promise<void>;
 }
+
+const inputClass =
+  'min-h-11 w-full rounded-2xl border border-oat-border bg-white px-3 outline-none transition-colors focus:border-fawn-amber';
 
 export function FamilyMemberManager({ users, baby, onUpdatePermissions, onUpdateBaby }: FamilyMemberManagerProps) {
   const [babyDraft, setBabyDraft] = useState({
@@ -30,14 +34,22 @@ export function FamilyMemberManager({ users, baby, onUpdatePermissions, onUpdate
   return (
     <div className="space-y-4">
       <Card>
-        <h2 className="mb-3 text-[17px] font-semibold">宝宝档案</h2>
+        <div className="mb-4 flex items-center gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-nursery-powder text-info-blue">
+            <BabyIcon className="h-5 w-5" aria-hidden />
+          </span>
+          <div>
+            <p className="text-sm text-dark-gray">宝宝档案</p>
+            <h2 className="text-[17px] font-semibold text-soft-charcoal">{baby.name}</h2>
+          </div>
+        </div>
         <form onSubmit={submitBaby} className="space-y-3">
           <label className="block">
             <span className="mb-1 block text-sm text-dark-gray">姓名</span>
             <input
               value={babyDraft.name}
               onChange={(event) => setBabyDraft((state) => ({ ...state, name: event.target.value }))}
-              className="min-h-11 w-full rounded-xl border border-oat-border bg-warm-gray px-3 outline-none focus:border-fawn-amber"
+              className={inputClass}
             />
           </label>
           <label className="block">
@@ -46,10 +58,10 @@ export function FamilyMemberManager({ users, baby, onUpdatePermissions, onUpdate
               type="date"
               value={babyDraft.birth_date}
               onChange={(event) => setBabyDraft((state) => ({ ...state, birth_date: event.target.value }))}
-              className="min-h-11 w-full rounded-xl border border-oat-border bg-warm-gray px-3 outline-none focus:border-fawn-amber"
+              className={inputClass}
             />
           </label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 min-[390px]:grid-cols-3">
             {[
               ['birth_weight_g', '出生体重(g)'],
               ['birth_height_cm', '身高(cm)'],
@@ -63,7 +75,7 @@ export function FamilyMemberManager({ users, baby, onUpdatePermissions, onUpdate
                   onChange={(event) =>
                     setBabyDraft((state) => ({ ...state, [key]: Number(event.target.value) }))
                   }
-                  className="min-h-11 w-full rounded-xl border border-oat-border bg-warm-gray px-2 outline-none focus:border-fawn-amber"
+                  className={inputClass}
                 />
               </label>
             ))}
@@ -75,10 +87,18 @@ export function FamilyMemberManager({ users, baby, onUpdatePermissions, onUpdate
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-[17px] font-semibold">家庭成员权限</h2>
+        <div className="mb-4 flex items-center gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-nursery-mint text-brand-strong">
+            <ShieldCheck className="h-5 w-5" aria-hidden />
+          </span>
+          <div>
+            <p className="text-sm text-dark-gray">成员权限</p>
+            <h2 className="text-[17px] font-semibold text-soft-charcoal">家庭成员权限</h2>
+          </div>
+        </div>
         <div className="space-y-3">
           {users.map((user) => (
-            <div key={user.id} className="rounded-xl border border-oat-border bg-warm-cream p-3">
+            <div key={user.id} className="rounded-2xl border border-white/70 bg-warm-gray p-3">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div>
                   <p className="font-semibold text-soft-charcoal">{user.display_name}</p>
@@ -87,12 +107,13 @@ export function FamilyMemberManager({ users, baby, onUpdatePermissions, onUpdate
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {(['can_upload_photos', 'can_write_tracker'] as const).map((key) => (
-                  <label key={key} className="flex min-h-11 items-center justify-between gap-2 rounded-xl bg-white px-3 text-sm">
+                  <label key={key} className="flex min-h-11 items-center justify-between gap-2 rounded-2xl bg-white px-3 text-sm">
                     <span>{key === 'can_upload_photos' ? '上传照片' : '写入数据'}</span>
                     <input
                       type="checkbox"
                       checked={user.permissions[key]}
                       disabled={user.role !== 'family'}
+                      className="h-5 w-5 accent-fawn-amber"
                       onChange={(event) =>
                         void onUpdatePermissions(user.id, {
                           ...user.permissions,

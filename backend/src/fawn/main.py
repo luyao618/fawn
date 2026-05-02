@@ -5,7 +5,7 @@ from fawn.api.router import api_router
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Fawn API", version="0.1.0")
+    app = FastAPI(title="Fawn API", version="2.1.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
