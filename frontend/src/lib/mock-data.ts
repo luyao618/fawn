@@ -167,10 +167,10 @@ export const mockGrowthRecords: GrowthRecord[] = [
     measurement_date: '2026-04-01',
     weight_g: 3900,
     height_cm: 53.8,
-    head_cm: 36.8,
+    head_cm: null,
     weight_percentile: 38,
     height_percentile: 42,
-    head_percentile: 49,
+    head_percentile: null,
   },
   {
     id: 'growth-3',
@@ -322,8 +322,8 @@ export const mockDashboardSummary: DashboardSummary = {
     last_feed_time: '2026-04-29T14:20:00+08:00',
   },
   today_sleep: {
-    total_hours: 9.7,
-    night_wakings: 2,
+    total_hours: null,
+    night_wakings: null,
   },
 };
 
@@ -345,16 +345,16 @@ export const mockFeedingStats: FeedingStatsData = {
 export const mockSleepStats: SleepStatsData = {
   days: 7,
   daily: [
-    { date: '2026-04-23', total_hours: 13.5, night_wakings: 2 },
-    { date: '2026-04-24', total_hours: 14.1, night_wakings: 1 },
-    { date: '2026-04-25', total_hours: 12.8, night_wakings: 3 },
-    { date: '2026-04-26', total_hours: 13.9, night_wakings: 2 },
-    { date: '2026-04-27', total_hours: 14.4, night_wakings: 1 },
-    { date: '2026-04-28', total_hours: 13.7, night_wakings: 2 },
-    { date: '2026-04-29', total_hours: 11.2, night_wakings: 2 },
+    { date: '2026-04-23', total_hours: 12.6, night_wakings: 2 },
+    { date: '2026-04-24', total_hours: 10.8, night_wakings: 3 },
+    { date: '2026-04-25', total_hours: 11.9, night_wakings: 2 },
+    { date: '2026-04-26', total_hours: null, night_wakings: null },
+    { date: '2026-04-27', total_hours: null, night_wakings: null },
+    { date: '2026-04-28', total_hours: 12.4, night_wakings: 1 },
+    { date: '2026-04-29', total_hours: null, night_wakings: null },
   ],
-  average_daily_hours: 13.4,
-  average_night_wakings: 1.9,
+  average_daily_hours: 11.93,
+  average_night_wakings: 2,
 };
 
 export const mockPhotos: Photo[] = [

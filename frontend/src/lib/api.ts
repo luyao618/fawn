@@ -206,28 +206,37 @@ function refreshMockSleepViews(record: SleepRecord) {
   const hours = Math.max(0, (end - start) / 1000 / 60 / 60);
   const daily = mockSleepStats.daily.find((item) => item.date === date);
   if (daily) {
-    daily.total_hours = Number((daily.total_hours + hours).toFixed(1));
-    daily.night_wakings += record.night_wakings;
+    daily.total_hours = Number(((daily.total_hours ?? 0) + hours).toFixed(1));
+    daily.night_wakings = (daily.night_wakings ?? 0) + record.night_wakings;
   } else {
     mockSleepStats.daily.push({ date, total_hours: Number(hours.toFixed(1)), night_wakings: record.night_wakings });
     mockSleepStats.daily.sort((left, right) => left.date.localeCompare(right.date));
   }
-  mockSleepStats.average_daily_hours = Number(
-    (
-      mockSleepStats.daily.reduce((total, item) => total + item.total_hours, 0) / mockSleepStats.daily.length
-    ).toFixed(1),
-  );
-  mockSleepStats.average_night_wakings = Number(
-    (
-      mockSleepStats.daily.reduce((total, item) => total + item.night_wakings, 0) / mockSleepStats.daily.length
-    ).toFixed(1),
-  );
+  const recordedSleepDays = mockSleepStats.daily.filter((item) => item.total_hours != null);
+  const wakingDays = mockSleepStats.daily.filter((item) => item.night_wakings != null);
+  mockSleepStats.average_daily_hours =
+    recordedSleepDays.length > 0
+      ? Number(
+          (
+            recordedSleepDays.reduce((total, item) => total + (item.total_hours ?? 0), 0) / recordedSleepDays.length
+          ).toFixed(1),
+        )
+      : null;
+  mockSleepStats.average_night_wakings =
+    wakingDays.length > 0
+      ? Number(
+          (
+            wakingDays.reduce((total, item) => total + (item.night_wakings ?? 0), 0) / wakingDays.length
+          ).toFixed(1),
+        )
+      : null;
 
   if (date === currentMockDate()) {
     mockDashboardSummary.today_sleep.total_hours = Number(
-      (mockDashboardSummary.today_sleep.total_hours + hours).toFixed(1),
+      ((mockDashboardSummary.today_sleep.total_hours ?? 0) + hours).toFixed(1),
     );
-    mockDashboardSummary.today_sleep.night_wakings += record.night_wakings;
+    mockDashboardSummary.today_sleep.night_wakings =
+      (mockDashboardSummary.today_sleep.night_wakings ?? 0) + record.night_wakings;
   }
 }
 

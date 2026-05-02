@@ -18,7 +18,7 @@ const tabs = [
 
 export function TabBar({ currentPath }: TabBarProps) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-mobile px-3 pb-[calc(10px+var(--safe-area-bottom))]">
+    <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-mobile bg-gradient-to-t from-white via-white/95 to-transparent px-3 pt-5 pb-[calc(10px+var(--safe-area-bottom))]">
       <div className="grid h-[78px] grid-cols-5 items-center gap-1 rounded-t-[30px] border border-white/70 bg-white/90 px-2 pt-2 shadow-tabbar backdrop-blur-xl">
         {tabs.map((tab) => {
           const active =

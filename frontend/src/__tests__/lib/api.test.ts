@@ -70,7 +70,7 @@ describe('api mock layer', () => {
     });
     expect((await api.getSleepRecords()).some((record) => record.id === sleep.id)).toBe(true);
     expect((await api.getDashboardSummary()).today_sleep.total_hours).toBe(
-      Number((beforeSleep.today_sleep.total_hours + 1.5).toFixed(1)),
+      Number(((beforeSleep.today_sleep.total_hours ?? 0) + 1.5).toFixed(1)),
     );
 
     const health = await api.createHealthRecord({

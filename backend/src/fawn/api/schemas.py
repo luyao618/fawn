@@ -210,38 +210,95 @@ class TrackerUpdate(BaseModel):
     notes: str | None = None
 
 
+class DashboardBabySummary(BaseModel):
+    name: str
+    gender: Literal["male", "female"]
+    birth_date: date
+    age_days: int
+    age_display: str
+
+
+class DashboardLatestGrowth(BaseModel):
+    date: date
+    weight_g: int | None = None
+    weight_percentile: float | None = None
+    height_cm: float | None = None
+    height_percentile: float | None = None
+
+
+class DashboardTodayFeeding(BaseModel):
+    total_ml: int
+    count: int
+    last_feed_time: datetime | None = None
+
+
+class DashboardTodaySleep(BaseModel):
+    total_hours: float | None = None
+    night_wakings: int | None = None
+
+
 class DashboardSummary(BaseModel):
-    baby: dict[str, Any]
-    latest_growth: dict[str, Any] | None
-    today_feeding: dict[str, Any]
-    today_sleep: dict[str, Any]
+    baby: DashboardBabySummary
+    latest_growth: DashboardLatestGrowth | None
+    today_feeding: DashboardTodayFeeding
+    today_sleep: DashboardTodaySleep
+
+
+class WHOReferencePoint(BaseModel):
+    age_months: float
+    value: float
 
 
 class WHOReferenceLines(BaseModel):
-    p3: list[dict[str, float]]
-    p15: list[dict[str, float]]
-    p50: list[dict[str, float]]
-    p85: list[dict[str, float]]
-    p97: list[dict[str, float]]
+    p3: list[WHOReferencePoint]
+    p15: list[WHOReferencePoint]
+    p50: list[WHOReferencePoint]
+    p85: list[WHOReferencePoint]
+    p97: list[WHOReferencePoint]
+
+
+class GrowthChartRecord(BaseModel):
+    date: date
+    weight_g: int | None = None
+    height_cm: float | None = None
+    head_cm: float | None = None
+
+
+class GrowthWHOReference(BaseModel):
+    weight: WHOReferenceLines
+    height: WHOReferenceLines
+    head: WHOReferenceLines
 
 
 class GrowthChartData(BaseModel):
-    records: list[dict[str, Any]]
-    who_reference: dict[str, WHOReferenceLines]
+    records: list[GrowthChartRecord]
+    who_reference: GrowthWHOReference
+
+
+class FeedingStatsDay(BaseModel):
+    date: date
+    total_ml: int
+    count: int
 
 
 class FeedingStatsData(BaseModel):
     days: int
-    daily: list[dict[str, Any]]
+    daily: list[FeedingStatsDay]
     average_daily_ml: float
     average_daily_count: float
 
 
+class SleepStatsDay(BaseModel):
+    date: date
+    total_hours: float | None = None
+    night_wakings: int | None = None
+
+
 class SleepStatsData(BaseModel):
     days: int
-    daily: list[dict[str, Any]]
-    average_daily_hours: float
-    average_night_wakings: float
+    daily: list[SleepStatsDay]
+    average_daily_hours: float | None
+    average_night_wakings: float | None
 
 
 class PhotoTagRead(BaseModel):

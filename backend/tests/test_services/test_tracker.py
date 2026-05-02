@@ -1,11 +1,14 @@
 from datetime import date
 
-from fawn.models import Baby, User
+from sqlalchemy import func, select
+
+from fawn.models import Baby, User, WhoGrowthReference
 from fawn.services.tracker import (
     PermissionDenied,
     calculate_age_months,
     ensure_tracker_write,
     lms_percentile,
+    seed_who_csv,
 )
 
 
@@ -42,3 +45,25 @@ def test_family_without_tracker_permission_is_rejected() -> None:
         assert "Tracker write permission" in str(exc)
         return
     raise AssertionError("family user without permission should be rejected")
+
+
+async def test_seed_who_csv_is_idempotent(db, tmp_path) -> None:
+    csv_path = tmp_path / "who.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "gender,indicator,age_months,l_value,m_value,s_value",
+                "male,weight,0.00,0.348700,3.346400,0.146020",
+                "male,weight,0.03,0.312700,3.317400,0.146930",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    first_insert = await seed_who_csv(db, csv_path, idempotent=True)
+    second_insert = await seed_who_csv(db, csv_path, idempotent=True)
+    count = await db.scalar(select(func.count()).select_from(WhoGrowthReference))
+
+    assert first_insert == 2
+    assert second_insert == 0
+    assert count == 2

@@ -145,10 +145,10 @@ export interface DashboardSummary {
   };
   latest_growth: {
     date: string;
-    weight_g: number;
-    weight_percentile: number;
-    height_cm: number;
-    height_percentile: number;
+    weight_g: number | null;
+    weight_percentile: number | null;
+    height_cm: number | null;
+    height_percentile: number | null;
   } | null;
   today_feeding: {
     total_ml: number;
@@ -156,8 +156,8 @@ export interface DashboardSummary {
     last_feed_time: string | null;
   };
   today_sleep: {
-    total_hours: number;
-    night_wakings: number;
+    total_hours: number | null;
+    night_wakings: number | null;
   };
 }
 
@@ -198,11 +198,11 @@ export interface SleepStatsData {
   days: number;
   daily: Array<{
     date: string;
-    total_hours: number;
-    night_wakings: number;
+    total_hours: number | null;
+    night_wakings: number | null;
   }>;
-  average_daily_hours: number;
-  average_night_wakings: number;
+  average_daily_hours: number | null;
+  average_night_wakings: number | null;
 }
 
 export type PhotoTagType = 'scene' | 'expression' | 'milestone';

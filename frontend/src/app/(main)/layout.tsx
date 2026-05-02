@@ -18,7 +18,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
   const router = useRouter();
   const isChat = pathname.startsWith('/chat');
-  const showTopBar = !isChat;
+  const isDashboard = pathname.startsWith('/dashboard');
+  const showTopBar = !isChat && !isDashboard;
   const title = useMemo(() => {
     return titleByPath.find(([path]) => pathname.startsWith(path))?.[1] ?? 'Fawn';
   }, [pathname]);
@@ -29,7 +30,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         {showTopBar ? (
           <TopBar title={title} onBack={pathname.startsWith('/history') ? () => router.push('/chat') : undefined} />
         ) : null}
-        <main className={isChat ? '' : 'pb-[calc(108px+var(--safe-area-bottom))]'}>{children}</main>
+        <main className={isChat ? '' : 'pb-[calc(124px+var(--safe-area-bottom))]'}>{children}</main>
         <TabBar currentPath={pathname} />
       </div>
     </AuthGuard>

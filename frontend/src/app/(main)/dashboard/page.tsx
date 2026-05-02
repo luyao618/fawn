@@ -2,16 +2,16 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, ClipboardList, RefreshCw, Sparkles } from 'lucide-react';
-import { BabyInfoCard } from '@/components/dashboard/BabyInfoCard';
+import { ClipboardList, RefreshCw } from 'lucide-react';
+import { Avatar } from '@/components/ui/Avatar';
 import { FeedingStats } from '@/components/dashboard/FeedingStats';
 import { GrowthChart } from '@/components/dashboard/GrowthChart';
 import { HealthTimeline } from '@/components/dashboard/HealthTimeline';
 import { SleepStats } from '@/components/dashboard/SleepStats';
-import { Button } from '@/components/ui/Button';
+import { TopBar } from '@/components/layout/TopBar';
 import { Card } from '@/components/ui/Card';
 import { api } from '@/lib/api';
-import { formatDate, formatDateTime, toKg } from '@/lib/utils';
+import { cn, formatDate, formatDateTime, toKg } from '@/lib/utils';
 import type {
   DashboardSummary,
   FeedingRecord,
@@ -31,6 +31,7 @@ type RecentRecord = {
   detail: string;
   at: string;
 };
+type DashboardSettledResult<T> = PromiseSettledResult<T>;
 
 const feedTypeLabel: Record<FeedingRecord['feed_type'], string> = {
   breast: '母乳',
@@ -43,9 +44,18 @@ const healthTypeLabel: Record<HealthRecord['record_type'], string> = {
   illness: '不适',
   checkup: '体检',
 };
+const STATS_HISTORY_DAYS = 90;
 
 function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse rounded-card bg-white/70 shadow-card ${className}`} />;
+}
+
+function sortRecentRecords(records: RecentRecord[]) {
+  return [...records].sort((left, right) => new Date(right.at).getTime() - new Date(left.at).getTime());
+}
+
+function fulfilledValue<T>(result: DashboardSettledResult<T>, fallback: T): T {
+  return result.status === 'fulfilled' ? result.value : fallback;
 }
 
 function recentFromRecords(
@@ -85,35 +95,65 @@ function recentFromRecords(
     at: record.record_date,
   }));
 
-  return [...growth, ...feeding, ...sleep, ...health]
-    .sort((left, right) => new Date(right.at).getTime() - new Date(left.at).getTime())
-    .slice(0, 5);
+  const primaryRecords = [growth, sleep, health, feeding]
+    .map((records) => sortRecentRecords(records)[0])
+    .filter((record): record is RecentRecord => Boolean(record));
+  const selectedIds = new Set(primaryRecords.map((record) => `${record.type}-${record.id}`));
+  const remainingRecords = sortRecentRecords([...growth, ...feeding, ...sleep, ...health]).filter(
+    (record) => !selectedIds.has(`${record.type}-${record.id}`),
+  );
+
+  return sortRecentRecords([...primaryRecords, ...remainingRecords.slice(0, 5 - primaryRecords.length)]).slice(0, 5);
 }
 
-function DashboardInsight({ summary }: { summary: DashboardSummary }) {
+function StatChip({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <Card className="bg-gradient-to-br from-white to-fawn-amber-light">
-      <div className="flex items-start gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-nursery-mint text-brand-strong">
-          <Sparkles className="h-5 w-5" aria-hidden />
-        </span>
+    <div className="min-w-0 rounded-2xl bg-warm-gray px-3 py-2">
+      <p className="text-[11px] text-dark-gray">{label}</p>
+      <p className="mt-0.5 whitespace-nowrap font-mono text-base font-bold leading-tight text-soft-charcoal">
+        {value}
+      </p>
+      {hint ? <p className="mt-0.5 whitespace-nowrap text-[11px] text-sage-green">{hint}</p> : null}
+    </div>
+  );
+}
+
+function DashboardOverview({ summary, latestRecord }: { summary: DashboardSummary; latestRecord?: RecentRecord }) {
+  const latestGrowth = summary.latest_growth;
+  const todaySleepValue =
+    summary.today_sleep.total_hours == null ? '没数据' : `${summary.today_sleep.total_hours.toFixed(1)}h`;
+  const latestRecordText = latestRecord ? `${latestRecord.type} · ${latestRecord.title}` : '暂无最近记录';
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-3">
+        <Avatar label={summary.baby.name} role="baby" size="md" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-fawn-amber">今日摘要</p>
-          <h2 className="mt-1 text-xl font-semibold leading-tight text-soft-charcoal">
-            {summary.baby.name}今天有 {summary.today_feeding.count} 次喂养，睡眠约{' '}
-            {summary.today_sleep.total_hours.toFixed(1)} 小时
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-fawn-amber">今日摘要</p>
+            <span className="rounded-full bg-nursery-mint px-2 py-1 text-[11px] font-semibold text-brand-strong">
+              {summary.baby.age_display}
+            </span>
+          </div>
+          <h2 className="mt-1 truncate text-[17px] font-semibold leading-tight text-soft-charcoal">
+            {summary.baby.name} · 喂养 {summary.today_feeding.count} 次 · 睡眠 {todaySleepValue}
           </h2>
-          <p className="mt-2 text-sm leading-6 text-dark-gray">
-            最近记录会影响趋势判断。需要补记奶量、睡眠或体重时，可以直接进入记录页。
-          </p>
-          <Link
-            href="/record"
-            className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-2xl bg-fawn-amber px-4 text-sm font-semibold text-white shadow-card"
-          >
-            去记录
-            <ArrowRight className="h-4 w-4" aria-hidden />
-          </Link>
+          <p className="mt-1 line-clamp-1 text-xs text-dark-gray">最近：{latestRecordText}</p>
         </div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <StatChip label="今日喂养" value={`${summary.today_feeding.count}次`} />
+        <StatChip label="今日睡眠" value={todaySleepValue} />
+        <StatChip
+          label="最新体重"
+          value={toKg(latestGrowth?.weight_g ?? null)}
+          hint={latestGrowth?.weight_percentile ? `WHO P${latestGrowth.weight_percentile}` : undefined}
+        />
+        <StatChip
+          label="最新身高"
+          value={latestGrowth?.height_cm ? `${latestGrowth.height_cm}cm` : '暂无'}
+          hint={latestGrowth?.height_percentile ? `WHO P${latestGrowth.height_percentile}` : undefined}
+        />
       </div>
     </Card>
   );
@@ -162,6 +202,7 @@ export default function DashboardPage() {
   const [recentRecords, setRecentRecords] = useState<RecentRecord[]>([]);
   const [indicator, setIndicator] = useState<Indicator>('weight');
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     setRefreshing(true);
@@ -175,22 +216,47 @@ export default function DashboardPage() {
         growthRecords,
         feedingRecords,
         sleepRecords,
-      ] = await Promise.all([
+      ] = await Promise.allSettled([
         api.getDashboardSummary(),
         api.getGrowthChart(),
-        api.getFeedingStats(7),
-        api.getSleepStats(7),
+        api.getFeedingStats(STATS_HISTORY_DAYS),
+        api.getSleepStats(STATS_HISTORY_DAYS),
         api.getHealthRecords(),
         api.getGrowthRecords(),
         api.getFeedingRecords(),
         api.getSleepRecords(),
-      ]);
-      setSummary(summaryData);
-      setGrowth(growthData);
-      setFeeding(feedingData);
-      setSleep(sleepData);
-      setHealth(healthData);
-      setRecentRecords(recentFromRecords(growthRecords, feedingRecords, sleepRecords, healthData));
+      ] as const);
+      const failedCount = [
+        summaryData,
+        growthData,
+        feedingData,
+        sleepData,
+        healthData,
+        growthRecords,
+        feedingRecords,
+        sleepRecords,
+      ].filter((result) => result.status === 'rejected').length;
+
+      if (summaryData.status === 'fulfilled') setSummary(summaryData.value);
+      if (growthData.status === 'fulfilled') setGrowth(growthData.value);
+      if (feedingData.status === 'fulfilled') setFeeding(feedingData.value);
+      if (sleepData.status === 'fulfilled') setSleep(sleepData.value);
+      if (healthData.status === 'fulfilled') setHealth(healthData.value);
+      if (
+        growthRecords.status === 'fulfilled' &&
+        feedingRecords.status === 'fulfilled' &&
+        sleepRecords.status === 'fulfilled'
+      ) {
+        setRecentRecords(
+          recentFromRecords(
+            growthRecords.value,
+            feedingRecords.value,
+            sleepRecords.value,
+            fulfilledValue(healthData, []),
+          ),
+        );
+      }
+      setLoadError(failedCount > 0 ? `有 ${failedCount} 项数据暂时没更新，已保留可用内容。` : null);
     } finally {
       setRefreshing(false);
     }
@@ -201,35 +267,54 @@ export default function DashboardPage() {
   }, [loadDashboard]);
 
   return (
-    <div className="space-y-5 px-4 py-4">
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => void loadDashboard()}
-          loading={refreshing}
-          className="min-h-10 px-3 py-2 text-sm"
-        >
-          <RefreshCw className="h-4 w-4" aria-hidden />
-          刷新
-        </Button>
+    <>
+      <TopBar
+        title="成长"
+        rightAction={
+          <button
+            type="button"
+            onClick={() => void loadDashboard()}
+            disabled={refreshing}
+            className="flex min-h-11 items-center gap-1 rounded-full bg-white/80 px-3 text-sm font-semibold text-fawn-amber shadow-card disabled:opacity-70"
+          >
+            <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} aria-hidden />
+            刷新
+          </button>
+        }
+      />
+      <div className="space-y-4 px-4 pt-3 pb-6">
+        {loadError ? (
+          <div
+            role="status"
+            className="rounded-2xl border border-fawn-amber/30 bg-fawn-amber-light px-3 py-2 text-xs leading-5 text-soft-charcoal"
+          >
+            {loadError}
+          </div>
+        ) : null}
+        {summary ? (
+          <DashboardOverview summary={summary} latestRecord={recentRecords[0]} />
+        ) : (
+          <Skeleton className="h-36" />
+        )}
+        {growth ? (
+          <GrowthChart
+            data={growth}
+            birthDate={summary?.baby.birth_date}
+            activeIndicator={indicator}
+            onIndicatorChange={setIndicator}
+          />
+        ) : (
+          <Skeleton className="h-80" />
+        )}
+
+        <div className="grid grid-cols-1 gap-4">
+          {feeding ? <FeedingStats data={feeding} /> : <Skeleton className="h-48" />}
+          {sleep ? <SleepStats data={sleep} /> : <Skeleton className="h-48" />}
+        </div>
+
+        {health ? <HealthTimeline records={health} /> : <Skeleton className="h-52" />}
+        <RecentRecords records={recentRecords} />
       </div>
-
-      {summary ? <DashboardInsight summary={summary} /> : <Skeleton className="h-52" />}
-      {summary ? <BabyInfoCard summary={summary} /> : <Skeleton className="h-40" />}
-      {growth ? (
-        <GrowthChart data={growth} activeIndicator={indicator} onIndicatorChange={setIndicator} />
-      ) : (
-        <Skeleton className="h-80" />
-      )}
-
-      <div className="grid grid-cols-1 gap-4 min-[390px]:grid-cols-2">
-        {feeding ? <FeedingStats data={feeding} /> : <Skeleton className="h-48" />}
-        {sleep ? <SleepStats data={sleep} /> : <Skeleton className="h-48" />}
-      </div>
-
-      {health ? <HealthTimeline records={health} /> : <Skeleton className="h-52" />}
-      <RecentRecords records={recentRecords} />
-    </div>
+    </>
   );
 }

@@ -7,7 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.dependencies import can_write_tracker
@@ -422,22 +422,38 @@ async def query_health(db: AsyncSession, **kwargs: Any) -> list[HealthRecord]:
 
 
 async def seed_who_csv(db: AsyncSession, csv_path: Path, idempotent: bool) -> int:
-    existing_count = await db.scalar(select(func.count()).select_from(WhoGrowthReference))
-    if idempotent and existing_count:
-        return 0
+    existing_keys: set[tuple[str, str, Decimal]] = set()
+    if idempotent:
+        existing_rows = await db.execute(
+            select(
+                WhoGrowthReference.gender,
+                WhoGrowthReference.indicator,
+                WhoGrowthReference.age_months,
+            )
+        )
+        existing_keys = {
+            (gender, indicator, age_months)
+            for gender, indicator, age_months in existing_rows.all()
+        }
+
     rows_added = 0
     with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         for row in reader:
+            age_months = Decimal(row["age_months"])
+            key = (row["gender"].strip(), row["indicator"].strip(), age_months)
+            if key in existing_keys:
+                continue
             item = WhoGrowthReference(
-                gender=row["gender"].strip(),
-                indicator=row["indicator"].strip(),
-                age_months=Decimal(row["age_months"]),
+                gender=key[0],
+                indicator=key[1],
+                age_months=age_months,
                 l_value=Decimal(row.get("l_value") or row.get("l") or row["L"]),
                 m_value=Decimal(row.get("m_value") or row.get("m") or row["M"]),
                 s_value=Decimal(row.get("s_value") or row.get("s") or row["S"]),
             )
             db.add(item)
+            existing_keys.add(key)
             rows_added += 1
     await db.commit()
     return rows_added
