@@ -1,5 +1,6 @@
 'use client';
 
+import { PhotoImage } from '@/components/album/PhotoImage';
 import { formatDate } from '@/lib/utils';
 import type { Photo } from '@/lib/types';
 
@@ -51,9 +52,10 @@ export function PhotoGrid({ photos, view, onPhotoClick }: PhotoGridProps) {
                   type="button"
                   key={photo.id}
                   onClick={() => onPhotoClick(photo)}
-                  className="relative aspect-[4/5] overflow-hidden rounded-card bg-warm-gray text-left shadow-card"
+                  className="relative aspect-[4/5] overflow-hidden rounded-[24px] bg-warm-gray text-left shadow-card transition-transform active:scale-[0.99]"
+                  aria-label={`查看照片：${label}`}
                 >
-                  <img src={photo.storage_url} alt={photo.original_filename} className="h-full w-full object-cover" />
+                  <PhotoImage src={photo.storage_url} alt={photo.original_filename} className="h-full w-full object-cover" />
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 pt-10 text-white">
                     <p className="truncate text-xs">{formatDate(photo.taken_at ?? photo.uploaded_at)}</p>
                     <p className="truncate text-sm font-semibold">{label}</p>

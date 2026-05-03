@@ -1,11 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Images, Sparkles } from 'lucide-react';
+import { Images } from 'lucide-react';
 import { PhotoGrid } from '@/components/album/PhotoGrid';
 import { PhotoViewer } from '@/components/album/PhotoViewer';
 import { UploadButton } from '@/components/album/UploadButton';
-import { Card } from '@/components/ui/Card';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
 import { canUploadPhotos } from '@/lib/utils';
@@ -25,10 +24,20 @@ export default function AlbumPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selected, setSelected] = useState<Photo | null>(null);
   const [isUploading, setUploading] = useState(false);
+  const [isLoading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function loadPhotos(nextView = view) {
-    const response = await api.getPhotos({ view: nextView });
-    setPhotos(response.items);
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      const response = await api.getPhotos({ view: nextView });
+      setPhotos(response.items);
+    } catch {
+      setErrorMessage('照片加载失败，请稍后再试。');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -45,57 +54,68 @@ export default function AlbumPage() {
     }
   }
 
-  async function confirmTag(tagId: string) {
+  const canUpload = canUploadPhotos(user?.role, user?.permissions);
+  const canDelete = user?.role === 'admin' || user?.role === 'parent';
+
+  async function downloadSelectedPhoto() {
     if (!selected) return;
-    await api.confirmTag(selected.id, tagId);
-    const fresh = await api.getPhoto(selected.id);
-    setSelected(fresh);
+    const response = await api.getPhotoDownloadUrl(selected.id);
+    const link = document.createElement('a');
+    link.href = response.download_url;
+    link.download = selected.original_filename;
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  async function deleteSelectedPhoto() {
+    if (!selected) return;
+    const confirmed = window.confirm('确定删除这张照片吗？照片会从相册隐藏，但原始文件会保留在存储中。');
+    if (!confirmed) return;
+    await api.deletePhoto(selected.id);
+    setSelected(null);
     await loadPhotos();
   }
 
-  const canUpload = canUploadPhotos(user?.role, user?.permissions);
-
   return (
-    <div className="space-y-5 px-4 py-4">
-      <Card className="bg-gradient-to-br from-white to-fawn-amber-light">
-        <div className="flex items-start gap-3">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-nursery-powder text-info-blue">
-            <Sparkles className="h-5 w-5" aria-hidden />
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-fawn-amber">智慧相册</p>
-            <h2 className="mt-1 text-xl font-semibold leading-tight text-soft-charcoal">自动整理场景、表情和里程碑</h2>
-            <p className="mt-2 text-sm leading-6 text-dark-gray">
-              上传后会先给出 AI 标签，重要里程碑可以由父母确认，方便以后回看成长片段。
-            </p>
+    <div className="space-y-4 px-4 py-4">
+      <div className="rounded-[24px] bg-white/85 p-2 shadow-card ring-1 ring-white/70">
+        <div className="flex items-center justify-between gap-3 px-2 pb-2 pt-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-nursery-mint text-brand-strong">
+              <Images className="h-4 w-4" aria-hidden />
+            </span>
+            <p className="truncate text-xs italic text-mid-gray">按时间、场景和里程碑浏览</p>
           </div>
+          <span className="shrink-0 rounded-full bg-warm-gray px-2.5 py-1 text-xs font-semibold text-dark-gray">
+            {isLoading ? '加载中' : `${photos.length} 张`}
+          </span>
         </div>
-      </Card>
-
-      <div className="flex items-center gap-3 rounded-card bg-white/85 p-2 shadow-card ring-1 ring-white/70">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-nursery-mint text-brand-strong">
-          <Images className="h-5 w-5" aria-hidden />
-        </span>
-        <div className="grid flex-1 grid-cols-3 rounded-2xl bg-warm-gray p-1">
-        {modes.map((mode) => (
-          <button
-            type="button"
-            key={mode.value}
-            onClick={() => setView(mode.value)}
-            className={`min-h-10 rounded-xl text-sm font-semibold ${view === mode.value ? 'bg-white text-fawn-amber shadow-card' : 'text-dark-gray'}`}
-          >
-            {mode.label}
-          </button>
-        ))}
+        <div className="grid grid-cols-3 rounded-2xl bg-warm-gray p-1">
+          {modes.map((mode) => (
+            <button
+              type="button"
+              key={mode.value}
+              onClick={() => setView(mode.value)}
+              className={`min-h-10 rounded-xl text-sm font-semibold ${view === mode.value ? 'bg-white text-fawn-amber shadow-card' : 'text-dark-gray'}`}
+            >
+              {mode.label}
+            </button>
+          ))}
         </div>
       </div>
+      {errorMessage ? (
+        <div className="rounded-2xl bg-safety-red-light px-4 py-3 text-sm text-safety-red">{errorMessage}</div>
+      ) : null}
       <PhotoGrid photos={photos} view={view} onPhotoClick={setSelected} />
       {canUpload ? <UploadButton onUpload={upload} isUploading={isUploading} /> : null}
       {selected ? (
         <PhotoViewer
           photo={selected}
           onClose={() => setSelected(null)}
-          onConfirmTag={user?.role === 'admin' || user?.role === 'parent' ? (tagId) => void confirmTag(tagId) : undefined}
+          onDownload={downloadSelectedPhoto}
+          onDelete={canDelete ? deleteSelectedPhoto : undefined}
         />
       ) : null}
     </div>

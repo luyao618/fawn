@@ -16,7 +16,7 @@ describe('profile page', () => {
 
     await waitFor(() => expect(screen.getByText('家庭与隐私')).toBeInTheDocument());
     expect(screen.getByText('家庭数据边界')).toBeInTheDocument();
-    expect(screen.getByText('宝宝档案')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('宝宝档案')).toBeInTheDocument());
     expect(screen.getByText('家庭成员权限')).toBeInTheDocument();
     expect(screen.getByText('我的画像')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('奶奶')).toBeInTheDocument());

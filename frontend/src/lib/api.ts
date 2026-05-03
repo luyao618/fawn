@@ -38,6 +38,7 @@ import type {
   MessageSearchResult,
   PaginatedResponse,
   Photo,
+  PhotoDownloadResponse,
   PhotoTag,
   ProfileItem,
   SleepRecordCreate,
@@ -666,6 +667,24 @@ export class ApiClient {
     if (!tag) throw new ApiError(404, '标签不存在');
     tag.is_confirmed = true;
     return clone(tag);
+  }
+
+  async getPhotoDownloadUrl(id: string): Promise<PhotoDownloadResponse> {
+    if (!isMockMode()) return this.request(`/album/photos/${id}/download`);
+    await delay();
+    const photo = mockPhotos.find((item) => item.id === id);
+    if (!photo) throw new ApiError(404, '照片不存在');
+    return { download_url: photo.storage_url, expires_in_seconds: 300 };
+  }
+
+  async deletePhoto(id: string): Promise<void> {
+    if (!isMockMode()) return this.request(`/album/photos/${id}`, { method: 'DELETE' });
+    await delay();
+    const role = currentUserRole();
+    if (role !== 'admin' && role !== 'parent') throw new ApiError(403, '没有删除权限');
+    const index = mockPhotos.findIndex((item) => item.id === id);
+    if (index === -1) throw new ApiError(404, '照片不存在');
+    mockPhotos.splice(index, 1);
   }
 
   async getMyProfile(): Promise<ProfileItem[]> {

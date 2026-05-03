@@ -238,6 +238,11 @@ export interface PhotoTag {
   is_confirmed: boolean;
 }
 
+export interface PhotoDownloadResponse {
+  download_url: string;
+  expires_in_seconds: number;
+}
+
 export interface ProfileItem {
   id: string;
   content: string;
