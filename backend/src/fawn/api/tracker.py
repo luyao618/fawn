@@ -54,6 +54,7 @@ def _service_error(exc: Exception) -> HTTPException:
 
 async def _list_records(
     record_type: Literal["growth", "feeding", "sleep", "health"],
+    user: User,
     date_value: date | None,
     from_date: date | None,
     to_date: date | None,
@@ -65,6 +66,7 @@ async def _list_records(
         records = await query_records(
             db,
             record_type,
+            family_id=user.family_id,
             date_value=date_value,
             from_date=from_date,
             to_date=to_date,
@@ -79,7 +81,7 @@ async def _list_records(
 
 @router.get("/growth", response_model=list[GrowthRecordRead])
 async def list_growth(
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     date_value: date | None = Query(None, alias="date"),
     from_date: date | None = Query(None, alias="from"),
@@ -87,12 +89,12 @@ async def list_growth(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[GrowthRecordRead]:
-    return await _list_records("growth", date_value, from_date, to_date, limit, offset, db)
+    return await _list_records("growth", user, date_value, from_date, to_date, limit, offset, db)
 
 
 @router.get("/feeding", response_model=list[FeedingRecordRead])
 async def list_feeding(
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     date_value: date | None = Query(None, alias="date"),
     from_date: date | None = Query(None, alias="from"),
@@ -100,12 +102,12 @@ async def list_feeding(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[FeedingRecordRead]:
-    return await _list_records("feeding", date_value, from_date, to_date, limit, offset, db)
+    return await _list_records("feeding", user, date_value, from_date, to_date, limit, offset, db)
 
 
 @router.get("/sleep", response_model=list[SleepRecordRead])
 async def list_sleep(
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     date_value: date | None = Query(None, alias="date"),
     from_date: date | None = Query(None, alias="from"),
@@ -113,12 +115,12 @@ async def list_sleep(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[SleepRecordRead]:
-    return await _list_records("sleep", date_value, from_date, to_date, limit, offset, db)
+    return await _list_records("sleep", user, date_value, from_date, to_date, limit, offset, db)
 
 
 @router.get("/health", response_model=list[HealthRecordRead])
 async def list_health(
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     date_value: date | None = Query(None, alias="date"),
     from_date: date | None = Query(None, alias="from"),
@@ -126,7 +128,7 @@ async def list_health(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[HealthRecordRead]:
-    return await _list_records("health", date_value, from_date, to_date, limit, offset, db)
+    return await _list_records("health", user, date_value, from_date, to_date, limit, offset, db)
 
 
 @router.post("/growth", response_model=GrowthRecordRead, status_code=status.HTTP_201_CREATED)

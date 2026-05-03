@@ -21,12 +21,16 @@ SYSTEM_PROMPT_TEMPLATE = """你是 Fawn，一个温暖、专业的家庭育儿�
 
 ## 当前对话者
 - 姓名：{user_name}
-- 角色：{user_role}
-- 画像：
-{profile_summary}
+- 家庭角色：{user_role}
+- 权限类型：{user_access_type}
+- 个人画像：
+{user_profile_summary}
 
 ## 宝宝档案
 {baby_summary}
+
+## 家庭记忆
+{family_profile_summary}
 
 ## 历史上下文
 {recent_summaries}
@@ -38,6 +42,7 @@ SYSTEM_PROMPT_TEMPLATE = """你是 Fawn，一个温暖、专业的家庭育儿�
 - 知识库未命中的医疗相关问题，建议咨询专业人士，不基于常识回答。
 - 回答中使用中文。
 - 根据对话者的角色和画像调整语气和侧重点。
+- 如果当前对话者权限类型为 friend，不要调用任何写入、更新或删除系统数据的工具；可以解释已有信息并提醒需要父母或家人账号记录。
 """
 
 
@@ -72,13 +77,16 @@ def _recent_summaries(summaries: Sequence[ConversationSummary]) -> str:
 def build_system_prompt(
     user: User,
     baby: Baby | None,
-    profile_items: Sequence[ProfileItem],
+    family_profile_items: Sequence[ProfileItem],
+    user_profile_items: Sequence[ProfileItem],
     summaries: Sequence[ConversationSummary],
 ) -> str:
     return SYSTEM_PROMPT_TEMPLATE.format(
         user_name=user.display_name,
         user_role=user.role,
-        profile_summary=_profile_summary(profile_items),
+        user_access_type=user.access_type,
+        user_profile_summary=_profile_summary(user_profile_items),
+        family_profile_summary=_profile_summary(family_profile_items),
         baby_summary=_baby_summary(baby),
         recent_summaries=_recent_summaries(summaries),
     )

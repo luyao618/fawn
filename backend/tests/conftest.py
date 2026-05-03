@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.ext.compiler import compiles
 
-from fawn.models import Baby, Base, User
+from fawn.models import Baby, Base, Family, User
 from fawn.services.auth import create_access_token, hash_password
 
 try:
@@ -72,12 +72,23 @@ async def db() -> AsyncIterator[AsyncSession]:
 
 
 @pytest_asyncio.fixture
-async def test_user(db: AsyncSession) -> User:
+async def test_family(db: AsyncSession) -> Family:
+    family = Family(id=uuid.uuid4(), name="Test Family")
+    db.add(family)
+    await db.commit()
+    await db.refresh(family)
+    return family
+
+
+@pytest_asyncio.fixture
+async def test_user(db: AsyncSession, test_family: Family) -> User:
     user = User(
         id=uuid.uuid4(),
+        family_id=test_family.id,
         username="testadmin",
         display_name="Test Admin",
-        role="admin",
+        access_type="parent",
+        role="爸爸",
         password_hash=hash_password("testpass"),
         permissions={"can_write_tracker": True, "can_upload_photos": True},
     )
@@ -88,12 +99,32 @@ async def test_user(db: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def test_family_user(db: AsyncSession) -> User:
+async def test_family_user(db: AsyncSession, test_family: Family) -> User:
     user = User(
         id=uuid.uuid4(),
+        family_id=test_family.id,
         username="testfamily",
         display_name="Test Family",
-        role="family",
+        access_type="family",
+        role="奶奶",
+        password_hash=hash_password("testpass"),
+        permissions={"can_write_tracker": True, "can_upload_photos": True},
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def test_friend_user(db: AsyncSession, test_family: Family) -> User:
+    user = User(
+        id=uuid.uuid4(),
+        family_id=test_family.id,
+        username="testfriend",
+        display_name="Test Friend",
+        access_type="friend",
+        role="儿科医生",
         password_hash=hash_password("testpass"),
         permissions={"can_write_tracker": False, "can_upload_photos": False},
     )
@@ -104,9 +135,10 @@ async def test_family_user(db: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def test_baby(db: AsyncSession) -> Baby:
+async def test_baby(db: AsyncSession, test_family: Family) -> Baby:
     baby = Baby(
         id=uuid.uuid4(),
+        family_id=test_family.id,
         name="Test Baby",
         gender="male",
         birth_date=date(2026, 1, 1),
@@ -120,13 +152,19 @@ async def test_baby(db: AsyncSession) -> Baby:
 
 @pytest_asyncio.fixture
 async def auth_headers(test_user: User) -> dict[str, str]:
-    token = create_access_token(test_user.id, test_user.role)
+    token = create_access_token(test_user.id, test_user.access_type)
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest_asyncio.fixture
 async def family_auth_headers(test_family_user: User) -> dict[str, str]:
-    token = create_access_token(test_family_user.id, test_family_user.role)
+    token = create_access_token(test_family_user.id, test_family_user.access_type)
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def friend_auth_headers(test_friend_user: User) -> dict[str, str]:
+    token = create_access_token(test_friend_user.id, test_friend_user.access_type)
     return {"Authorization": f"Bearer {token}"}
 
 

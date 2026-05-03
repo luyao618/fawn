@@ -12,6 +12,9 @@ from fawn.models.base import Base, UUIDMixin
 class Conversation(UUIDMixin, Base):
     __tablename__ = "conversations"
 
+    family_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("families.id"), nullable=False
+    )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
@@ -47,6 +50,10 @@ class Message(UUIDMixin, Base):
         ForeignKey("conversations.id"),
         nullable=False,
     )
+    sender_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+    )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     message_type: Mapped[str] = mapped_column(
@@ -58,6 +65,7 @@ class Message(UUIDMixin, Base):
     )
 
     conversation = relationship("Conversation", back_populates="messages")
+    sender = relationship("User")
 
 
 class ConversationSummary(UUIDMixin, Base):

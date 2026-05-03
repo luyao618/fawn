@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.api.schemas import BabyRead, BabyUpdate
 from fawn.db.session import get_db
-from fawn.dependencies import get_current_user
+from fawn.dependencies import get_current_user, get_parent_user
 from fawn.models import User
 from fawn.services import profile as profile_service
 
@@ -18,7 +18,7 @@ async def get_baby(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        return await profile_service.get_baby(db)
+        return await profile_service.get_baby(db, user.family_id)
     except profile_service.NotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -26,13 +26,11 @@ async def get_baby(
 @router.patch("", response_model=BabyRead)
 async def update_baby(
     body: BabyUpdate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_parent_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if user.role not in {"admin", "parent"}:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin or parent role required")
     try:
         data = body.model_dump(exclude_unset=True)
-        return await profile_service.update_baby(db, data)
+        return await profile_service.update_baby(db, user.family_id, data)
     except profile_service.NotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

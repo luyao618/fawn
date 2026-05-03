@@ -18,10 +18,10 @@ def _aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
-async def check_session_timeout(db: AsyncSession, user_id: uuid.UUID) -> uuid.UUID | None:
+async def check_session_timeout(db: AsyncSession, family_id: uuid.UUID) -> uuid.UUID | None:
     active = await db.scalar(
         select(Conversation)
-        .where(Conversation.user_id == user_id, Conversation.is_active.is_(True))
+        .where(Conversation.family_id == family_id, Conversation.is_active.is_(True))
         .order_by(Conversation.started_at.desc())
         .limit(1)
     )
@@ -148,7 +148,9 @@ async def finalize_conversation(db: AsyncSession, conversation_id: uuid.UUID) ->
     for content in profile_items:
         db.add(
             ProfileItem(
+                family_id=conversation.family_id,
                 user_id=conversation.user_id,
+                scope="user",
                 content=content,
                 source_conversation_id=conversation_id,
             )

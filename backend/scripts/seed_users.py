@@ -11,7 +11,7 @@ import yaml
 from sqlalchemy import select
 
 from fawn.db.session import async_session_factory
-from fawn.models import Baby, User
+from fawn.models import Baby, Family, User
 from fawn.services.auth import hash_password
 
 DEFAULT_PERMISSIONS = {"can_upload_photos": True, "can_write_tracker": False}
@@ -41,10 +41,33 @@ def _optional_decimal(value: Any) -> Decimal | None:
     return Decimal(str(value))
 
 
+def _access_type(value: str) -> str:
+    if value in {"admin", "parent"}:
+        return "parent"
+    if value in {"family", "friend"}:
+        return value
+    return "family"
+
+
+async def ensure_family(session, config: dict[str, Any]) -> Family:
+    existing = await session.scalar(select(Family).order_by(Family.created_at.asc()).limit(1))
+    if existing is not None:
+        return existing
+    baby_config = config.get("baby") or {}
+    family_name = config.get("family_name") or (
+        f"{baby_config['name']}的家庭" if baby_config.get("name") else "默认家庭"
+    )
+    family = Family(name=family_name)
+    session.add(family)
+    await session.flush()
+    return family
+
+
 async def seed_users_from_config(config: dict[str, Any], idempotent: bool) -> int:
     members = config["family"]
     created = 0
     async with async_session_factory() as session:
+        family = await ensure_family(session, config)
         for member in members:
             username = member["username"]
             existing = await session.scalar(select(User).where(User.username == username))
@@ -53,11 +76,16 @@ async def seed_users_from_config(config: dict[str, Any], idempotent: bool) -> in
                     continue
                 raise ValueError(f"User already exists: {username}")
             user = User(
+                family_id=family.id,
                 username=username,
                 display_name=member["display_name"],
                 password_hash=hash_password(member["password"]),
-                role=member["role"],
-                permissions=member.get("permissions") or DEFAULT_PERMISSIONS,
+                access_type=_access_type(member["role"]),
+                role=member.get("family_role") or member.get("display_role") or member["display_name"],
+                permissions=member.get("permissions") or {
+                    "can_upload_photos": _access_type(member["role"]) in {"parent", "family"},
+                    "can_write_tracker": _access_type(member["role"]) in {"parent", "family"},
+                },
                 avatar_url=member.get("avatar_url"),
             )
             session.add(user)
@@ -72,6 +100,7 @@ async def seed_baby_from_config(config: dict[str, Any], idempotent: bool) -> int
         return 0
 
     async with async_session_factory() as session:
+        family = await ensure_family(session, config)
         existing = await session.scalar(select(Baby).order_by(Baby.created_at.asc()).limit(1))
         if existing is not None:
             if idempotent:
@@ -79,6 +108,7 @@ async def seed_baby_from_config(config: dict[str, Any], idempotent: bool) -> int
             raise ValueError("Baby profile already exists")
 
         baby = Baby(
+            family_id=family.id,
             name=baby_config["name"],
             gender=baby_config["gender"],
             birth_date=_parse_date(baby_config["birth_date"]),

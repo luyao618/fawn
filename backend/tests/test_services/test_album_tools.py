@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fawn.models import Baby, Photo, PhotoTag, User
 
 
-async def test_browse_photos_empty(db: AsyncSession, test_baby: Baby):
+async def test_browse_photos_empty(db: AsyncSession, test_user: User, test_baby: Baby):
     with patch("fawn.agent.tools.album.async_session_factory") as mock_factory:
         mock_factory.return_value.__aenter__ = lambda s: db
         mock_factory.return_value.__aexit__ = lambda s, *a: None
@@ -24,7 +24,7 @@ async def test_browse_photos_empty(db: AsyncSession, test_baby: Baby):
         mock_factory.side_effect = mock_session
 
         from fawn.agent.tools.album import browse_photos
-        result = await browse_photos.ainvoke({"view": "timeline"})
+        result = await browse_photos.ainvoke({"view": "timeline", "user_id": str(test_user.id)})
 
     assert "photos" in result
     assert isinstance(result["photos"], list)
@@ -62,7 +62,7 @@ async def test_browse_photos_with_data(db: AsyncSession, test_user: User, test_b
 
     with patch("fawn.agent.tools.album.async_session_factory", side_effect=mock_session):
         from fawn.agent.tools.album import browse_photos
-        result = await browse_photos.ainvoke({"view": "timeline"})
+        result = await browse_photos.ainvoke({"view": "timeline", "user_id": str(test_user.id)})
 
     assert len(result["photos"]) == 1
     assert result["photos"][0]["original_filename"] == "test.jpg"
