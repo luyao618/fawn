@@ -36,9 +36,23 @@ describe('album page', () => {
     expect(screen.getByRole('button', { name: '删除照片' })).toBeInTheDocument();
   });
 
-  it('hides delete action for family members', async () => {
+  it('shows delete action for family members', async () => {
     useAuthStore.getState().logout();
     await useAuthStore.getState().login('nainai', 'password');
+
+    const user = userEvent.setup();
+    render(<AlbumPage />);
+
+    const photoButtons = await screen.findAllByRole('button', { name: /查看照片：/ });
+    await user.click(photoButtons[0]);
+
+    expect(screen.getByRole('button', { name: '下载照片' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '删除照片' })).toBeInTheDocument();
+  });
+
+  it('hides delete action for friends', async () => {
+    useAuthStore.getState().logout();
+    await useAuthStore.getState().login('doctor', 'password');
 
     const user = userEvent.setup();
     render(<AlbumPage />);

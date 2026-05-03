@@ -14,10 +14,11 @@ describe('profile page', () => {
   it('loads family, privacy, baby profile, and memory sections', async () => {
     render(<ProfilePage />);
 
-    await waitFor(() => expect(screen.getByText('家庭与隐私')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('晨晨的家庭')).toBeInTheDocument());
     expect(screen.getByText('家庭数据边界')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('宝宝档案')).toBeInTheDocument());
-    expect(screen.getByText('家庭成员权限')).toBeInTheDocument();
+    expect(screen.getByText('账号与权限')).toBeInTheDocument();
+    expect(screen.getByText('家庭记忆')).toBeInTheDocument();
     expect(screen.getByText('我的画像')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('奶奶')).toBeInTheDocument());
   });

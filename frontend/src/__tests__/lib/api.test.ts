@@ -28,7 +28,8 @@ describe('api mock layer', () => {
 
   it('returns typed core mock data', async () => {
     const login = await api.login({ username: 'mama', password: 'password' });
-    expect(login.user.role).toBe('parent');
+    expect(login.user.access_type).toBe('parent');
+    expect(login.user.role).toBe('妈妈');
     window.localStorage.setItem('access_token', login.access_token);
     expect((await api.getMe()).username).toBe('mama');
     expect((await api.getDashboardSummary()).baby.name).toBe('晨晨');
@@ -86,7 +87,7 @@ describe('api mock layer', () => {
   });
 
   it('rejects tracker creation for mock users without write permission', async () => {
-    const login = await api.login({ username: 'nainai', password: 'password' });
+    const login = await api.login({ username: 'doctor', password: 'password' });
     window.localStorage.setItem('access_token', login.access_token);
 
     await expect(

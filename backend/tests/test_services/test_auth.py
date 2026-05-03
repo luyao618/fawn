@@ -21,6 +21,7 @@ def test_create_access_token_payload() -> None:
 
     assert payload["sub"] == str(user_id)
     assert payload["role"] == "parent"
+    assert payload["access_type"] == "parent"
     assert "exp" in payload
 
 

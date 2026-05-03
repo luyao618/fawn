@@ -89,7 +89,7 @@ export function ChatClient() {
       />
       {error ? <div className="bg-safety-red-light px-4 py-2 text-sm text-safety-red">{error}</div> : null}
       <QuickActionChips
-        canWriteTracker={canWriteTracker(user?.role, user?.permissions)}
+        canWriteTracker={canWriteTracker(user?.access_type)}
         onSelect={(action) => void sendMessage(action)}
       />
       <ChatInput

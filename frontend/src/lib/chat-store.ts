@@ -106,11 +106,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     let conversation = get().currentConversation;
     if (!conversation) conversation = await get().createConversation();
+    const currentUser = useAuthStore.getState().user;
 
     const localMessageId = id('user');
     const userMessage: Message = {
       id: localMessageId,
       conversation_id: conversation.id,
+      sender_user_id: currentUser?.id ?? null,
+      sender: currentUser ?? null,
       role: 'user',
       content: trimmed || '发送了一张照片',
       message_type: imageUrl ? 'image' : 'text',

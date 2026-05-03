@@ -4,6 +4,7 @@ import {
   mockBaby,
   mockConversations,
   mockDashboardSummary,
+  mockFamily,
   mockFeedingRecords,
   mockFeedingStats,
   mockGrowthChart,
@@ -26,6 +27,7 @@ import type {
   FeedingRecordCreate,
   FeedingRecord,
   FeedingStatsData,
+  Family,
   GrowthRecordCreate,
   GrowthChartData,
   GrowthReferenceP50,
@@ -46,7 +48,10 @@ import type {
   SleepStatsData,
   TrackerType,
   User,
+  UserAccessType,
+  UserCreate,
   UserPermissions,
+  UserUpdate,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -102,8 +107,17 @@ function tokenToUser(token: string | null): User | null {
   return mockUsers.find((user) => user.username === username) ?? null;
 }
 
-function currentUserRole() {
-  return tokenToUser(getAuthToken())?.role ?? 'parent';
+function currentUserAccessType(): UserAccessType {
+  return tokenToUser(getAuthToken())?.access_type ?? 'parent';
+}
+
+function requireMockUser(): User {
+  const user = tokenToUser(getAuthToken());
+  if (!user) {
+    onUnauthorized();
+    throw new ApiError(401, '登录已过期，请重新登录');
+  }
+  return user;
 }
 
 function paginate<T>(items: T[], page = 1, page_size = 20): PaginatedResponse<T> {
@@ -160,13 +174,30 @@ function currentMockDate() {
 }
 
 function ensureMockTrackerWrite() {
-  const user = tokenToUser(getAuthToken());
-  if (!user) {
-    onUnauthorized();
-    throw new ApiError(401, '登录已过期，请重新登录');
-  }
-  if (user.role !== 'admin' && user.role !== 'parent' && !user.permissions.can_write_tracker) {
+  const user = requireMockUser();
+  if (user.access_type !== 'parent' && user.access_type !== 'family') {
     throw new ApiError(403, '没有记录权限');
+  }
+}
+
+function ensureMockProfileWrite() {
+  const user = requireMockUser();
+  if (user.access_type !== 'parent' && user.access_type !== 'family') {
+    throw new ApiError(403, '没有画像写入权限');
+  }
+}
+
+function ensureMockPhotoWrite() {
+  const user = requireMockUser();
+  if (user.access_type !== 'parent' && user.access_type !== 'family') {
+    throw new ApiError(403, '没有照片写入权限');
+  }
+}
+
+function ensureMockFamilyManage() {
+  const user = requireMockUser();
+  if (user.access_type !== 'parent') {
+    throw new ApiError(403, '没有家庭管理权限');
   }
 }
 
@@ -398,8 +429,8 @@ export class ApiClient {
     }
 
     await delay();
-    const role = currentUserRole();
-    return createMockSSEResponse(mockSSEEventsFor(content, role));
+    const accessType = currentUserAccessType();
+    return createMockSSEResponse(mockSSEEventsFor(content, accessType));
   }
 
   async uploadChatImage(conversationId: string, file: File): Promise<{ image_url: string; mime_type: string }> {
@@ -557,6 +588,7 @@ export class ApiClient {
     }
 
     await delay();
+    ensureMockTrackerWrite();
     const records = recordMatchesType(type) as unknown as Array<Record<string, unknown>>;
     const index = records.findIndex((record) => record.id === id);
     if (index === -1) throw new ApiError(404, '记录不存在');
@@ -567,6 +599,7 @@ export class ApiClient {
   async deleteTrackerRecord(type: TrackerType, id: string): Promise<void> {
     if (!isMockMode()) return this.request(`/tracker/${type}/${id}`, { method: 'DELETE' });
     await delay();
+    ensureMockTrackerWrite();
     const records = recordMatchesType(type) as Array<{ id: string }>;
     const index = records.findIndex((record) => record.id === id);
     if (index >= 0) records.splice(index, 1);
@@ -626,6 +659,7 @@ export class ApiClient {
     }
 
     await delay();
+    ensureMockPhotoWrite();
     const photo: Photo = {
       id: `photo-${Date.now()}`,
       storage_url: URL.createObjectURL(file),
@@ -663,6 +697,7 @@ export class ApiClient {
   async confirmTag(photoId: string, tagId: string): Promise<PhotoTag> {
     if (!isMockMode()) return this.request(`/album/photos/${photoId}/tags/${tagId}/confirm`, { method: 'POST' });
     await delay();
+    ensureMockPhotoWrite();
     const tag = mockPhotos.find((photo) => photo.id === photoId)?.tags.find((item) => item.id === tagId);
     if (!tag) throw new ApiError(404, '标签不存在');
     tag.is_confirmed = true;
@@ -680,8 +715,7 @@ export class ApiClient {
   async deletePhoto(id: string): Promise<void> {
     if (!isMockMode()) return this.request(`/album/photos/${id}`, { method: 'DELETE' });
     await delay();
-    const role = currentUserRole();
-    if (role !== 'admin' && role !== 'parent') throw new ApiError(403, '没有删除权限');
+    ensureMockPhotoWrite();
     const index = mockPhotos.findIndex((item) => item.id === id);
     if (index === -1) throw new ApiError(404, '照片不存在');
     mockPhotos.splice(index, 1);
@@ -690,7 +724,27 @@ export class ApiClient {
   async getMyProfile(): Promise<ProfileItem[]> {
     if (!isMockMode()) return this.request('/profile/me');
     await delay();
-    return clone(mockProfileItems);
+    return clone(mockProfileItems.filter((item) => item.scope === 'user'));
+  }
+
+  async createProfileItem(content: string): Promise<ProfileItem> {
+    if (!isMockMode()) {
+      return this.request('/profile/me', {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      });
+    }
+    await delay();
+    ensureMockProfileWrite();
+    const item: ProfileItem = {
+      id: `profile-${Date.now()}`,
+      scope: 'user',
+      content,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mockProfileItems.unshift(item);
+    return clone(item);
   }
 
   async updateProfileItem(id: string, content: string): Promise<ProfileItem> {
@@ -701,6 +755,7 @@ export class ApiClient {
       });
     }
     await delay();
+    ensureMockProfileWrite();
     const item = mockProfileItems.find((profile) => profile.id === id);
     if (!item) throw new ApiError(404, '画像不存在');
     item.content = content;
@@ -711,7 +766,58 @@ export class ApiClient {
   async deleteProfileItem(id: string): Promise<void> {
     if (!isMockMode()) return this.request(`/profile/me/${id}`, { method: 'DELETE' });
     await delay();
+    ensureMockProfileWrite();
     const index = mockProfileItems.findIndex((item) => item.id === id);
+    if (index >= 0) mockProfileItems.splice(index, 1);
+  }
+
+  async getFamilyProfile(): Promise<ProfileItem[]> {
+    if (!isMockMode()) return this.request('/profile/family');
+    await delay();
+    return clone(mockProfileItems.filter((item) => item.scope === 'family'));
+  }
+
+  async createFamilyProfileItem(content: string): Promise<ProfileItem> {
+    if (!isMockMode()) {
+      return this.request('/profile/family', {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      });
+    }
+    await delay();
+    ensureMockFamilyManage();
+    const item: ProfileItem = {
+      id: `family-profile-${Date.now()}`,
+      scope: 'family',
+      content,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mockProfileItems.unshift(item);
+    return clone(item);
+  }
+
+  async updateFamilyProfileItem(id: string, content: string): Promise<ProfileItem> {
+    if (!isMockMode()) {
+      return this.request(`/profile/family/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ content }),
+      });
+    }
+    await delay();
+    ensureMockFamilyManage();
+    const item = mockProfileItems.find((profile) => profile.id === id && profile.scope === 'family');
+    if (!item) throw new ApiError(404, '家庭记忆不存在');
+    item.content = content;
+    item.updated_at = new Date().toISOString();
+    return clone(item);
+  }
+
+  async deleteFamilyProfileItem(id: string): Promise<void> {
+    if (!isMockMode()) return this.request(`/profile/family/${id}`, { method: 'DELETE' });
+    await delay();
+    ensureMockFamilyManage();
+    const index = mockProfileItems.findIndex((item) => item.id === id && item.scope === 'family');
     if (index >= 0) mockProfileItems.splice(index, 1);
   }
 
@@ -729,6 +835,7 @@ export class ApiClient {
       });
     }
     await delay();
+    ensureMockFamilyManage();
     Object.assign(mockBaby, data);
     return clone(mockBaby);
   }
@@ -739,6 +846,92 @@ export class ApiClient {
     return clone(mockUsers);
   }
 
+  async getFamily(): Promise<Family> {
+    if (!isMockMode()) return this.request('/family');
+    await delay();
+    return clone(mockFamily);
+  }
+
+  async updateFamily(data: Partial<Family>): Promise<Family> {
+    if (!isMockMode()) {
+      return this.request('/family', {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    }
+    await delay();
+    ensureMockFamilyManage();
+    Object.assign(mockFamily, data);
+    return clone(mockFamily);
+  }
+
+  async createUser(data: UserCreate): Promise<User> {
+    if (!isMockMode()) {
+      return this.request('/users', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    }
+    await delay();
+    ensureMockFamilyManage();
+    if (mockUsers.some((user) => user.username === data.username)) throw new ApiError(409, '用户名已存在');
+    const user: User = {
+      id: `user-${Date.now()}`,
+      family_id: mockFamily.id,
+      username: data.username,
+      display_name: data.display_name,
+      access_type: data.access_type,
+      role: data.role,
+      avatar_url: null,
+      permissions: {
+        can_upload_photos: data.access_type !== 'friend',
+        can_write_tracker: data.access_type !== 'friend',
+      },
+    };
+    mockUsers.push(user);
+    return clone(user);
+  }
+
+  async updateUser(id: string, data: UserUpdate): Promise<User> {
+    if (!isMockMode()) {
+      return this.request(`/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    }
+    await delay();
+    ensureMockFamilyManage();
+    const user = mockUsers.find((item) => item.id === id);
+    if (!user) throw new ApiError(404, '用户不存在');
+    Object.assign(user, data);
+    if (data.access_type) {
+      user.permissions = {
+        can_upload_photos: data.access_type !== 'friend',
+        can_write_tracker: data.access_type !== 'friend',
+      };
+    }
+    return clone(user);
+  }
+
+  async updateUserPassword(id: string, password: string): Promise<void> {
+    if (!isMockMode()) {
+      return this.request(`/users/${id}/password`, {
+        method: 'PATCH',
+        body: JSON.stringify({ password }),
+      });
+    }
+    await delay();
+    ensureMockFamilyManage();
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    if (!isMockMode()) return this.request(`/users/${id}`, { method: 'DELETE' });
+    await delay();
+    ensureMockFamilyManage();
+    const index = mockUsers.findIndex((item) => item.id === id);
+    if (index >= 0) mockUsers.splice(index, 1);
+  }
+
   async updateUserPermissions(id: string, permissions: UserPermissions): Promise<User> {
     if (!isMockMode()) {
       return this.request(`/users/${id}/permissions`, {
@@ -747,6 +940,7 @@ export class ApiClient {
       });
     }
     await delay();
+    ensureMockFamilyManage();
     const user = mockUsers.find((item) => item.id === id);
     if (!user) throw new ApiError(404, '用户不存在');
     user.permissions = permissions;

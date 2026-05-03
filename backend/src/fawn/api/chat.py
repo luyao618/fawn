@@ -14,6 +14,7 @@ from fastapi.responses import Response, StreamingResponse
 from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from fawn.agent.graph import get_agent_graph
 from fawn.agent.prompts import build_system_prompt
@@ -29,19 +30,34 @@ from fawn.config import get_settings
 from fawn.db.session import get_db
 from fawn.dependencies import get_current_user
 from fawn.models import Baby, Conversation, ConversationSummary, Message, ProfileItem, User
-from fawn.services.memory import check_session_timeout, finalize_conversation
 from fawn.services.storage import get_bytes, put_bytes
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger(__name__)
 
 
-async def _get_user_conversation(
+async def _get_family_conversation(
     db: AsyncSession, user: User, conversation_id: uuid.UUID
 ) -> Conversation:
     conversation = await db.get(Conversation, conversation_id)
-    if conversation is None or conversation.user_id != user.id:
+    if conversation is None or conversation.family_id != user.family_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    return conversation
+
+
+async def _get_or_create_family_conversation(db: AsyncSession, user: User) -> Conversation:
+    conversation = await db.scalar(
+        select(Conversation)
+        .where(Conversation.family_id == user.family_id, Conversation.is_active.is_(True))
+        .order_by(Conversation.started_at.asc())
+        .limit(1)
+    )
+    if conversation is not None:
+        return conversation
+    conversation = Conversation(family_id=user.family_id, user_id=user.id)
+    db.add(conversation)
+    await db.commit()
+    await db.refresh(conversation)
     return conversation
 
 
@@ -69,19 +85,7 @@ async def create_conversation(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ConversationRead:
-    active = (
-        await db.execute(
-            select(Conversation)
-            .where(Conversation.user_id == user.id, Conversation.is_active.is_(True))
-        )
-    ).scalars().all()
-    for old in active:
-        await finalize_conversation(db, old.id)
-
-    conversation = Conversation(user_id=user.id)
-    db.add(conversation)
-    await db.commit()
-    await db.refresh(conversation)
+    conversation = await _get_or_create_family_conversation(db, user)
     return await _conversation_read(db, conversation)
 
 
@@ -94,13 +98,13 @@ async def list_conversations(
 ) -> PaginatedResponse:
     offset = (page - 1) * page_size
     total = await db.scalar(
-        select(func.count()).select_from(Conversation).where(Conversation.user_id == user.id)
+        select(func.count()).select_from(Conversation).where(Conversation.family_id == user.family_id)
     )
     conversations = list(
         (
             await db.execute(
                 select(Conversation)
-                .where(Conversation.user_id == user.id)
+                .where(Conversation.family_id == user.family_id)
                 .order_by(Conversation.started_at.desc())
                 .limit(page_size)
                 .offset(offset)
@@ -124,11 +128,12 @@ async def get_conversation(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ConversationDetail:
-    conversation = await _get_user_conversation(db, user, conversation_id)
+    conversation = await _get_family_conversation(db, user, conversation_id)
     messages = list(
         (
             await db.execute(
                 select(Message)
+                .options(selectinload(Message.sender))
                 .where(Message.conversation_id == conversation_id)
                 .order_by(Message.created_at.asc())
             )
@@ -150,14 +155,15 @@ async def _search_messages(
     offset = (page - 1) * page_size
     base = (
         select(Message, Conversation.started_at.label("conversation_started_at"))
+        .options(selectinload(Message.sender))
         .join(Conversation, Conversation.id == Message.conversation_id)
-        .where(Conversation.user_id == user.id, Message.content.ilike(f"%{query}%"))
+        .where(Conversation.family_id == user.family_id, Message.content.ilike(f"%{query}%"))
     )
     total = await db.scalar(
         select(func.count())
         .select_from(Message)
         .join(Conversation, Conversation.id == Message.conversation_id)
-        .where(Conversation.user_id == user.id, Message.content.ilike(f"%{query}%"))
+        .where(Conversation.family_id == user.family_id, Message.content.ilike(f"%{query}%"))
     )
     rows = list(
         (
@@ -198,23 +204,38 @@ async def search_messages_compat(
 
 async def _prompt_context(
     db: AsyncSession, user: User
-) -> tuple[Baby | None, list[ProfileItem], list[ConversationSummary]]:
-    baby = await db.scalar(select(Baby).order_by(Baby.created_at.asc()).limit(1))
-    profile_items = list(
-        (await db.execute(select(ProfileItem).where(ProfileItem.user_id == user.id))).scalars()
+) -> tuple[Baby | None, list[ProfileItem], list[ProfileItem], list[ConversationSummary]]:
+    baby = await db.scalar(
+        select(Baby).where(Baby.family_id == user.family_id).order_by(Baby.created_at.asc()).limit(1)
+    )
+    user_profile_items = list(
+        (
+            await db.execute(
+                select(ProfileItem).where(ProfileItem.user_id == user.id, ProfileItem.scope == "user")
+            )
+        ).scalars()
+    )
+    family_profile_items = list(
+        (
+            await db.execute(
+                select(ProfileItem).where(
+                    ProfileItem.family_id == user.family_id, ProfileItem.scope == "family"
+                )
+            )
+        ).scalars()
     )
     summaries = list(
         (
             await db.execute(
                 select(ConversationSummary)
                 .join(Conversation, Conversation.id == ConversationSummary.conversation_id)
-                .where(Conversation.user_id == user.id)
+                .where(Conversation.family_id == user.family_id)
                 .order_by(ConversationSummary.created_at.desc())
                 .limit(get_settings().summary_max_recent)
             )
         ).scalars()
     )
-    return baby, profile_items, summaries
+    return baby, family_profile_items, user_profile_items, summaries
 
 
 def _chat_image_key(conversation_id: uuid.UUID, filename: str) -> str:
@@ -257,19 +278,12 @@ async def send_message(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
-    await _get_user_conversation(db, user, conversation_id)
+    await _get_family_conversation(db, user, conversation_id)
 
     async def event_stream():
-        expired_conversation_id = await check_session_timeout(db, user.id)
-        if expired_conversation_id:
-            await finalize_conversation(db, expired_conversation_id)
-            yield _sse(
-                {"type": "session_expired", "expired_conversation_id": str(expired_conversation_id)}
-            )
-            return
-
         user_message = Message(
             conversation_id=conversation_id,
+            sender_user_id=user.id,
             role="user",
             content=body.content,
             message_type="image" if body.image_url else "text",
@@ -278,8 +292,10 @@ async def send_message(
         db.add(user_message)
         await db.commit()
 
-        baby, profile_items, summaries = await _prompt_context(db, user)
-        system_prompt = build_system_prompt(user, baby, profile_items, summaries)
+        baby, family_profile_items, user_profile_items, summaries = await _prompt_context(db, user)
+        system_prompt = build_system_prompt(
+            user, baby, family_profile_items, user_profile_items, summaries
+        )
         if not get_settings().llm.tool_calling_enabled:
             system_prompt += (
                 "\n\n## 当前运行模式\n"
@@ -296,6 +312,7 @@ async def send_message(
                 ],
                 "user_id": str(user.id),
                 "user_role": user.role,
+                "user_access_type": user.access_type,
                 "user_name": user.display_name,
                 "conversation_id": str(conversation_id),
             }
@@ -305,6 +322,7 @@ async def send_message(
                     "user_id": str(user.id),
                     "conversation_id": str(conversation_id),
                     "user_role": user.role,
+                    "user_access_type": user.access_type,
                 }
             }
             async with asyncio.timeout(get_settings().llm.request_timeout_seconds):
@@ -369,7 +387,7 @@ async def upload_chat_image(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ChatImageResponse:
-    await _get_user_conversation(db, user, conversation_id)
+    await _get_family_conversation(db, user, conversation_id)
     suffix = Path(file.filename or "image.jpg").suffix or ".jpg"
     filename = f"{uuid.uuid4()}{suffix}"
     storage_key = _chat_image_key(conversation_id, filename)
@@ -389,7 +407,7 @@ async def get_chat_image(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    await _get_user_conversation(db, user, conversation_id)
+    await _get_family_conversation(db, user, conversation_id)
     content = get_bytes(_chat_image_key(conversation_id, filename))
     media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     return Response(content=content, media_type=media_type)

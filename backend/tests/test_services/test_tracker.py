@@ -18,6 +18,7 @@ def test_lms_percentile_returns_median_for_m_value() -> None:
 
 def test_age_months_applies_premature_correction() -> None:
     baby = Baby(
+        family_id="00000000-0000-0000-0000-000000000000",
         name="Baby",
         gender="female",
         birth_date=date(2026, 1, 1),
@@ -30,12 +31,14 @@ def test_age_months_applies_premature_correction() -> None:
     assert corrected < (31 / 30.4375)
 
 
-def test_family_without_tracker_permission_is_rejected() -> None:
+def test_friend_without_tracker_permission_is_rejected() -> None:
     user = User(
+        family_id="00000000-0000-0000-0000-000000000000",
         username="family",
         display_name="Family",
         password_hash="hash",
-        role="family",
+        access_type="friend",
+        role="儿科医生",
         permissions={"can_upload_photos": True, "can_write_tracker": False},
     )
 

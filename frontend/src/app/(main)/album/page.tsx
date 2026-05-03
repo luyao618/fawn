@@ -7,7 +7,7 @@ import { PhotoViewer } from '@/components/album/PhotoViewer';
 import { UploadButton } from '@/components/album/UploadButton';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
-import { canUploadPhotos } from '@/lib/utils';
+import { canSoftDeleteData, canUploadPhotos } from '@/lib/utils';
 import type { Photo } from '@/lib/types';
 
 type ViewMode = 'timeline' | 'scene' | 'milestone';
@@ -54,8 +54,8 @@ export default function AlbumPage() {
     }
   }
 
-  const canUpload = canUploadPhotos(user?.role, user?.permissions);
-  const canDelete = user?.role === 'admin' || user?.role === 'parent';
+  const canUpload = canUploadPhotos(user?.access_type);
+  const canDelete = canSoftDeleteData(user?.access_type);
 
   async function downloadSelectedPhoto() {
     if (!selected) return;

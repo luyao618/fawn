@@ -4,6 +4,7 @@ import type {
   DashboardSummary,
   FeedingRecord,
   FeedingStatsData,
+  Family,
   GrowthChartData,
   GrowthRecord,
   HealthRecord,
@@ -20,28 +21,49 @@ import type {
 
 const now = new Date('2026-04-29T09:00:00+08:00');
 
+export const mockFamily: Family = {
+  id: 'family-chenchen',
+  name: '晨晨的家庭',
+};
+
 export const mockUsers: User[] = [
   {
     id: 'user-admin',
+    family_id: mockFamily.id,
     username: 'admin',
     display_name: '爸爸',
-    role: 'admin',
+    access_type: 'parent',
+    role: '爸爸',
     avatar_url: null,
     permissions: { can_upload_photos: true, can_write_tracker: true },
   },
   {
     id: 'user-mama',
+    family_id: mockFamily.id,
     username: 'mama',
     display_name: '妈妈',
-    role: 'parent',
+    access_type: 'parent',
+    role: '妈妈',
     avatar_url: null,
     permissions: { can_upload_photos: true, can_write_tracker: true },
   },
   {
     id: 'user-nainai',
+    family_id: mockFamily.id,
     username: 'nainai',
     display_name: '奶奶',
-    role: 'family',
+    access_type: 'family',
+    role: '奶奶',
+    avatar_url: null,
+    permissions: { can_upload_photos: true, can_write_tracker: true },
+  },
+  {
+    id: 'user-doctor',
+    family_id: mockFamily.id,
+    username: 'doctor',
+    display_name: '李医生',
+    access_type: 'friend',
+    role: '儿科医生',
     avatar_url: null,
     permissions: { can_upload_photos: false, can_write_tracker: false },
   },
@@ -101,6 +123,8 @@ export const mockMessages: Message[] = [
   {
     id: 'msg-2',
     conversation_id: 'conv-active',
+    sender_user_id: 'user-admin',
+    sender: mockUsers[0],
     role: 'user',
     content: '宝宝今天体重4.2kg，是不是偏轻了？',
     message_type: 'text',
@@ -122,6 +146,8 @@ export const mockMessages: Message[] = [
   {
     id: 'msg-4',
     conversation_id: 'conv-active',
+    sender_user_id: 'user-nainai',
+    sender: mockUsers[2],
     role: 'user',
     content: '宝宝发烧39度怎么办',
     message_type: 'text',
@@ -140,6 +166,8 @@ export const mockMessages: Message[] = [
   {
     id: 'msg-img-1',
     conversation_id: 'conv-history-1',
+    sender_user_id: 'user-mama',
+    sender: mockUsers[1],
     role: 'user',
     content: '这是今天的照片',
     message_type: 'image',
@@ -405,19 +433,21 @@ export const mockPhotos: Photo[] = [
 export const mockProfileItems: ProfileItem[] = [
   {
     id: 'profile-1',
+    scope: 'user',
     content: '妈妈更关注喂养间隔和体重增长趋势。',
     created_at: '2026-04-10T10:00:00+08:00',
     updated_at: '2026-04-25T12:00:00+08:00',
   },
   {
     id: 'profile-2',
+    scope: 'family',
     content: '家庭倾向先观察日常状态，异常时及时联系儿科医生。',
     created_at: '2026-04-12T08:30:00+08:00',
     updated_at: '2026-04-22T18:40:00+08:00',
   },
 ];
 
-export function mockSSEEventsFor(content: string, role: User['role'] = 'parent'): SSEEvent[] {
+export function mockSSEEventsFor(content: string, accessType: User['access_type'] = 'parent'): SSEEvent[] {
   const normalized = content.toLowerCase();
   const isCorrection =
     content.includes('不对') || content.includes('纠正') || (content.includes('不是') && !content.includes('是不是'));
@@ -460,7 +490,17 @@ export function mockSSEEventsFor(content: string, role: User['role'] = 'parent')
     ];
   }
 
-  if (role === 'family' && (content.includes('吃了多少') || content.includes('喂养'))) {
+  if (accessType === 'friend' && (content.includes('记录') || content.includes('写入'))) {
+    return [
+      {
+        type: 'token',
+        content: '当前账号只有查看和聊天权限，不能写入家庭记录。请让父母或家人账号来记录这条数据。',
+      },
+      { type: 'done', message_id: `msg-${Date.now()}`, message_type: 'text' },
+    ];
+  }
+
+  if ((content.includes('吃了多少') || content.includes('喂养'))) {
     return [
       { type: 'tool_call', name: 'query_feeding_data', args: { date: 'today' } },
       {

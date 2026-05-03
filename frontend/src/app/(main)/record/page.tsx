@@ -276,7 +276,7 @@ function initialHealthForm() {
 
 export default function RecordPage() {
   const user = useAuthStore((state) => state.user);
-  const canWrite = canWriteTracker(user?.role, user?.permissions);
+  const canWrite = canWriteTracker(user?.access_type);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [activeKind, setActiveKind] = useState<RecordKind>('feeding');
   const [feeding, setFeeding] = useState(initialFeedingForm);

@@ -239,11 +239,18 @@ async def delete_tracker_record(
 
 
 @tool
-async def query_growth_data(days: int = 90) -> dict[str, Any]:
+async def query_growth_data(days: int = 90, user_id: InjectedUserId = "") -> dict[str, Any] | str:
     """Return recent growth records and percentile trends."""
+    if error := _missing_context(user_id):
+        return error
     from_date = date_cls.today() - timedelta(days=days)
-    async with async_session_factory() as db:
-        records = await tracker_service.query_growth(db, from_date=from_date, limit=500)
+    session, db, user = await _load_user(user_id)
+    try:
+        records = await tracker_service.query_growth(
+            db, family_id=user.family_id, from_date=from_date, limit=500
+        )
+    finally:
+        await session.__aexit__(None, None, None)
     return {
         "records": [
             {
@@ -269,11 +276,20 @@ async def query_growth_data(days: int = 90) -> dict[str, Any]:
 
 
 @tool
-async def query_feeding_data(date: str | None = None) -> dict[str, Any]:
+async def query_feeding_data(
+    date: str | None = None, user_id: InjectedUserId = ""
+) -> dict[str, Any] | str:
     """Return feeding records and daily totals."""
+    if error := _missing_context(user_id):
+        return error
     target = _parse_date(date) if date else date_cls.today()
-    async with async_session_factory() as db:
-        records = await tracker_service.query_feeding(db, date_value=target, limit=500)
+    session, db, user = await _load_user(user_id)
+    try:
+        records = await tracker_service.query_feeding(
+            db, family_id=user.family_id, date_value=target, limit=500
+        )
+    finally:
+        await session.__aexit__(None, None, None)
     milk_records = [record for record in records if record.feed_type != "solid"]
     return {
         "date": target.isoformat(),
@@ -292,11 +308,20 @@ async def query_feeding_data(date: str | None = None) -> dict[str, Any]:
 
 
 @tool
-async def query_sleep_data(date: str | None = None) -> dict[str, Any]:
+async def query_sleep_data(
+    date: str | None = None, user_id: InjectedUserId = ""
+) -> dict[str, Any] | str:
     """Return sleep records and daily totals."""
+    if error := _missing_context(user_id):
+        return error
     target = _parse_date(date) if date else date_cls.today()
-    async with async_session_factory() as db:
-        records = await tracker_service.query_sleep(db, date_value=target, limit=500)
+    session, db, user = await _load_user(user_id)
+    try:
+        records = await tracker_service.query_sleep(
+            db, family_id=user.family_id, date_value=target, limit=500
+        )
+    finally:
+        await session.__aexit__(None, None, None)
     total_hours = sum(
         (record.sleep_end - record.sleep_start).total_seconds() / 3600
         for record in records
@@ -314,10 +339,17 @@ async def query_sleep_data(date: str | None = None) -> dict[str, Any]:
 
 
 @tool
-async def query_health_timeline(limit: int = 20) -> dict[str, Any]:
+async def query_health_timeline(
+    limit: int = 20, user_id: InjectedUserId = ""
+) -> dict[str, Any] | str:
     """Return recent health events."""
-    async with async_session_factory() as db:
-        records = await tracker_service.query_health(db, limit=limit)
+    if error := _missing_context(user_id):
+        return error
+    session, db, user = await _load_user(user_id)
+    try:
+        records = await tracker_service.query_health(db, family_id=user.family_id, limit=limit)
+    finally:
+        await session.__aexit__(None, None, None)
     return {
         "records": [
             {
@@ -333,12 +365,22 @@ async def query_health_timeline(limit: int = 20) -> dict[str, Any]:
 
 
 @tool
-async def get_baby_profile() -> dict[str, Any]:
+async def get_baby_profile(user_id: InjectedUserId = "") -> dict[str, Any] | str:
     """Return the baby profile."""
-    async with async_session_factory() as db:
-        baby = await db.scalar(select(Baby).order_by(Baby.created_at.asc()).limit(1))
-    if baby is None:
-        return {"baby": None}
+    if error := _missing_context(user_id):
+        return error
+    session, db, user = await _load_user(user_id)
+    try:
+        baby = await db.scalar(
+            select(Baby)
+            .where(Baby.family_id == user.family_id)
+            .order_by(Baby.created_at.asc())
+            .limit(1)
+        )
+        if baby is None:
+            return {"baby": None}
+    finally:
+        await session.__aexit__(None, None, None)
     return {
         "baby": {
             "id": str(baby.id),
