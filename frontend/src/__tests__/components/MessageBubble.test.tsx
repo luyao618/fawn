@@ -74,9 +74,10 @@ describe('MessageBubble', () => {
     expect(screen.queryByText('不要格式化')).not.toBeInTheDocument();
   });
 
-  it('renders safety alerts with safety copy', () => {
+  it('renders safety alerts as quiet assistant copy', () => {
     render(<MessageBubble message={{ ...base, message_type: 'safety_alert', content: '**请尽快就医**' }} />);
     expect(screen.getByText('请尽快就医').tagName).toBe('STRONG');
-    expect(screen.getByText('建议尽快咨询医生或就医')).toBeInTheDocument();
+    expect(screen.getByText('如症状持续或加重，请及时咨询医生或就医。')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Fawn Agent')).not.toBeInTheDocument();
   });
 });

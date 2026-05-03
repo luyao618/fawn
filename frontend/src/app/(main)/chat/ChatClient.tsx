@@ -64,7 +64,7 @@ export function ChatClient() {
   return (
     <div className="flex h-[100dvh] flex-col bg-transparent pb-[calc(100px+var(--safe-area-bottom))]">
       <TopBar
-        title="Fawn 管家"
+        title="管家"
         rightAction={
           <Link
             href="/history"

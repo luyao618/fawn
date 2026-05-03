@@ -19,7 +19,17 @@ describe('ChatInput', () => {
       <ChatInput onSend={vi.fn()} onAttach={vi.fn()} disabled attachedImage={null} onRemoveImage={vi.fn()} />,
     );
     expect(screen.getByPlaceholderText('输入消息...')).toBeDisabled();
+    expect(screen.getByLabelText('更多操作')).toBeDisabled();
     expect(screen.getByLabelText('发送')).toBeDisabled();
+  });
+
+  it('opens the add menu with photo upload as the first action', async () => {
+    render(
+      <ChatInput onSend={vi.fn()} onAttach={vi.fn()} attachedImage={null} onRemoveImage={vi.fn()} />,
+    );
+    expect(screen.queryByRole('menuitem', { name: '上传照片' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText('更多操作'));
+    expect(screen.getByRole('menuitem', { name: '上传照片' })).toBeInTheDocument();
   });
 
   it('uploads and removes an attached image', async () => {

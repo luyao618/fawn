@@ -33,11 +33,22 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   const card = metadataCard(message.metadata);
   const imageUrl = typeof message.metadata?.image_url === 'string' ? message.metadata.image_url : null;
 
-  if (message.message_type === 'safety_alert') {
+  if (!isUser) {
     return (
-      <div className="flex items-start gap-3">
-        <Avatar label="Fawn Agent" role="agent" />
-        <SafetyAlert content={message.content} />
+      <div className="flex justify-start">
+        <div className="animate-[bubble-in_200ms_ease-out] max-w-[92%] break-words px-1 py-1 text-base leading-7 text-soft-charcoal max-[374px]:max-w-[96%]">
+          {message.message_type === 'safety_alert' ? (
+            <SafetyAlert content={message.content} />
+          ) : message.message_type === 'image' && imageUrl ? (
+            <img src={imageUrl} alt={message.content} className="max-h-64 rounded-xl object-cover" />
+          ) : (
+            <>
+              <MarkdownMessage content={message.content} />
+              {isStreaming ? <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-mid-gray align-middle" /> : null}
+            </>
+          )}
+          {message.message_type === 'data_card' && card ? <DataCard type={card.type as 'growth' | 'feeding' | 'sleep' | 'health'} data={card.data} /> : null}
+        </div>
       </div>
     );
   }
@@ -46,9 +57,9 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
     <div className={cn('flex items-start gap-3', isMine ? 'justify-end' : 'justify-start')}>
       {!isMine ? (
         <Avatar
-          label={isUser ? senderLabel : 'Fawn Agent'}
-          role={isUser ? (sender?.access_type ?? 'family') : 'agent'}
-          src={isUser ? sender?.avatar_url : undefined}
+          label={senderLabel}
+          role={sender?.access_type ?? 'family'}
+          src={sender?.avatar_url}
         />
       ) : null}
       <div

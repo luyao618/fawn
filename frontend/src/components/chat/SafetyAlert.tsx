@@ -1,16 +1,10 @@
-import { AlertTriangle } from 'lucide-react';
 import { MarkdownMessage } from './MarkdownMessage';
 
 export function SafetyAlert({ content }: { content: string }) {
   return (
-    <div className="max-w-[85vw] rounded-2xl border-l-[3px] border-safety-red bg-safety-red-light p-3 text-soft-charcoal shadow-card">
-      <div className="flex gap-2">
-        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-safety-red" aria-hidden />
-        <div>
-          <MarkdownMessage content={content} className="text-base leading-normal" />
-          <p className="mt-2 text-sm font-semibold text-safety-red">建议尽快咨询医生或就医</p>
-        </div>
-      </div>
+    <div className="text-soft-charcoal">
+      <MarkdownMessage content={content} className="text-base leading-7" />
+      <p className="mt-2 text-sm italic leading-6 text-dark-gray">如症状持续或加重，请及时咨询医生或就医。</p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
-import { ChangeEvent, FormEvent, useRef, useState } from 'react';
-import { ImagePlus, Send, X } from 'lucide-react';
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
+import { ImagePlus, Plus, Send, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ChatInputProps {
@@ -15,8 +15,30 @@ interface ChatInputProps {
 export function ChatInput({ onSend, onAttach, disabled, attachedImage, onRemoveImage }: ChatInputProps) {
   const [content, setContent] = useState('');
   const [isUploading, setUploading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [isActionMenuOpen, setActionMenuOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const canSend = Boolean(content.trim() || attachedImage) && !disabled && !isUploading;
+  const canOpenActions = !disabled && !isUploading;
+
+  useEffect(() => {
+    if (!isActionMenuOpen) return;
+
+    function closeOnOutsidePointer(event: PointerEvent) {
+      if (event.target instanceof Node && !menuRef.current?.contains(event.target)) {
+        setActionMenuOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [isActionMenuOpen]);
+
+  function openPhotoPicker() {
+    setActionMenuOpen(false);
+    fileInputRef.current?.click();
+  }
 
   async function onFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -33,8 +55,16 @@ export function ChatInput({ onSend, onAttach, disabled, attachedImage, onRemoveI
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!canSend) return;
+    setActionMenuOpen(false);
     onSend(content, attachedImage ?? undefined);
     setContent('');
+  }
+
+  function keepInputVisibleOnMobile() {
+    setActionMenuOpen(false);
+    const keepVisible = () => textareaRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+    window.setTimeout(keepVisible, 120);
+    window.setTimeout(keepVisible, 360);
   }
 
   return (
@@ -54,19 +84,41 @@ export function ChatInput({ onSend, onAttach, disabled, attachedImage, onRemoveI
       ) : null}
 
       <div className="flex items-end gap-2 rounded-[30px] bg-white p-2 shadow-float ring-1 ring-white/70">
-        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
-        <button
-          type="button"
-          disabled={disabled || isUploading}
-          onClick={() => inputRef.current?.click()}
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-warm-gray text-dark-gray disabled:text-mid-gray"
-          aria-label="选择图片"
-        >
-          <ImagePlus className="h-6 w-6" />
-        </button>
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
+        <div ref={menuRef} className="relative shrink-0">
+          {isActionMenuOpen ? (
+            <div
+              role="menu"
+              className="absolute bottom-[calc(100%+8px)] left-0 z-20 w-40 rounded-2xl border border-white/70 bg-white/95 p-1.5 shadow-float backdrop-blur"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={openPhotoPicker}
+                className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-soft-charcoal hover:bg-warm-gray active:bg-nursery-mint"
+              >
+                <ImagePlus className="h-4 w-4 text-dark-gray" aria-hidden />
+                上传照片
+              </button>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            disabled={!canOpenActions}
+            onClick={() => setActionMenuOpen((open) => !open)}
+            className="grid h-11 w-11 place-items-center rounded-full bg-warm-gray text-dark-gray transition-colors disabled:text-mid-gray active:bg-nursery-mint"
+            aria-label="更多操作"
+            aria-expanded={isActionMenuOpen}
+            aria-haspopup="menu"
+          >
+            <Plus className="h-6 w-6" />
+          </button>
+        </div>
         <textarea
+          ref={textareaRef}
           value={content}
           onChange={(event) => setContent(event.target.value)}
+          onFocus={keepInputVisibleOnMobile}
           disabled={disabled}
           rows={1}
           placeholder={isUploading ? '图片上传中...' : '输入消息...'}
