@@ -11,7 +11,10 @@ from fawn.models.base import Base, UUIDMixin
 
 class Photo(UUIDMixin, Base):
     __tablename__ = "photos"
-    __table_args__ = (Index("idx_photos_time", "baby_id", "taken_at"),)
+    __table_args__ = (
+        Index("idx_photos_time", "baby_id", "taken_at"),
+        Index("idx_photos_deleted_at", "deleted_at"),
+    )
 
     baby_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("babies.id"), nullable=False
@@ -29,6 +32,10 @@ class Photo(UUIDMixin, Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id")
     )
 
     tags = relationship("PhotoTag", back_populates="photo", cascade="all, delete-orphan")

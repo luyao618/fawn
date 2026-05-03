@@ -12,11 +12,10 @@ describe('album page', () => {
     await useAuthStore.getState().login('mama', 'password');
   });
 
-  it('loads photos with insight banner and view controls', async () => {
+  it('loads photos with compact album controls', async () => {
     render(<AlbumPage />);
 
-    await waitFor(() => expect(screen.getByText('智慧相册')).toBeInTheDocument());
-    expect(screen.getByText('自动整理场景、表情和里程碑')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('按时间、场景和里程碑浏览')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: '时间线' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '场景' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '里程碑' })).toBeInTheDocument();
@@ -24,5 +23,30 @@ describe('album page', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '场景' }));
     await waitFor(() => expect(screen.getByText('客厅')).toBeInTheDocument());
+  });
+
+  it('shows download and delete actions for parents', async () => {
+    const user = userEvent.setup();
+    render(<AlbumPage />);
+
+    const photoButtons = await screen.findAllByRole('button', { name: /查看照片：/ });
+    await user.click(photoButtons[0]);
+
+    expect(screen.getByRole('button', { name: '下载照片' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '删除照片' })).toBeInTheDocument();
+  });
+
+  it('hides delete action for family members', async () => {
+    useAuthStore.getState().logout();
+    await useAuthStore.getState().login('nainai', 'password');
+
+    const user = userEvent.setup();
+    render(<AlbumPage />);
+
+    const photoButtons = await screen.findAllByRole('button', { name: /查看照片：/ });
+    await user.click(photoButtons[0]);
+
+    expect(screen.getByRole('button', { name: '下载照片' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '删除照片' })).not.toBeInTheDocument();
   });
 });

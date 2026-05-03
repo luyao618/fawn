@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fawn.api.schemas import PaginatedResponse, PhotoRead, PhotoTagRead
+from fawn.api.schemas import PaginatedResponse, PhotoDownloadResponse, PhotoRead, PhotoTagRead
 from fawn.db.session import get_db
 from fawn.dependencies import get_current_user, require_photo_uploader
 from fawn.models import User
@@ -98,6 +98,19 @@ async def confirm_tag(
     except album_service.NotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return tag
+
+
+@router.get("/photos/{photo_id}/download", response_model=PhotoDownloadResponse)
+async def download_photo(
+    photo_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        download_url = await album_service.get_photo_download_url(db, photo_id)
+    except album_service.NotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return PhotoDownloadResponse(download_url=download_url)
 
 
 @router.delete("/photos/{photo_id}", status_code=status.HTTP_204_NO_CONTENT)

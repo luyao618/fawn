@@ -334,6 +334,11 @@ class PhotoRead(BaseModel):
     tags: list[PhotoTagRead] = []
 
 
+class PhotoDownloadResponse(BaseModel):
+    download_url: str
+    expires_in_seconds: int = 300
+
+
 class ProfileItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

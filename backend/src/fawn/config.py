@@ -32,10 +32,13 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://fawn:fawn@localhost:5432/fawn"
 
     minio_endpoint: str = "localhost:9000"
+    minio_public_endpoint: str | None = None
     minio_access_key: str = "minioadmin"
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "fawn"
+    minio_region: str = "us-east-1"
     minio_use_ssl: bool = False
+    minio_public_use_ssl: bool | None = None
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
 

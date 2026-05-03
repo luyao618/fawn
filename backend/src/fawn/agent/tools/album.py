@@ -19,6 +19,7 @@ async def browse_photos(
         stmt = (
             select(Photo)
             .options(selectinload(Photo.tags))
+            .where(Photo.deleted_at.is_(None))
             .order_by(Photo.taken_at.desc().nullslast())
             .limit(limit)
         )
