@@ -28,6 +28,7 @@ import type {
   FeedingStatsData,
   GrowthRecordCreate,
   GrowthChartData,
+  GrowthReferenceP50,
   GrowthRecord,
   HealthRecordCreate,
   HealthRecord,
@@ -125,6 +126,34 @@ function dateKey(value: string) {
   return value.slice(0, 10);
 }
 
+function ageDisplay(ageDays: number) {
+  const months = Math.floor(ageDays / 30);
+  const days = ageDays % 30;
+  return months <= 0 ? `${days}天` : `${months}个月${days}天`;
+}
+
+function interpolateP50(
+  lines: GrowthChartData['who_reference']['weight'],
+  ageMonths: number,
+): number | null {
+  const points = lines.p50;
+  if (points.length === 0 || ageMonths < points[0].age_months || ageMonths > points[points.length - 1].age_months) {
+    return null;
+  }
+
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
+    if (Math.abs(point.age_months - ageMonths) < 1e-9) return point.value;
+    if (point.age_months > ageMonths) {
+      const previous = points[index - 1] ?? point;
+      const span = point.age_months - previous.age_months;
+      if (span <= 0) return point.value;
+      return Number((previous.value + ((ageMonths - previous.age_months) / span) * (point.value - previous.value)).toFixed(2));
+    }
+  }
+  return points[points.length - 1].value;
+}
+
 function currentMockDate() {
   return dateKey(currentMockTime());
 }
@@ -168,18 +197,28 @@ function refreshMockGrowthViews(record: GrowthRecord) {
 }
 
 function refreshMockFeedingViews(record: FeedingRecord) {
+  if (record.feed_type === 'solid') return;
+
   const date = dateKey(record.feed_time);
-  const amount = record.amount_ml ?? 0;
+  const amount = record.feed_type === 'formula' ? record.amount_ml ?? 0 : 0;
+  const breastDuration = record.feed_type === 'breast' ? record.duration_min ?? 0 : 0;
   const daily = mockFeedingStats.daily.find((item) => item.date === date);
   if (daily) {
     daily.total_ml += amount;
+    daily.breast_duration_min += breastDuration;
     daily.count += 1;
   } else {
-    mockFeedingStats.daily.push({ date, total_ml: amount, count: 1 });
+    mockFeedingStats.daily.push({ date, total_ml: amount, breast_duration_min: breastDuration, count: 1 });
     mockFeedingStats.daily.sort((left, right) => left.date.localeCompare(right.date));
   }
   mockFeedingStats.average_daily_ml = Math.round(
     mockFeedingStats.daily.reduce((total, item) => total + item.total_ml, 0) / mockFeedingStats.daily.length,
+  );
+  mockFeedingStats.average_daily_breast_duration_min = Number(
+    (
+      mockFeedingStats.daily.reduce((total, item) => total + item.breast_duration_min, 0) /
+      mockFeedingStats.daily.length
+    ).toFixed(1),
   );
   mockFeedingStats.average_daily_count = Number(
     (
@@ -189,6 +228,7 @@ function refreshMockFeedingViews(record: FeedingRecord) {
 
   if (date === currentMockDate()) {
     mockDashboardSummary.today_feeding.total_ml += amount;
+    mockDashboardSummary.today_feeding.breast_duration_min += breastDuration;
     mockDashboardSummary.today_feeding.count += 1;
     if (
       !mockDashboardSummary.today_feeding.last_feed_time ||
@@ -204,12 +244,13 @@ function refreshMockSleepViews(record: SleepRecord) {
   const start = new Date(record.sleep_start).getTime();
   const end = record.sleep_end ? new Date(record.sleep_end).getTime() : start;
   const hours = Math.max(0, (end - start) / 1000 / 60 / 60);
+  const nightWakings = record.sleep_type === 'night' ? record.night_wakings : null;
   const daily = mockSleepStats.daily.find((item) => item.date === date);
   if (daily) {
     daily.total_hours = Number(((daily.total_hours ?? 0) + hours).toFixed(1));
-    daily.night_wakings = (daily.night_wakings ?? 0) + record.night_wakings;
+    if (nightWakings != null) daily.night_wakings = (daily.night_wakings ?? 0) + nightWakings;
   } else {
-    mockSleepStats.daily.push({ date, total_hours: Number(hours.toFixed(1)), night_wakings: record.night_wakings });
+    mockSleepStats.daily.push({ date, total_hours: Number(hours.toFixed(1)), night_wakings: nightWakings });
     mockSleepStats.daily.sort((left, right) => left.date.localeCompare(right.date));
   }
   const recordedSleepDays = mockSleepStats.daily.filter((item) => item.total_hours != null);
@@ -235,8 +276,10 @@ function refreshMockSleepViews(record: SleepRecord) {
     mockDashboardSummary.today_sleep.total_hours = Number(
       ((mockDashboardSummary.today_sleep.total_hours ?? 0) + hours).toFixed(1),
     );
-    mockDashboardSummary.today_sleep.night_wakings =
-      (mockDashboardSummary.today_sleep.night_wakings ?? 0) + record.night_wakings;
+    if (nightWakings != null) {
+      mockDashboardSummary.today_sleep.night_wakings =
+        (mockDashboardSummary.today_sleep.night_wakings ?? 0) + nightWakings;
+    }
   }
 }
 
@@ -426,6 +469,7 @@ export class ApiClient {
       weight_percentile: null,
       height_percentile: null,
       head_percentile: null,
+      notes: data.notes ?? null,
     };
     mockGrowthRecords.unshift(record);
     refreshMockGrowthViews(record);
@@ -537,6 +581,28 @@ export class ApiClient {
     if (!isMockMode()) return this.request('/dashboard/growth-chart');
     await delay();
     return clone(mockGrowthChart);
+  }
+
+  async getGrowthReferenceP50(measurementDate: string): Promise<GrowthReferenceP50> {
+    if (!isMockMode()) {
+      return this.request(`/dashboard/growth-reference-p50?measurement_date=${encodeURIComponent(measurementDate)}`);
+    }
+
+    await delay();
+    const ageDays = Math.floor(
+      (new Date(`${measurementDate}T00:00:00+08:00`).getTime() -
+        new Date(`${mockBaby.birth_date}T00:00:00+08:00`).getTime()) /
+        86_400_000,
+    );
+    const ageMonths = ageDays / 30.4375;
+    return clone({
+      measurement_date: measurementDate,
+      age_days: ageDays,
+      age_display: ageDisplay(ageDays),
+      weight_g: interpolateP50(mockGrowthChart.who_reference.weight, ageMonths),
+      height_cm: interpolateP50(mockGrowthChart.who_reference.height, ageMonths),
+      head_cm: interpolateP50(mockGrowthChart.who_reference.head, ageMonths),
+    });
   }
 
   async getFeedingStats(days = 7): Promise<FeedingStatsData> {

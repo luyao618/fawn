@@ -44,10 +44,13 @@ describe('api mock layer', () => {
       measurement_date: '2026-05-02',
       weight_g: 6300,
       height_cm: 62,
+      notes: '家用体重秤测量',
     });
     expect((await api.getGrowthRecords()).some((record) => record.id === growth.id)).toBe(true);
+    expect(growth.notes).toBe('家用体重秤测量');
     expect((await api.getGrowthChart()).records.some((record) => record.date === '2026-05-02')).toBe(true);
     expect((await api.getDashboardSummary()).latest_growth?.date).toBe('2026-05-02');
+    expect((await api.getGrowthReferenceP50('2026-04-29')).age_display).toBeTruthy();
 
     const feeding = await api.createFeedingRecord({
       feed_time: '2026-04-29T15:30:00+08:00',

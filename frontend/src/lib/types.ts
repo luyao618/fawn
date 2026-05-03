@@ -77,6 +77,7 @@ export interface GrowthRecord {
   weight_percentile: number | null;
   height_percentile: number | null;
   head_percentile: number | null;
+  notes: string | null;
 }
 
 export interface GrowthRecordCreate {
@@ -84,6 +85,16 @@ export interface GrowthRecordCreate {
   weight_g?: number | null;
   height_cm?: number | null;
   head_cm?: number | null;
+  notes?: string | null;
+}
+
+export interface GrowthReferenceP50 {
+  measurement_date: string;
+  age_days: number;
+  age_display: string;
+  weight_g: number | null;
+  height_cm: number | null;
+  head_cm: number | null;
 }
 
 export interface FeedingRecord {
@@ -152,6 +163,7 @@ export interface DashboardSummary {
   } | null;
   today_feeding: {
     total_ml: number;
+    breast_duration_min: number;
     count: number;
     last_feed_time: string | null;
   };
@@ -188,9 +200,11 @@ export interface FeedingStatsData {
   daily: Array<{
     date: string;
     total_ml: number;
+    breast_duration_min: number;
     count: number;
   }>;
   average_daily_ml: number;
+  average_daily_breast_duration_min: number;
   average_daily_count: number;
 }
 

@@ -50,9 +50,9 @@ export function DataCard({ type, data }: DataCardProps) {
 
       {type === 'feeding' ? (
         <div className="grid grid-cols-3 gap-3">
-          <Stat label="总量">{value(data, 'total_ml')}ml</Stat>
+          <Stat label="配方奶">{value(data, 'total_ml')}ml</Stat>
+          <Stat label="亲喂">{value(data, 'breast_duration_min')}分</Stat>
           <Stat label="次数">{value(data, 'count')}次</Stat>
-          <Stat label="最近">{value(data, 'last_feed_time')}</Stat>
         </div>
       ) : null}
 

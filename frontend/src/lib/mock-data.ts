@@ -161,6 +161,7 @@ export const mockGrowthRecords: GrowthRecord[] = [
     weight_percentile: 50,
     height_percentile: 48,
     head_percentile: 52,
+    notes: '出生记录',
   },
   {
     id: 'growth-2',
@@ -171,6 +172,7 @@ export const mockGrowthRecords: GrowthRecord[] = [
     weight_percentile: 38,
     height_percentile: 42,
     head_percentile: null,
+    notes: null,
   },
   {
     id: 'growth-3',
@@ -181,6 +183,7 @@ export const mockGrowthRecords: GrowthRecord[] = [
     weight_percentile: 35,
     height_percentile: 45,
     head_percentile: 50,
+    notes: '家用软尺测量，头围可能有轻微误差',
   },
 ];
 
@@ -318,6 +321,7 @@ export const mockDashboardSummary: DashboardSummary = {
   },
   today_feeding: {
     total_ml: 190,
+    breast_duration_min: 18,
     count: 3,
     last_feed_time: '2026-04-29T14:20:00+08:00',
   },
@@ -330,15 +334,16 @@ export const mockDashboardSummary: DashboardSummary = {
 export const mockFeedingStats: FeedingStatsData = {
   days: 7,
   daily: [
-    { date: '2026-04-23', total_ml: 520, count: 7 },
-    { date: '2026-04-24', total_ml: 560, count: 8 },
-    { date: '2026-04-25', total_ml: 540, count: 7 },
-    { date: '2026-04-26', total_ml: 590, count: 8 },
-    { date: '2026-04-27', total_ml: 570, count: 8 },
-    { date: '2026-04-28', total_ml: 610, count: 8 },
-    { date: '2026-04-29', total_ml: 480, count: 6 },
+    { date: '2026-04-23', total_ml: 520, breast_duration_min: 38, count: 7 },
+    { date: '2026-04-24', total_ml: 560, breast_duration_min: 40, count: 8 },
+    { date: '2026-04-25', total_ml: 540, breast_duration_min: 37, count: 7 },
+    { date: '2026-04-26', total_ml: 590, breast_duration_min: 42, count: 8 },
+    { date: '2026-04-27', total_ml: 570, breast_duration_min: 40, count: 8 },
+    { date: '2026-04-28', total_ml: 610, breast_duration_min: 45, count: 8 },
+    { date: '2026-04-29', total_ml: 480, breast_duration_min: 41, count: 6 },
   ],
   average_daily_ml: 553,
+  average_daily_breast_duration_min: 40.4,
   average_daily_count: 7.4,
 };
 

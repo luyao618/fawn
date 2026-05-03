@@ -30,6 +30,12 @@ const tabs: Array<{ type: TrackerType; label: string }> = [
   { type: 'health', label: '健康' },
 ];
 
+const feedTypeLabel: Record<FeedingRecord['feed_type'], string> = {
+  breast: '母乳',
+  formula: '配方奶',
+  solid: '辅食',
+};
+
 function summary(type: TrackerType, record: TrackerRecord) {
   if (type === 'growth') {
     const item = record as GrowthRecord;
@@ -37,7 +43,9 @@ function summary(type: TrackerType, record: TrackerRecord) {
   }
   if (type === 'feeding') {
     const item = record as FeedingRecord;
-    return `${formatDateTime(item.feed_time)} · ${item.feed_type} · ${item.amount_ml ?? item.duration_min ?? '暂无'}${item.amount_ml ? 'ml' : 'min'}`;
+    const amount =
+      item.amount_ml != null ? `${item.amount_ml}ml` : item.duration_min != null ? `${item.duration_min}分钟` : '未填写数量';
+    return `${formatDateTime(item.feed_time)} · ${feedTypeLabel[item.feed_type]} · ${amount}`;
   }
   if (type === 'sleep') {
     const item = record as SleepRecord;

@@ -10,13 +10,20 @@ from fawn.api.schemas import (
     DashboardSummary,
     FeedingStatsData,
     GrowthChartData,
+    GrowthReferenceP50,
     SleepStatsData,
     WHOReferenceLines,
 )
 from fawn.db.session import get_db
 from fawn.dependencies import get_current_user
 from fawn.models import FeedingRecord, GrowthRecord, SleepRecord, User, WhoGrowthReference
-from fawn.services.tracker import NotFound, calculate_age_months, get_default_baby, lms_value_for_z
+from fawn.services.tracker import (
+    NotFound,
+    calculate_age_months,
+    calculate_growth_reference_value,
+    get_default_baby,
+    lms_value_for_z,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -68,6 +75,11 @@ def dashboard_local_date(value: datetime) -> date:
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return value.astimezone(DASHBOARD_TIMEZONE).date()
+
+
+def dashboard_stats_start_date(today: date, birth_date: date, days: int) -> date:
+    requested_start = today - timedelta(days=days - 1)
+    return min(today, max(requested_start, birth_date))
 
 
 def _month_decimal(value: float, rounding: str) -> Decimal:
@@ -126,8 +138,12 @@ async def summary(
         )
     ).scalars()
     feedings = list(feeding_rows)
-    total_ml = sum(record.amount_ml or 0 for record in feedings)
-    last_feed_time = max((record.feed_time for record in feedings), default=None)
+    milk_feedings = [record for record in feedings if record.feed_type != "solid"]
+    total_ml = sum(record.amount_ml or 0 for record in milk_feedings if record.feed_type == "formula")
+    breast_duration_min = sum(
+        record.duration_min or 0 for record in milk_feedings if record.feed_type == "breast"
+    )
+    last_feed_time = max((record.feed_time for record in milk_feedings), default=None)
 
     sleep_rows = (
         await db.execute(
@@ -138,6 +154,7 @@ async def summary(
     ).scalars()
     sleeps = list(sleep_rows)
     completed_sleeps = [record for record in sleeps if record.sleep_end is not None]
+    night_sleeps = [record for record in sleeps if record.sleep_type == "night"]
     total_seconds = sum(
         (record.sleep_end - record.sleep_start).total_seconds() for record in completed_sleeps
     )
@@ -153,12 +170,15 @@ async def summary(
         latest_growth=latest_growth_payload,
         today_feeding={
             "total_ml": total_ml,
-            "count": len(feedings),
+            "breast_duration_min": breast_duration_min,
+            "count": len(milk_feedings),
             "last_feed_time": last_feed_time.isoformat() if last_feed_time else None,
         },
         today_sleep={
             "total_hours": round(total_seconds / 3600, 2) if completed_sleeps else None,
-            "night_wakings": sum(record.night_wakings for record in sleeps) if sleeps else None,
+            "night_wakings": (
+                sum(record.night_wakings for record in night_sleeps) if night_sleeps else None
+            ),
         },
     )
 
@@ -222,19 +242,50 @@ async def growth_chart(
     )
 
 
+@router.get("/growth-reference-p50", response_model=GrowthReferenceP50)
+async def growth_reference_p50(
+    measurement_date: date = Query(...),
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GrowthReferenceP50:
+    try:
+        baby = await get_default_baby(db)
+    except NotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    age_days = (measurement_date - baby.birth_date).days
+    values = {
+        "weight_g": await calculate_growth_reference_value(db, baby, "weight", measurement_date),
+        "height_cm": await calculate_growth_reference_value(db, baby, "height", measurement_date),
+        "head_cm": await calculate_growth_reference_value(db, baby, "head", measurement_date),
+    }
+    return GrowthReferenceP50(
+        measurement_date=measurement_date,
+        age_days=age_days,
+        age_display=age_display(age_days),
+        **{key: decimal_float(value) for key, value in values.items()},
+    )
+
+
 @router.get("/feeding-stats", response_model=FeedingStatsData)
 async def feeding_stats(
     _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     days: int = Query(7, ge=1, le=90),
 ) -> FeedingStatsData:
+    try:
+        baby = await get_default_baby(db)
+    except NotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     today = dashboard_today()
-    start_date = today - timedelta(days=days - 1)
-    start_dt, end_dt = dashboard_range_bounds(start_date, days)
+    start_date = dashboard_stats_start_date(today, baby.birth_date, days)
+    day_count = (today - start_date).days + 1
+    start_dt, end_dt = dashboard_range_bounds(start_date, day_count)
     records = list(
         (
             await db.execute(
                 select(FeedingRecord).where(
+                    FeedingRecord.baby_id == baby.id,
                     FeedingRecord.feed_time >= start_dt,
                     FeedingRecord.feed_time < end_dt,
                 )
@@ -242,21 +293,30 @@ async def feeding_stats(
         ).scalars()
     )
     daily = []
-    for index in range(days):
+    for index in range(day_count):
         current = start_date + timedelta(days=index)
         matching = [record for record in records if dashboard_local_date(record.feed_time) == current]
+        milk_matching = [record for record in matching if record.feed_type != "solid"]
         daily.append(
             {
                 "date": current.isoformat(),
-                "total_ml": sum(r.amount_ml or 0 for r in matching),
-                "count": len(matching),
+                "total_ml": sum(
+                    r.amount_ml or 0 for r in milk_matching if r.feed_type == "formula"
+                ),
+                "breast_duration_min": sum(
+                    r.duration_min or 0 for r in milk_matching if r.feed_type == "breast"
+                ),
+                "count": len(milk_matching),
             }
         )
     return FeedingStatsData(
-        days=days,
+        days=day_count,
         daily=daily,
-        average_daily_ml=round(sum(item["total_ml"] for item in daily) / days, 2),
-        average_daily_count=round(sum(item["count"] for item in daily) / days, 2),
+        average_daily_ml=round(sum(item["total_ml"] for item in daily) / day_count, 2),
+        average_daily_breast_duration_min=round(
+            sum(item["breast_duration_min"] for item in daily) / day_count, 2
+        ),
+        average_daily_count=round(sum(item["count"] for item in daily) / day_count, 2),
     )
 
 
@@ -266,13 +326,19 @@ async def sleep_stats(
     db: AsyncSession = Depends(get_db),
     days: int = Query(7, ge=1, le=90),
 ) -> SleepStatsData:
+    try:
+        baby = await get_default_baby(db)
+    except NotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     today = dashboard_today()
-    start_date = today - timedelta(days=days - 1)
-    start_dt, end_dt = dashboard_range_bounds(start_date, days)
+    start_date = dashboard_stats_start_date(today, baby.birth_date, days)
+    day_count = (today - start_date).days + 1
+    start_dt, end_dt = dashboard_range_bounds(start_date, day_count)
     records = list(
         (
             await db.execute(
                 select(SleepRecord).where(
+                    SleepRecord.baby_id == baby.id,
                     SleepRecord.sleep_start >= start_dt,
                     SleepRecord.sleep_start < end_dt,
                 )
@@ -280,22 +346,25 @@ async def sleep_stats(
         ).scalars()
     )
     daily = []
-    for index in range(days):
+    for index in range(day_count):
         current = start_date + timedelta(days=index)
         matching = [record for record in records if dashboard_local_date(record.sleep_start) == current]
         completed = [record for record in matching if record.sleep_end is not None]
+        night_sleeps = [record for record in matching if record.sleep_type == "night"]
         total_hours = sum((record.sleep_end - record.sleep_start).total_seconds() / 3600 for record in completed)
         daily.append(
             {
                 "date": current.isoformat(),
                 "total_hours": round(total_hours, 2) if completed else None,
-                "night_wakings": sum(record.night_wakings for record in matching) if matching else None,
+                "night_wakings": (
+                    sum(record.night_wakings for record in night_sleeps) if night_sleeps else None
+                ),
             }
         )
     recorded_days = [item for item in daily if item["total_hours"] is not None]
     waking_days = [item for item in daily if item["night_wakings"] is not None]
     return SleepStatsData(
-        days=days,
+        days=day_count,
         daily=daily,
         average_daily_hours=(
             round(sum(item["total_hours"] for item in recorded_days) / len(recorded_days), 2)

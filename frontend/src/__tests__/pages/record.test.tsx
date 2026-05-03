@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import RecordPage from '@/app/(main)/record/page';
@@ -28,11 +28,119 @@ describe('record page', () => {
     render(<RecordPage />);
 
     await waitFor(() => expect(screen.getByRole('button', { name: '保存喂养' })).toBeInTheDocument());
-    await userEvent.type(screen.getByLabelText('奶量 (ml)'), '90');
+    await userEvent.type(screen.getByLabelText('配方奶量 (ml)'), '90');
     await userEvent.click(screen.getByRole('button', { name: '保存喂养' }));
 
     await waitFor(() => expect(screen.getByText(/喂养已保存/)).toBeInTheDocument());
     expect((await api.getFeedingRecords()).some((record) => record.amount_ml === 90)).toBe(true);
+  });
+
+  it('uses large feeding type buttons instead of a native select', async () => {
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存喂养' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/记录晨晨今天的变化/)).toBeInTheDocument());
+
+    expect(screen.getByLabelText('时间')).toHaveAttribute('min', '2026-03-01T00:00');
+
+    const group = screen.getByRole('group', { name: '喂养类型' });
+    expect(screen.queryByRole('combobox', { name: '类型' })).not.toBeInTheDocument();
+    expect(within(group).queryByRole('button', { name: '辅食' })).not.toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: '配方奶' })).toHaveAttribute('aria-pressed', 'true');
+
+    await userEvent.click(within(group).getByRole('button', { name: '母乳' }));
+
+    expect(within(group).getByRole('button', { name: '母乳' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('亲喂时长 (分钟)')).toBeInTheDocument();
+  });
+
+  it('uses full-width sleep time fields and sleep type buttons', async () => {
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存喂养' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /睡眠：/ }));
+
+    expect(screen.getByRole('button', { name: '保存睡眠' })).toBeInTheDocument();
+    expect(screen.getByLabelText('开始')).toHaveAttribute('type', 'datetime-local');
+    expect(screen.getByLabelText('结束')).toHaveAttribute('type', 'datetime-local');
+
+    const group = screen.getByRole('group', { name: '睡眠类型' });
+    expect(screen.queryByRole('combobox', { name: '类型' })).not.toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: '小睡' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByLabelText('夜醒次数')).not.toBeInTheDocument();
+
+    await userEvent.click(within(group).getByRole('button', { name: '夜睡' }));
+
+    expect(within(group).getByRole('button', { name: '夜睡' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('夜醒次数')).toBeInTheDocument();
+  });
+
+  it('submits nap records with zero night wakings', async () => {
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存喂养' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /睡眠：/ }));
+
+    expect(screen.queryByLabelText('夜醒次数')).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('补充说明（可选）'), '午睡测试记录');
+    await userEvent.click(screen.getByRole('button', { name: '保存睡眠' }));
+
+    await waitFor(() => expect(screen.getByText(/睡眠已保存/)).toBeInTheDocument());
+    expect(
+      (await api.getSleepRecords()).some(
+        (record) => record.notes === '午睡测试记录' && record.sleep_type === 'nap' && record.night_wakings === 0,
+      ),
+    ).toBe(true);
+  });
+
+  it('blocks sleep records when the end is before the start', async () => {
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存喂养' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /睡眠：/ }));
+
+    fireEvent.change(screen.getByLabelText('开始'), { target: { value: '2026-05-02T10:00' } });
+    fireEvent.change(screen.getByLabelText('结束'), { target: { value: '2026-05-02T09:00' } });
+    await userEvent.click(screen.getByRole('button', { name: '保存睡眠' }));
+
+    await waitFor(() => expect(screen.getByText('睡眠结束时间必须晚于开始时间')).toBeInTheDocument());
+  });
+
+  it('shows compact growth P50 hints and saves optional notes', async () => {
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存喂养' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /生长：/ }));
+
+    await waitFor(() => expect(screen.getAllByText(/P50/).length).toBeGreaterThanOrEqual(3));
+    expect(screen.getByLabelText('补充说明（可选）')).toBeInTheDocument();
+
+    await userEvent.type(screen.getByRole('spinbutton', { name: /体重/ }), '4300');
+    await userEvent.type(screen.getByLabelText('补充说明（可选）'), '家用软尺测量');
+    await userEvent.click(screen.getByRole('button', { name: '保存生长' }));
+
+    await waitFor(() => expect(screen.getByText(/生长已保存/)).toBeInTheDocument());
+    expect(
+      (await api.getGrowthRecords()).some(
+        (record) => record.weight_g === 4300 && record.notes === '家用软尺测量',
+      ),
+    ).toBe(true);
+  });
+
+  it('uses health type buttons instead of a native select', async () => {
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存喂养' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /健康：/ }));
+
+    expect(screen.getByRole('button', { name: '保存健康' })).toBeInTheDocument();
+    const group = screen.getByRole('group', { name: '健康类型' });
+    expect(screen.queryByRole('combobox', { name: '类型' })).not.toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: '体检' })).toHaveAttribute('aria-pressed', 'true');
+
+    await userEvent.click(within(group).getByRole('button', { name: '疫苗' }));
+
+    expect(within(group).getByRole('button', { name: '疫苗' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('disables submission for users without tracker write permission', async () => {
