@@ -110,18 +110,14 @@ def _interpolate(
     return values[0], values[1], values[2]
 
 
-async def calculate_percentile(
+async def _reference_lms(
     db: AsyncSession,
     baby: Baby,
     indicator: Literal["weight", "height", "head"],
-    value: float | int | Decimal | None,
     measurement_date: date,
-) -> Decimal | None:
-    if value is None:
-        return None
-
+) -> tuple[float, float, float] | None:
     age_months = calculate_age_months(baby, measurement_date)
-    if age_months < 0 or age_months > 6:
+    if age_months < 0:
         return None
 
     result = await db.execute(
@@ -151,11 +147,44 @@ async def calculate_percentile(
             right = ref
             break
 
-    l_value, m_value, s_value = _interpolate(left, right, age_months)
+    return _interpolate(left, right, age_months)
+
+
+async def calculate_growth_reference_value(
+    db: AsyncSession,
+    baby: Baby,
+    indicator: Literal["weight", "height", "head"],
+    measurement_date: date,
+    z_score: float = 0.0,
+) -> Decimal | None:
+    lms = await _reference_lms(db, baby, indicator, measurement_date)
+    if lms is None:
+        return None
+
+    value = lms_value_for_z(*lms, z_score)
+    if indicator == "weight":
+        value *= 1000
+    return Decimal(str(round(value, 2)))
+
+
+async def calculate_percentile(
+    db: AsyncSession,
+    baby: Baby,
+    indicator: Literal["weight", "height", "head"],
+    value: float | int | Decimal | None,
+    measurement_date: date,
+) -> Decimal | None:
+    if value is None:
+        return None
+
+    lms = await _reference_lms(db, baby, indicator, measurement_date)
+    if lms is None:
+        return None
+
     numeric_value = float(value)
     if indicator == "weight" and numeric_value > 100:
         numeric_value = numeric_value / 1000
-    percentile = lms_percentile(numeric_value, l_value, m_value, s_value)
+    percentile = lms_percentile(numeric_value, *lms)
     return Decimal(str(percentile))
 
 
@@ -183,6 +212,7 @@ async def create_growth_record(
     weight_g: int | None = None,
     height_cm: float | None = None,
     head_cm: float | None = None,
+    notes: str | None = None,
     baby_id: uuid.UUID | None = None,
     source_conversation_id: uuid.UUID | None = None,
 ) -> GrowthRecord:
@@ -197,6 +227,7 @@ async def create_growth_record(
         weight_g=weight_g,
         height_cm=Decimal(str(height_cm)) if height_cm is not None else None,
         head_cm=Decimal(str(head_cm)) if head_cm is not None else None,
+        notes=notes,
         source_conversation_id=source_conversation_id,
     )
     db.add(record)
@@ -255,6 +286,8 @@ async def create_sleep_record(
     baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db)
     if baby is None:
         raise NotFound("Baby profile not found")
+    if sleep_type == "nap":
+        night_wakings = 0
     record = SleepRecord(
         baby_id=baby.id,
         recorded_by=user.id,

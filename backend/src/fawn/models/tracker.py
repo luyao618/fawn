@@ -35,6 +35,7 @@ class GrowthRecord(UUIDMixin, TimestampMixin, Base):
     weight_percentile: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     height_percentile: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     head_percentile: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    notes: Mapped[str | None] = mapped_column(Text)
     source_conversation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("conversations.id"),

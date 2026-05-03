@@ -126,6 +126,7 @@ class GrowthRecordRead(BaseModel):
     weight_percentile: float | None = None
     height_percentile: float | None = None
     head_percentile: float | None = None
+    notes: str | None = None
 
 
 class GrowthRecordCreate(BaseModel):
@@ -133,6 +134,16 @@ class GrowthRecordCreate(BaseModel):
     weight_g: int | None = Field(default=None, gt=0)
     height_cm: float | None = Field(default=None, gt=0)
     head_cm: float | None = Field(default=None, gt=0)
+    notes: str | None = None
+
+
+class GrowthReferenceP50(BaseModel):
+    measurement_date: date
+    age_days: int
+    age_display: str
+    weight_g: float | None = None
+    height_cm: float | None = None
+    head_cm: float | None = None
 
 
 class FeedingRecordRead(BaseModel):
@@ -228,6 +239,7 @@ class DashboardLatestGrowth(BaseModel):
 
 class DashboardTodayFeeding(BaseModel):
     total_ml: int
+    breast_duration_min: int
     count: int
     last_feed_time: datetime | None = None
 
@@ -278,6 +290,7 @@ class GrowthChartData(BaseModel):
 class FeedingStatsDay(BaseModel):
     date: date
     total_ml: int
+    breast_duration_min: int
     count: int
 
 
@@ -285,6 +298,7 @@ class FeedingStatsData(BaseModel):
     days: int
     daily: list[FeedingStatsDay]
     average_daily_ml: float
+    average_daily_breast_duration_min: float
     average_daily_count: float
 
 

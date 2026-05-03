@@ -61,6 +61,7 @@ async def record_growth(
     weight_g: int | None = None,
     height_cm: float | None = None,
     head_cm: float | None = None,
+    notes: str | None = None,
     user_id: InjectedUserId = "",
     conversation_id: InjectedConversationId = "",
 ) -> dict[str, Any] | str:
@@ -76,6 +77,7 @@ async def record_growth(
             weight_g=weight_g,
             height_cm=height_cm,
             head_cm=head_cm,
+            notes=notes,
             source_conversation_id=uuid.UUID(conversation_id),
         )
         payload = _record_payload(record)
@@ -259,6 +261,7 @@ async def query_growth_data(days: int = 90) -> dict[str, Any]:
                 "head_percentile": float(record.head_percentile)
                 if record.head_percentile is not None
                 else None,
+                "notes": record.notes,
             }
             for record in records
         ]
@@ -271,13 +274,19 @@ async def query_feeding_data(date: str | None = None) -> dict[str, Any]:
     target = _parse_date(date) if date else date_cls.today()
     async with async_session_factory() as db:
         records = await tracker_service.query_feeding(db, date_value=target, limit=500)
+    milk_records = [record for record in records if record.feed_type != "solid"]
     return {
         "date": target.isoformat(),
-        "total_ml": sum(record.amount_ml or 0 for record in records),
-        "count": len(records),
+        "total_ml": sum(
+            record.amount_ml or 0 for record in milk_records if record.feed_type == "formula"
+        ),
+        "breast_duration_min": sum(
+            record.duration_min or 0 for record in milk_records if record.feed_type == "breast"
+        ),
+        "count": len(milk_records),
         "records": [
             {"id": str(r.id), "feed_time": r.feed_time.isoformat(), "feed_type": r.feed_type}
-            for r in records
+            for r in milk_records
         ],
     }
 
@@ -296,7 +305,7 @@ async def query_sleep_data(date: str | None = None) -> dict[str, Any]:
     return {
         "date": target.isoformat(),
         "total_hours": round(total_hours, 2),
-        "night_wakings": sum(record.night_wakings for record in records),
+        "night_wakings": sum(record.night_wakings for record in records if record.sleep_type == "night"),
         "records": [
             {"id": str(r.id), "sleep_start": r.sleep_start.isoformat(), "sleep_type": r.sleep_type}
             for r in records

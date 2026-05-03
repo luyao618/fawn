@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ClipboardList, RefreshCw } from 'lucide-react';
+import { ClipboardList, Moon, RefreshCw, Ruler, Stethoscope, Utensils } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { FeedingStats } from '@/components/dashboard/FeedingStats';
 import { GrowthChart } from '@/components/dashboard/GrowthChart';
@@ -24,9 +25,10 @@ import type {
 } from '@/lib/types';
 
 type Indicator = 'weight' | 'height' | 'head';
+type RecentRecordType = '生长' | '喂养' | '睡眠' | '健康';
 type RecentRecord = {
   id: string;
-  type: string;
+  type: RecentRecordType;
   title: string;
   detail: string;
   at: string;
@@ -45,6 +47,35 @@ const healthTypeLabel: Record<HealthRecord['record_type'], string> = {
   checkup: '体检',
 };
 const STATS_HISTORY_DAYS = 90;
+const recentTypeStyle: Record<
+  RecentRecordType,
+  {
+    icon: LucideIcon;
+    iconBox: string;
+    label: string;
+  }
+> = {
+  喂养: {
+    icon: Utensils,
+    iconBox: 'bg-fawn-amber-light text-fawn-amber',
+    label: 'text-fawn-amber',
+  },
+  睡眠: {
+    icon: Moon,
+    iconBox: 'bg-[#EEF4F8] text-[#6F8EAE]',
+    label: 'text-[#6F8EAE]',
+  },
+  生长: {
+    icon: Ruler,
+    iconBox: 'bg-sage-green-light text-sage-green',
+    label: 'text-sage-green',
+  },
+  健康: {
+    icon: Stethoscope,
+    iconBox: 'bg-nursery-mint text-brand-strong',
+    label: 'text-brand-strong',
+  },
+};
 
 function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse rounded-card bg-white/70 shadow-card ${className}`} />;
@@ -122,6 +153,7 @@ function DashboardOverview({ summary, latestRecord }: { summary: DashboardSummar
   const latestGrowth = summary.latest_growth;
   const todaySleepValue =
     summary.today_sleep.total_hours == null ? '没数据' : `${summary.today_sleep.total_hours.toFixed(1)}h`;
+  const todayBreastDuration = summary.today_feeding.breast_duration_min;
   const latestRecordText = latestRecord ? `${latestRecord.type} · ${latestRecord.title}` : '暂无最近记录';
 
   return (
@@ -142,7 +174,11 @@ function DashboardOverview({ summary, latestRecord }: { summary: DashboardSummar
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <StatChip label="今日喂养" value={`${summary.today_feeding.count}次`} />
+        <StatChip
+          label="今日喂养"
+          value={`${summary.today_feeding.count}次`}
+          hint={todayBreastDuration > 0 ? `亲喂 ${todayBreastDuration}分钟` : undefined}
+        />
         <StatChip label="今日睡眠" value={todaySleepValue} />
         <StatChip
           label="最新体重"
@@ -176,17 +212,28 @@ function RecentRecords({ records }: { records: RecentRecord[] }) {
         </Link>
       </div>
       <div className="space-y-3">
-        {records.map((record) => (
-          <div key={`${record.type}-${record.id}`} className="flex gap-3 rounded-2xl bg-warm-gray p-3">
-            <span className="shrink-0 rounded-full bg-white px-2 py-1 text-xs font-semibold text-fawn-amber">
-              {record.type}
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-soft-charcoal">{record.title}</p>
-              <p className="mt-1 line-clamp-2 text-xs leading-5 text-dark-gray">{record.detail}</p>
+        {records.map((record) => {
+          const style = recentTypeStyle[record.type];
+          const Icon = style.icon;
+
+          return (
+            <div
+              key={`${record.type}-${record.id}`}
+              className="rounded-2xl bg-warm-gray p-3 ring-1 ring-white/70"
+            >
+              <div className="flex gap-3">
+                <div className={cn('mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl', style.iconBox)}>
+                  <Icon className="h-4 w-4" strokeWidth={2} aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className={cn('text-[11px] font-semibold leading-none', style.label)}>{record.type}</p>
+                  <p className="mt-1.5 truncate text-sm font-semibold text-soft-charcoal">{record.title}</p>
+                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-dark-gray">{record.detail}</p>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {records.length === 0 ? <p className="py-3 text-center text-sm text-mid-gray">暂无记录</p> : null}
       </div>
     </Card>
