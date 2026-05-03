@@ -68,7 +68,7 @@ export function ProfileItemList({
             placeholder="添加一条记忆"
             className="min-h-11 min-w-0 flex-1 rounded-2xl border border-oat-border bg-white px-3 outline-none focus:border-fawn-amber"
           />
-          <Button type="submit" className="min-h-11 px-4 text-sm">
+          <Button type="submit" variant="secondary" className="min-h-11 px-4 text-sm shadow-none">
             添加
           </Button>
         </form>
