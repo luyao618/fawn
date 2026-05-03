@@ -60,8 +60,10 @@ def ensure_tracker_write(user: User) -> None:
         raise PermissionDenied("Tracker write permission required")
 
 
-async def get_default_baby(db: AsyncSession) -> Baby:
-    baby = await db.scalar(select(Baby).order_by(Baby.created_at.asc()).limit(1))
+async def get_default_baby(db: AsyncSession, family_id: uuid.UUID) -> Baby:
+    baby = await db.scalar(
+        select(Baby).where(Baby.family_id == family_id).order_by(Baby.created_at.asc()).limit(1)
+    )
     if baby is None:
         raise NotFound("Baby profile not found")
     return baby
@@ -217,9 +219,11 @@ async def create_growth_record(
     source_conversation_id: uuid.UUID | None = None,
 ) -> GrowthRecord:
     ensure_tracker_write(user)
-    baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db)
+    baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db, user.family_id)
     if baby is None:
         raise NotFound("Baby profile not found")
+    if baby.family_id != user.family_id:
+        raise PermissionDenied("Cannot write records for another family")
     record = GrowthRecord(
         baby_id=baby.id,
         recorded_by=user.id,
@@ -251,9 +255,11 @@ async def create_feeding_record(
     source_conversation_id: uuid.UUID | None = None,
 ) -> FeedingRecord:
     ensure_tracker_write(user)
-    baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db)
+    baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db, user.family_id)
     if baby is None:
         raise NotFound("Baby profile not found")
+    if baby.family_id != user.family_id:
+        raise PermissionDenied("Cannot write records for another family")
     record = FeedingRecord(
         baby_id=baby.id,
         recorded_by=user.id,
@@ -283,9 +289,11 @@ async def create_sleep_record(
     source_conversation_id: uuid.UUID | None = None,
 ) -> SleepRecord:
     ensure_tracker_write(user)
-    baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db)
+    baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db, user.family_id)
     if baby is None:
         raise NotFound("Baby profile not found")
+    if baby.family_id != user.family_id:
+        raise PermissionDenied("Cannot write records for another family")
     if sleep_type == "nap":
         night_wakings = 0
     record = SleepRecord(
@@ -316,9 +324,11 @@ async def create_health_record(
     source_conversation_id: uuid.UUID | None = None,
 ) -> HealthRecord:
     ensure_tracker_write(user)
-    baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db)
+    baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db, user.family_id)
     if baby is None:
         raise NotFound("Baby profile not found")
+    if baby.family_id != user.family_id:
+        raise PermissionDenied("Cannot write records for another family")
     record = HealthRecord(
         baby_id=baby.id,
         recorded_by=user.id,
@@ -348,6 +358,11 @@ async def update_tracker_record(
     record = await db.get(model, record_id)
     if record is None:
         raise NotFound("Tracker record not found")
+    if getattr(record, "deleted_at", None) is not None:
+        raise NotFound("Tracker record not found")
+    baby = await db.get(Baby, record.baby_id)
+    if baby is None or baby.family_id != user.family_id:
+        raise PermissionDenied("Cannot modify another family's tracker record")
 
     allowed = set(model.__table__.columns.keys()) - {
         "id",
@@ -359,6 +374,8 @@ async def update_tracker_record(
         "weight_percentile",
         "height_percentile",
         "head_percentile",
+        "deleted_at",
+        "deleted_by",
     }
     for key, value in updates.items():
         if key in allowed:
@@ -385,7 +402,13 @@ async def delete_tracker_record(
     record = await db.get(model, record_id)
     if record is None:
         raise NotFound("Tracker record not found")
-    await db.delete(record)
+    if getattr(record, "deleted_at", None) is not None:
+        raise NotFound("Tracker record not found")
+    baby = await db.get(Baby, record.baby_id)
+    if baby is None or baby.family_id != user.family_id:
+        raise PermissionDenied("Cannot delete another family's tracker record")
+    record.deleted_at = datetime.now(UTC)
+    record.deleted_by = user.id
     await db.commit()
 
 
@@ -422,6 +445,7 @@ async def query_records(
     db: AsyncSession,
     record_type: TrackerType,
     *,
+    family_id: uuid.UUID,
     date_value: date | None = None,
     from_date: date | None = None,
     to_date: date | None = None,
@@ -431,7 +455,11 @@ async def query_records(
     model = RECORD_MODELS.get(record_type)
     if model is None:
         raise ValidationError("Unknown tracker record type")
-    stmt = select(model)
+    stmt = (
+        select(model)
+        .join(Baby, model.baby_id == Baby.id)
+        .where(Baby.family_id == family_id, model.deleted_at.is_(None))
+    )
     stmt = _apply_date_filters(stmt, record_type, date_value, from_date, to_date)
     stmt = stmt.order_by(DATE_FIELDS[record_type].desc()).limit(limit).offset(offset)
     result = await db.execute(stmt)

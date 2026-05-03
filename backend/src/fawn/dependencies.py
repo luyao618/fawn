@@ -28,33 +28,55 @@ async def get_current_user(
         raise credentials_error from exc
 
     user = await db.get(User, user_id)
-    if user is None:
+    if user is None or user.deleted_at is not None:
         raise credentials_error
     return user
 
 
 async def get_admin_user(user: User = Depends(get_current_user)) -> User:
-    if user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    if user.access_type != "parent":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Parent access required")
+    return user
+
+
+async def get_parent_user(user: User = Depends(get_current_user)) -> User:
+    if user.access_type != "parent":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Parent access required")
     return user
 
 
 def can_write_tracker(user: User) -> bool:
-    if user.role in {"admin", "parent"}:
-        return True
-    return bool((user.permissions or {}).get("can_write_tracker"))
+    return user.access_type in {"parent", "family"}
 
 
 def can_upload_photos(user: User) -> bool:
-    if user.role in {"admin", "parent"}:
-        return True
-    return bool((user.permissions or {}).get("can_upload_photos"))
+    return user.access_type in {"parent", "family"}
+
+
+def can_soft_delete_data(user: User) -> bool:
+    return user.access_type in {"parent", "family"}
+
+
+def can_manage_family(user: User) -> bool:
+    return user.access_type == "parent"
+
+
+def can_write_profile(user: User) -> bool:
+    return user.access_type in {"parent", "family"}
 
 
 async def require_tracker_writer(user: User = Depends(get_current_user)) -> User:
     if not can_write_tracker(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Tracker write permission required"
+        )
+    return user
+
+
+async def require_profile_writer(user: User = Depends(get_current_user)) -> User:
+    if not can_write_profile(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Profile write permission required"
         )
     return user
 

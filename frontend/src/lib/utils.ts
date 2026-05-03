@@ -35,18 +35,28 @@ export function toKg(grams: number | null) {
   return `${(grams / 1000).toFixed(1)}kg`;
 }
 
-export function roleLabel(role: string) {
-  if (role === 'admin') return '管理员';
-  if (role === 'parent') return '父母';
-  return '家人';
+export function accessTypeLabel(accessType: string | undefined) {
+  if (accessType === 'parent') return '父母权限';
+  if (accessType === 'family') return '家人权限';
+  return '朋友权限';
 }
 
-export function canWriteTracker(role: string | undefined, permissions?: { can_write_tracker: boolean }) {
-  if (role === 'admin' || role === 'parent') return true;
-  return Boolean(permissions?.can_write_tracker);
+export function roleLabel(role: string | undefined) {
+  return role || '家庭成员';
 }
 
-export function canUploadPhotos(role: string | undefined, permissions?: { can_upload_photos: boolean }) {
-  if (role === 'admin' || role === 'parent') return true;
-  return Boolean(permissions?.can_upload_photos);
+export function canWriteTracker(accessType: string | undefined) {
+  return accessType === 'parent' || accessType === 'family';
+}
+
+export function canUploadPhotos(accessType: string | undefined) {
+  return accessType === 'parent' || accessType === 'family';
+}
+
+export function canSoftDeleteData(accessType: string | undefined) {
+  return accessType === 'parent' || accessType === 'family';
+}
+
+export function canManageFamily(accessType: string | undefined) {
+  return accessType === 'parent';
 }

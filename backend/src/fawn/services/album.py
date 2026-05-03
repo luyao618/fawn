@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from fawn.dependencies import can_soft_delete_data
 from fawn.models import Baby, Photo, PhotoTag, User
 from fawn.services.storage import get_presigned_download_url, put_bytes
 
@@ -96,6 +97,8 @@ async def upload_photo(
     baby = await db.get(Baby, baby_id)
     if baby is None:
         raise NotFound("Baby not found")
+    if baby.family_id != user.family_id:
+        raise PermissionDenied("Cannot upload a photo for another family")
 
     ext = filename.rsplit(".", 1)[-1] if "." in filename else "bin"
     file_id = uuid.uuid4()
@@ -124,6 +127,7 @@ async def upload_photo(
 async def list_photos(
     db: AsyncSession,
     *,
+    family_id: uuid.UUID,
     baby_id: uuid.UUID | None = None,
     view: str = "timeline",
     scene: str | None = None,
@@ -131,8 +135,18 @@ async def list_photos(
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[Photo], int]:
-    stmt = select(Photo).options(selectinload(Photo.tags)).where(Photo.deleted_at.is_(None))
-    count_stmt = select(func.count()).select_from(Photo).where(Photo.deleted_at.is_(None))
+    stmt = (
+        select(Photo)
+        .join(Baby, Photo.baby_id == Baby.id)
+        .options(selectinload(Photo.tags))
+        .where(Photo.deleted_at.is_(None), Baby.family_id == family_id)
+    )
+    count_stmt = (
+        select(func.count())
+        .select_from(Photo)
+        .join(Baby, Photo.baby_id == Baby.id)
+        .where(Photo.deleted_at.is_(None), Baby.family_id == family_id)
+    )
 
     if baby_id:
         stmt = stmt.where(Photo.baby_id == baby_id)
@@ -178,11 +192,12 @@ async def list_photos(
     return photos, total
 
 
-async def get_photo(db: AsyncSession, photo_id: uuid.UUID) -> Photo:
+async def get_photo(db: AsyncSession, photo_id: uuid.UUID, family_id: uuid.UUID) -> Photo:
     stmt = (
         select(Photo)
+        .join(Baby, Photo.baby_id == Baby.id)
         .options(selectinload(Photo.tags))
-        .where(Photo.id == photo_id, Photo.deleted_at.is_(None))
+        .where(Photo.id == photo_id, Photo.deleted_at.is_(None), Baby.family_id == family_id)
     )
     photo = (await db.execute(stmt)).scalar_one_or_none()
     if photo is None:
@@ -190,15 +205,19 @@ async def get_photo(db: AsyncSession, photo_id: uuid.UUID) -> Photo:
     return photo
 
 
-async def confirm_tag(db: AsyncSession, photo_id: uuid.UUID, tag_id: uuid.UUID) -> PhotoTag:
+async def confirm_tag(
+    db: AsyncSession, photo_id: uuid.UUID, tag_id: uuid.UUID, family_id: uuid.UUID
+) -> PhotoTag:
     tag = (
         await db.execute(
             select(PhotoTag)
             .join(Photo)
+            .join(Baby, Photo.baby_id == Baby.id)
             .where(
                 PhotoTag.id == tag_id,
                 PhotoTag.photo_id == photo_id,
                 Photo.deleted_at.is_(None),
+                Baby.family_id == family_id,
             )
         )
     ).scalar_one_or_none()
@@ -210,14 +229,14 @@ async def confirm_tag(db: AsyncSession, photo_id: uuid.UUID, tag_id: uuid.UUID) 
     return tag
 
 
-async def get_photo_download_url(db: AsyncSession, photo_id: uuid.UUID) -> str:
-    photo = await get_photo(db, photo_id)
+async def get_photo_download_url(db: AsyncSession, photo_id: uuid.UUID, family_id: uuid.UUID) -> str:
+    photo = await get_photo(db, photo_id, family_id)
     return get_presigned_download_url(photo.storage_key, photo.original_filename)
 
 
 async def delete_photo(db: AsyncSession, user: User, photo_id: uuid.UUID) -> None:
-    photo = await get_photo(db, photo_id)
-    if user.role not in {"admin", "parent"}:
+    photo = await get_photo(db, photo_id, user.family_id)
+    if not can_soft_delete_data(user):
         raise PermissionDenied("Cannot delete this photo")
     photo.deleted_at = datetime.now(UTC)
     photo.deleted_by = user.id

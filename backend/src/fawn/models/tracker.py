@@ -40,6 +40,8 @@ class GrowthRecord(UUIDMixin, TimestampMixin, Base):
         UUID(as_uuid=True),
         ForeignKey("conversations.id"),
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
 
 class FeedingRecord(UUIDMixin, TimestampMixin, Base):
@@ -66,6 +68,8 @@ class FeedingRecord(UUIDMixin, TimestampMixin, Base):
         UUID(as_uuid=True),
         ForeignKey("conversations.id"),
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
 
 class SleepRecord(UUIDMixin, TimestampMixin, Base):
@@ -92,6 +96,8 @@ class SleepRecord(UUIDMixin, TimestampMixin, Base):
         UUID(as_uuid=True),
         ForeignKey("conversations.id"),
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
 
 class HealthRecord(UUIDMixin, TimestampMixin, Base):
@@ -118,6 +124,8 @@ class HealthRecord(UUIDMixin, TimestampMixin, Base):
         UUID(as_uuid=True),
         ForeignKey("conversations.id"),
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
 
 class WhoGrowthReference(Base):

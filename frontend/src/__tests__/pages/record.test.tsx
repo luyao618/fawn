@@ -145,7 +145,7 @@ describe('record page', () => {
 
   it('disables submission for users without tracker write permission', async () => {
     useAuthStore.getState().logout();
-    await useAuthStore.getState().login('nainai', 'password');
+    await useAuthStore.getState().login('doctor', 'password');
 
     render(<RecordPage />);
 

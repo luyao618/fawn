@@ -1,11 +1,11 @@
 import { Baby, Bot, UserRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { UserRole } from '@/lib/types';
+import type { UserAccessType } from '@/lib/types';
 
-const ringByRole: Record<UserRole | 'agent' | 'baby', string> = {
-  admin: 'bg-info-blue-light text-info-blue ring-white',
+const ringByRole: Record<UserAccessType | 'agent' | 'baby', string> = {
   parent: 'bg-nursery-butter text-brand-strong ring-white',
   family: 'bg-white text-role-grandma ring-nursery-powder',
+  friend: 'bg-white text-dark-gray ring-oat-border',
   agent: 'bg-nursery-mint text-brand-strong ring-white',
   baby: 'bg-nursery-powder text-info-blue ring-white',
 };
@@ -13,7 +13,7 @@ const ringByRole: Record<UserRole | 'agent' | 'baby', string> = {
 interface AvatarProps {
   src?: string | null;
   label: string;
-  role?: UserRole | 'agent' | 'baby';
+  role?: UserAccessType | 'agent' | 'baby';
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }

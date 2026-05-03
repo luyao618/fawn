@@ -34,7 +34,7 @@ async def upload_photo(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        baby = await profile_service.get_baby(db)
+        baby = await profile_service.get_baby(db, user.family_id)
         content = await file.read()
         photo = await album_service.upload_photo(
             db,
@@ -63,7 +63,13 @@ async def list_photos(
     db: AsyncSession = Depends(get_db),
 ):
     photos, total = await album_service.list_photos(
-        db, view=view, scene=scene, month=month, page=page, page_size=page_size
+        db,
+        family_id=user.family_id,
+        view=view,
+        scene=scene,
+        month=month,
+        page=page,
+        page_size=page_size,
     )
     return PaginatedResponse(
         items=[_photo_to_read(p) for p in photos],
@@ -80,7 +86,7 @@ async def get_photo(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        photo = await album_service.get_photo(db, photo_id)
+        photo = await album_service.get_photo(db, photo_id, user.family_id)
     except album_service.NotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _photo_to_read(photo)
@@ -90,11 +96,11 @@ async def get_photo(
 async def confirm_tag(
     photo_id: uuid.UUID,
     tag_id: uuid.UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_photo_uploader),
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        tag = await album_service.confirm_tag(db, photo_id, tag_id)
+        tag = await album_service.confirm_tag(db, photo_id, tag_id, user.family_id)
     except album_service.NotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return tag
@@ -107,7 +113,7 @@ async def download_photo(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        download_url = await album_service.get_photo_download_url(db, photo_id)
+        download_url = await album_service.get_photo_download_url(db, photo_id, user.family_id)
     except album_service.NotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return PhotoDownloadResponse(download_url=download_url)

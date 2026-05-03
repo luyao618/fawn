@@ -118,13 +118,25 @@ async def test_create_health_record(
     assert data["description"] == "No concerns"
 
 
-async def test_create_tracker_record_family_forbidden(
+async def test_create_tracker_record_family_allowed(
     client: AsyncClient, family_auth_headers: dict, test_baby: Baby
 ) -> None:
     response = await client.post(
         "/api/tracker/feeding",
         json={"feed_time": "2026-05-02T08:30:00Z", "feed_type": "breast", "duration_min": 12},
         headers=family_auth_headers,
+    )
+
+    assert response.status_code == 201
+
+
+async def test_create_tracker_record_friend_forbidden(
+    client: AsyncClient, friend_auth_headers: dict, test_baby: Baby
+) -> None:
+    response = await client.post(
+        "/api/tracker/feeding",
+        json={"feed_time": "2026-05-02T08:30:00Z", "feed_type": "breast", "duration_min": 12},
+        headers=friend_auth_headers,
     )
 
     assert response.status_code == 403

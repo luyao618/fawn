@@ -106,18 +106,21 @@ def growth_reference_span_months(
 
 @router.get("/summary", response_model=DashboardSummary)
 async def summary(
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DashboardSummary:
     try:
-        baby = await get_default_baby(db)
+        baby = await get_default_baby(db, user.family_id)
     except NotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     today = dashboard_today()
     age_days = (today - baby.birth_date).days
 
     latest_growth = await db.scalar(
-        select(GrowthRecord).order_by(GrowthRecord.measurement_date.desc()).limit(1)
+        select(GrowthRecord)
+        .where(GrowthRecord.baby_id == baby.id, GrowthRecord.deleted_at.is_(None))
+        .order_by(GrowthRecord.measurement_date.desc())
+        .limit(1)
     )
     latest_growth_payload = None
     if latest_growth:
@@ -133,6 +136,8 @@ async def summary(
     feeding_rows = (
         await db.execute(
             select(FeedingRecord).where(
+                FeedingRecord.baby_id == baby.id,
+                FeedingRecord.deleted_at.is_(None),
                 FeedingRecord.feed_time >= start, FeedingRecord.feed_time < end
             )
         )
@@ -148,6 +153,8 @@ async def summary(
     sleep_rows = (
         await db.execute(
             select(SleepRecord).where(
+                SleepRecord.baby_id == baby.id,
+                SleepRecord.deleted_at.is_(None),
                 SleepRecord.sleep_start >= start, SleepRecord.sleep_start < end
             )
         )
@@ -185,16 +192,20 @@ async def summary(
 
 @router.get("/growth-chart", response_model=GrowthChartData)
 async def growth_chart(
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GrowthChartData:
     try:
-        baby = await get_default_baby(db)
+        baby = await get_default_baby(db, user.family_id)
     except NotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     records = list(
         (
-            await db.execute(select(GrowthRecord).order_by(GrowthRecord.measurement_date.asc()))
+            await db.execute(
+                select(GrowthRecord)
+                .where(GrowthRecord.baby_id == baby.id, GrowthRecord.deleted_at.is_(None))
+                .order_by(GrowthRecord.measurement_date.asc())
+            )
         ).scalars()
     )
     record_ages = [calculate_age_months(baby, record.measurement_date) for record in records]
@@ -245,11 +256,11 @@ async def growth_chart(
 @router.get("/growth-reference-p50", response_model=GrowthReferenceP50)
 async def growth_reference_p50(
     measurement_date: date = Query(...),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GrowthReferenceP50:
     try:
-        baby = await get_default_baby(db)
+        baby = await get_default_baby(db, user.family_id)
     except NotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
@@ -269,12 +280,12 @@ async def growth_reference_p50(
 
 @router.get("/feeding-stats", response_model=FeedingStatsData)
 async def feeding_stats(
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     days: int = Query(7, ge=1, le=90),
 ) -> FeedingStatsData:
     try:
-        baby = await get_default_baby(db)
+        baby = await get_default_baby(db, user.family_id)
     except NotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     today = dashboard_today()
@@ -286,6 +297,7 @@ async def feeding_stats(
             await db.execute(
                 select(FeedingRecord).where(
                     FeedingRecord.baby_id == baby.id,
+                    FeedingRecord.deleted_at.is_(None),
                     FeedingRecord.feed_time >= start_dt,
                     FeedingRecord.feed_time < end_dt,
                 )
@@ -322,12 +334,12 @@ async def feeding_stats(
 
 @router.get("/sleep-stats", response_model=SleepStatsData)
 async def sleep_stats(
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     days: int = Query(7, ge=1, le=90),
 ) -> SleepStatsData:
     try:
-        baby = await get_default_baby(db)
+        baby = await get_default_baby(db, user.family_id)
     except NotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     today = dashboard_today()
@@ -339,6 +351,7 @@ async def sleep_stats(
             await db.execute(
                 select(SleepRecord).where(
                     SleepRecord.baby_id == baby.id,
+                    SleepRecord.deleted_at.is_(None),
                     SleepRecord.sleep_start >= start_dt,
                     SleepRecord.sleep_start < end_dt,
                 )

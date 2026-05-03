@@ -5,7 +5,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from fawn.db.session import async_session_factory
-from fawn.models import ProfileItem
+from fawn.models import ProfileItem, User
 
 
 InjectedUserId = Annotated[str, InjectedState("user_id")]
@@ -26,11 +26,18 @@ async def update_user_profile(
     user_uuid = uuid.UUID(user_id)
     conversation_uuid = uuid.UUID(conversation_id) if conversation_id else None
     async with async_session_factory() as db:
+        user = await db.get(User, user_uuid)
+        if user is None:
+            return {"error": "user not found"}
+        if user.access_type == "friend":
+            return {"error": "您当前只有查看权限，不能写入个人画像"}
         if action == "add":
             if not content:
                 return {"error": "content is required"}
             item = ProfileItem(
+                family_id=user.family_id,
                 user_id=user_uuid,
+                scope="user",
                 content=content,
                 source_conversation_id=conversation_uuid,
             )
@@ -41,7 +48,7 @@ async def update_user_profile(
         if not item_id:
             return {"error": "item_id is required"}
         item = await db.get(ProfileItem, uuid.UUID(item_id))
-        if item is None or item.user_id != user_uuid:
+        if item is None or item.scope != "user" or item.user_id != user_uuid:
             return {"error": "profile item not found"}
         if action == "update":
             if not content:

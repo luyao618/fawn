@@ -46,6 +46,22 @@ async def test_update_user_profile_add_no_content(db: AsyncSession, test_user: U
     assert "error" in result
 
 
+async def test_friend_cannot_update_user_profile(db: AsyncSession, test_friend_user: User):
+    @asynccontextmanager
+    async def mock_session():
+        yield db
+
+    ctx = _make_ctx(test_friend_user.id)
+
+    with patch("fawn.agent.tools.profile.async_session_factory", side_effect=mock_session):
+        from fawn.agent.tools.profile import update_user_profile
+        result = await update_user_profile.ainvoke(
+            {"action": "add", "content": "Friend note", **ctx},
+        )
+
+    assert "error" in result
+
+
 async def test_update_user_profile_delete(db: AsyncSession, test_user: User):
     item = ProfileItem(
         user_id=test_user.id,

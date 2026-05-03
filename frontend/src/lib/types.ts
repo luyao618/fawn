@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'parent' | 'family';
+export type UserAccessType = 'parent' | 'family' | 'friend';
 
 export interface UserPermissions {
   can_upload_photos: boolean;
@@ -7,11 +7,32 @@ export interface UserPermissions {
 
 export interface User {
   id: string;
+  family_id: string;
   username: string;
   display_name: string;
-  role: UserRole;
+  access_type: UserAccessType;
+  role: string;
   avatar_url: string | null;
   permissions: UserPermissions;
+}
+
+export interface Family {
+  id: string;
+  name: string;
+}
+
+export interface UserCreate {
+  username: string;
+  display_name: string;
+  password: string;
+  access_type: UserAccessType;
+  role: string;
+}
+
+export interface UserUpdate {
+  display_name?: string;
+  access_type?: UserAccessType;
+  role?: string;
 }
 
 export interface LoginRequest {
@@ -42,6 +63,8 @@ export type MessageType = 'text' | 'image' | 'data_card' | 'safety_alert';
 export interface Message {
   id: string;
   conversation_id: string;
+  sender_user_id?: string | null;
+  sender?: User | null;
   role: 'user' | 'assistant';
   content: string;
   message_type: MessageType;
@@ -245,6 +268,7 @@ export interface PhotoDownloadResponse {
 
 export interface ProfileItem {
   id: string;
+  scope: 'user' | 'family';
   content: string;
   created_at: string;
   updated_at: string;

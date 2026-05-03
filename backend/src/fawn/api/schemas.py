@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-UserRole = Literal["admin", "parent", "family"]
+UserAccessType = Literal["parent", "family", "friend"]
 TrackerType = Literal["growth", "feeding", "sleep", "health"]
 MessageType = Literal["text", "image", "data_card", "safety_alert"]
 
@@ -18,11 +18,42 @@ class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    family_id: uuid.UUID
     username: str
     display_name: str
-    role: UserRole
+    access_type: UserAccessType
+    role: str
     avatar_url: str | None = None
     permissions: UserPermissions
+
+
+class FamilyRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+
+
+class FamilyUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=1, max_length=50)
+    display_name: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=6, max_length=128)
+    access_type: UserAccessType
+    role: str = Field(min_length=1, max_length=100)
+
+
+class UserUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=100)
+    access_type: UserAccessType | None = None
+    role: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+class UserPasswordUpdate(BaseModel):
+    password: str = Field(min_length=6, max_length=128)
 
 
 class LoginRequest(BaseModel):
@@ -82,6 +113,8 @@ class MessageRead(BaseModel):
 
     id: uuid.UUID
     conversation_id: uuid.UUID
+    sender_user_id: uuid.UUID | None = None
+    sender: UserRead | None = None
     role: Literal["user", "assistant"]
     content: str
     message_type: MessageType
@@ -343,10 +376,15 @@ class ProfileItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    scope: Literal["user", "family"] = "user"
     content: str
     created_at: datetime
     updated_at: datetime
 
 
+class ProfileItemCreate(BaseModel):
+    content: str = Field(min_length=1)
+
+
 class ProfileItemUpdate(BaseModel):
-    content: str
+    content: str = Field(min_length=1)

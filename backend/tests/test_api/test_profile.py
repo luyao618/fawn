@@ -55,6 +55,15 @@ async def test_delete_profile_item(
     assert response.status_code == 204
 
 
+async def test_friend_cannot_write_profile(client: AsyncClient, friend_auth_headers: dict):
+    response = await client.post(
+        "/api/profile/me",
+        json={"content": "Friend preference"},
+        headers=friend_auth_headers,
+    )
+    assert response.status_code == 403
+
+
 async def test_update_other_users_item_forbidden(
     client: AsyncClient, family_auth_headers: dict, test_user: User, db: AsyncSession
 ):

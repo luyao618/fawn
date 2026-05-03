@@ -1,8 +1,10 @@
 from datetime import date
 from decimal import Decimal
+import uuid
 
-from sqlalchemy import Boolean, CheckConstraint, Date, Integer, Numeric, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Integer, Numeric, String
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from fawn.models.base import Base, TimestampMixin, UUIDMixin
 
@@ -11,6 +13,9 @@ class Baby(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "babies"
     __table_args__ = (CheckConstraint("gender IN ('male', 'female')", name="ck_babies_gender"),)
 
+    family_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("families.id"), nullable=False
+    )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     gender: Mapped[str] = mapped_column(String(10), nullable=False)
     birth_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -21,3 +26,5 @@ class Baby(UUIDMixin, TimestampMixin, Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
     gestational_weeks: Mapped[int | None] = mapped_column(Integer)
+
+    family = relationship("Family", back_populates="babies")
