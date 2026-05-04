@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -528,6 +528,8 @@ async def _update_baby_profile(
         baby = await profile_service.update_baby(db, user.family_id, updates)
     except profile_service.NotFound:
         return TrackerRouteResult(response_text="还没有宝宝档案。")
+    except profile_service.MemorySyncError:
+        return TrackerRouteResult(response_text="宝宝档案同步到长期记忆失败，已保留原数据，请稍后重试。")
 
     response = f"已更新宝宝档案：{_baby_profile_update_labels(updates)}。"
     return TrackerRouteResult(
@@ -924,7 +926,7 @@ async def _format_full_record(db: AsyncSession, record_type: str, record: Any) -
         if record.notes:
             parts.append(f"备注：{record.notes}")
         parts.append(f"记录人 {recorded_by}")
-        return f"刚刚记录的是喂养：" + "，".join(parts) + "。"
+        return "刚刚记录的是喂养：" + "，".join(parts) + "。"
     if record_type == "sleep":
         parts = [
             f"开始 {_format_datetime(record.sleep_start)}",
@@ -937,7 +939,7 @@ async def _format_full_record(db: AsyncSession, record_type: str, record: Any) -
         if record.notes:
             parts.append(f"备注：{record.notes}")
         parts.append(f"记录人 {recorded_by}")
-        return f"刚刚记录的是睡眠：" + "，".join(parts) + "。"
+        return "刚刚记录的是睡眠：" + "，".join(parts) + "。"
     if record_type == "health":
         parts = [
             f"日期 {_format_date(record.record_date)}",
@@ -947,7 +949,7 @@ async def _format_full_record(db: AsyncSession, record_type: str, record: Any) -
         if record.description:
             parts.append(f"描述：{record.description}")
         parts.append(f"记录人 {recorded_by}")
-        return f"刚刚记录的是健康：" + "，".join(parts) + "。"
+        return "刚刚记录的是健康：" + "，".join(parts) + "。"
     return f"刚刚记录的是{record_type}，记录人 {recorded_by}。"
 
 

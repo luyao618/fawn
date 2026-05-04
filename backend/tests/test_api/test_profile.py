@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import uuid
-
-
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.models import ProfileItem, User
+from fawn.services.long_term_memory import LongTermMemoryService, MemoryTarget
 
 
 async def test_get_my_profile_empty(client: AsyncClient, auth_headers: dict):
@@ -42,6 +41,69 @@ async def test_update_profile_item(
     )
     assert response.status_code == 200
     assert response.json()["content"] == "Updated"
+
+
+async def test_create_my_profile_item_syncs_markdown(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_user: User,
+    memory_root,
+):
+    response = await client.post(
+        "/api/profile/me",
+        json={"content": "爸爸喜欢直接给结论"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    content = await LongTermMemoryService(memory_root).read_memory(
+        test_user.family_id,
+        MemoryTarget.USER,
+        user_id=test_user.id,
+    )
+    assert "爸爸喜欢直接给结论" in content
+
+
+async def test_create_family_profile_item_syncs_markdown(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_user: User,
+    memory_root,
+):
+    response = await client.post(
+        "/api/profile/family",
+        json={"content": "家庭晚上八点后尽量安静"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    content = await LongTermMemoryService(memory_root).read_memory(
+        test_user.family_id,
+        MemoryTarget.MEMORY,
+    )
+    assert "家庭晚上八点后尽量安静" in content
+
+
+async def test_profile_markdown_sync_failure_rolls_back_db(
+    client: AsyncClient,
+    auth_headers: dict,
+    db: AsyncSession,
+    monkeypatch,
+):
+    async def fail_sync(*args, **kwargs):
+        raise OSError("disk failed")
+
+    monkeypatch.setattr(LongTermMemoryService, "sync_user_profile", fail_sync)
+
+    response = await client.post(
+        "/api/profile/me",
+        json={"content": "不能只留在 DB"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 500
+    rows = list((await db.execute(select(ProfileItem))).scalars())
+    assert rows == []
 
 
 async def test_delete_profile_item(

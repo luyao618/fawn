@@ -4,6 +4,8 @@ import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Baby as BabyIcon,
+  BookOpen,
+  Brain,
   ChevronRight,
   HelpCircle,
   KeyRound,
@@ -11,16 +13,16 @@ import {
   Pencil,
   Plus,
   Trash2,
+  UserRound,
   UsersRound,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { ProfileItemList } from '@/components/profile/ProfileItemList';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
-import { accessTypeLabel, canManageFamily, canWriteTracker, getAgeDisplay, roleLabel } from '@/lib/utils';
-import type { Baby, Family, ProfileItem, User, UserAccessType, UserCreate } from '@/lib/types';
+import { accessTypeLabel, canManageFamily, getAgeDisplay, roleLabel } from '@/lib/utils';
+import type { Baby, Family, MemoryFileSummary, User, UserAccessType, UserCreate } from '@/lib/types';
 
 const inputClass =
   'min-h-11 w-full rounded-2xl border border-oat-border bg-white px-3 outline-none transition-colors focus:border-fawn-amber';
@@ -46,6 +48,13 @@ const emptyMemberDraft: UserCreate = {
   access_type: 'family',
   role: '',
 };
+
+function memoryIcon(kind: MemoryFileSummary['kind']) {
+  if (kind === 'soul') return <Brain className="h-5 w-5" aria-hidden />;
+  if (kind === 'baby') return <BabyIcon className="h-5 w-5" aria-hidden />;
+  if (kind === 'user') return <UserRound className="h-5 w-5" aria-hidden />;
+  return <BookOpen className="h-5 w-5" aria-hidden />;
+}
 
 function AccessTypePicker({
   value,
@@ -122,12 +131,10 @@ export default function ProfilePage() {
   const currentUser = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const canManage = canManageFamily(currentUser?.access_type);
-  const canWriteProfile = canWriteTracker(currentUser?.access_type);
   const [family, setFamily] = useState<Family | null>(null);
-  const [profile, setProfile] = useState<ProfileItem[]>([]);
-  const [familyProfile, setFamilyProfile] = useState<ProfileItem[]>([]);
   const [baby, setBaby] = useState<Baby | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [memoryFiles, setMemoryFiles] = useState<MemoryFileSummary[]>([]);
   const [familyName, setFamilyName] = useState('');
   const [babyDraft, setBabyDraft] = useState<Partial<Baby>>({});
   const [memberDraft, setMemberDraft] = useState<UserCreate>(emptyMemberDraft);
@@ -146,20 +153,18 @@ export default function ProfilePage() {
   });
 
   const load = useCallback(async () => {
-    const [familyData, profileData, familyProfileData, babyData, usersData] = await Promise.all([
+    const [familyData, babyData, usersData, memoryData] = await Promise.all([
       api.getFamily(),
-      api.getMyProfile(),
-      api.getFamilyProfile(),
       api.getBaby(),
       api.getUsers(),
+      api.getMemoryFiles(),
     ]);
     setFamily(familyData);
     setFamilyName(familyData.name);
-    setProfile(profileData);
-    setFamilyProfile(familyProfileData);
     setBaby(babyData);
     setBabyDraft(babyData);
     setUsers(usersData);
+    setMemoryFiles(memoryData);
   }, []);
 
   useEffect(() => {
@@ -381,34 +386,38 @@ export default function ProfilePage() {
         </Card>
       ) : null}
 
-      <ProfileItemList
-        items={familyProfile}
-        eyebrow="共享上下文"
-        title="家庭记忆"
-        emptyText="暂无家庭记忆"
-        onAdd={canManage ? async (content) => setFamilyProfile([await api.createFamilyProfileItem(content), ...familyProfile]) : undefined}
-        onEdit={canManage ? async (id, content) => {
-          const updated = await api.updateFamilyProfileItem(id, content);
-          setFamilyProfile((items) => items.map((item) => (item.id === id ? updated : item)));
-        } : undefined}
-        onDelete={canManage ? async (id) => {
-          await api.deleteFamilyProfileItem(id);
-          setFamilyProfile((items) => items.filter((item) => item.id !== id));
-        } : undefined}
-      />
-
-      <ProfileItemList
-        items={profile}
-        onAdd={canWriteProfile ? async (content) => setProfile([await api.createProfileItem(content), ...profile]) : undefined}
-        onEdit={canWriteProfile ? async (id, content) => {
-          const updated = await api.updateProfileItem(id, content);
-          setProfile((items) => items.map((item) => (item.id === id ? updated : item)));
-        } : undefined}
-        onDelete={canWriteProfile ? async (id) => {
-          await api.deleteProfileItem(id);
-          setProfile((items) => items.filter((item) => item.id !== id));
-        } : undefined}
-      />
+      <Card>
+        <div className="mb-4 flex items-center gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-nursery-butter text-warning-amber">
+            <BookOpen className="h-5 w-5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm text-dark-gray">长期记忆</p>
+            <h2 className="text-[17px] font-semibold text-soft-charcoal">Markdown 文件</h2>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-2xl border border-oat-border bg-white">
+          {memoryFiles.map((file) => (
+            <button
+              key={file.id}
+              type="button"
+              onClick={() => router.push(`/profile/memory/${encodeURIComponent(file.id)}`)}
+              className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-oat-border/70 px-3 py-3 text-left last:border-b-0"
+            >
+              <span className="grid h-10 w-10 place-items-center rounded-2xl bg-warm-gray text-fawn-amber">
+                {memoryIcon(file.kind)}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-soft-charcoal">{file.label}</span>
+                <span className="block truncate text-xs text-dark-gray">
+                  {file.can_edit ? '可编辑' : '只读'}
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 text-mid-gray" aria-hidden />
+            </button>
+          ))}
+        </div>
+      </Card>
 
       {isFamilyEditorOpen ? (
         <Modal title="修改家庭名称" onClose={() => setIsFamilyEditorOpen(false)}>
@@ -513,7 +522,7 @@ export default function ProfilePage() {
       {isPermissionHelpOpen ? (
         <Modal title="权限说明" eyebrow="父母、家人、朋友" onClose={() => setIsPermissionHelpOpen(false)}>
           <div className="grid gap-2 text-sm">
-            <p className="rounded-2xl bg-warm-gray p-3">父母：管理账号、修改密码、宝宝档案和家庭记忆，并拥有所有日常权限。</p>
+            <p className="rounded-2xl bg-warm-gray p-3">父母：管理账号、修改密码、宝宝档案和长期记忆，并拥有所有日常权限。</p>
             <p className="rounded-2xl bg-warm-gray p-3">家人：记录数据、上传/下载照片、软删除普通数据，并和管家聊天。</p>
             <p className="rounded-2xl bg-warm-gray p-3">朋友：查看所有内容、下载照片、参与聊天，但不能写入或删除数据。</p>
           </div>

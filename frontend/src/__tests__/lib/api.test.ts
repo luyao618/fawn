@@ -104,6 +104,20 @@ describe('api mock layer', () => {
     await expect(api.getConversation('missing')).rejects.toMatchObject({ status: 404 });
   });
 
+  it('reads and updates markdown memory files in mock mode', async () => {
+    const login = await api.login({ username: 'mama', password: 'password' });
+    window.localStorage.setItem('access_token', login.access_token);
+
+    const files = await api.getMemoryFiles();
+    expect(files.some((file) => file.id === 'memory' && file.label === 'Memory')).toBe(true);
+    expect(files.some((file) => file.id === 'baby' && file.label === 'Baby')).toBe(true);
+    expect(files.some((file) => file.label === '对 妈妈 的记忆')).toBe(true);
+    const updated = await api.updateMemoryFile('baby', '## 宝宝记忆\n喜欢白噪音入睡');
+    expect(updated.content).toContain('## 结构化宝宝档案');
+    expect(updated.content).toContain('晨晨');
+    expect(updated.content).toContain('喜欢白噪音入睡');
+  });
+
   it('logs out when mock getMe sees an invalid token', async () => {
     await useAuthStore.getState().login('mama', 'password');
     useAuthStore.setState({ token: 'bad-token' });

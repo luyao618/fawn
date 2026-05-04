@@ -1,6 +1,5 @@
-from collections.abc import Sequence
-
-from fawn.models import Baby, ConversationSummary, ProfileItem, User
+from fawn.models import User
+from fawn.services.long_term_memory import LongTermMemoryContext
 
 SYSTEM_PROMPT_TEMPLATE = """你是 Fawn，一个温暖、专业的家庭育儿助手，专注于 0-6 个月婴儿的成长陪伴。
 
@@ -23,17 +22,9 @@ SYSTEM_PROMPT_TEMPLATE = """你是 Fawn，一个温暖、专业的家庭育儿�
 - 姓名：{user_name}
 - 家庭角色：{user_role}
 - 权限类型：{user_access_type}
-- 个人画像：
-{user_profile_summary}
 
-## 宝宝档案
-{baby_summary}
-
-## 家庭记忆
-{family_profile_summary}
-
-## 历史上下文
-{recent_summaries}
+## 长期记忆
+{long_term_memory}
 
 ## 行为规范
 - 记录数据后明确反馈确认内容。
@@ -46,47 +37,10 @@ SYSTEM_PROMPT_TEMPLATE = """你是 Fawn，一个温暖、专业的家庭育儿�
 """
 
 
-def _profile_summary(profile_items: Sequence[ProfileItem]) -> str:
-    if not profile_items:
-        return "暂无画像条目"
-    return "\n".join(f"- {item.content}" for item in profile_items)
-
-
-def _baby_summary(baby: Baby | None) -> str:
-    if baby is None:
-        return "暂无宝宝档案"
-    premature = "早产" if baby.is_premature else "足月"
-    return (
-        f"姓名：{baby.name}\n"
-        f"性别：{baby.gender}\n"
-        f"出生日期：{baby.birth_date.isoformat()}\n"
-        f"出生体重：{baby.birth_weight_g or '未知'}g\n"
-        f"出生身长：{baby.birth_height_cm or '未知'}cm\n"
-        f"出生头围：{baby.birth_head_cm or '未知'}cm\n"
-        f"是否早产：{premature}\n"
-        f"孕周：{baby.gestational_weeks or '未知'}"
-    )
-
-
-def _recent_summaries(summaries: Sequence[ConversationSummary]) -> str:
-    if not summaries:
-        return "暂无历史摘要"
-    return "\n".join(f"- {item.summary}" for item in summaries)
-
-
-def build_system_prompt(
-    user: User,
-    baby: Baby | None,
-    family_profile_items: Sequence[ProfileItem],
-    user_profile_items: Sequence[ProfileItem],
-    summaries: Sequence[ConversationSummary],
-) -> str:
+def build_system_prompt(user: User, long_term_memory: LongTermMemoryContext) -> str:
     return SYSTEM_PROMPT_TEMPLATE.format(
         user_name=user.display_name,
         user_role=user.role,
         user_access_type=user.access_type,
-        user_profile_summary=_profile_summary(user_profile_items),
-        family_profile_summary=_profile_summary(family_profile_items),
-        baby_summary=_baby_summary(baby),
-        recent_summaries=_recent_summaries(summaries),
+        long_term_memory=long_term_memory.render_for_prompt(),
     )

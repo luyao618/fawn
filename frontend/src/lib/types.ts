@@ -274,6 +274,21 @@ export interface ProfileItem {
   updated_at: string;
 }
 
+export type MemoryFileKind = 'soul' | 'family' | 'baby' | 'user';
+
+export interface MemoryFileSummary {
+  id: string;
+  label: string;
+  kind: MemoryFileKind;
+  filename: string;
+  can_edit: boolean;
+  limit: number;
+}
+
+export interface MemoryFileRead extends MemoryFileSummary {
+  content: string;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;

@@ -388,3 +388,23 @@ class ProfileItemCreate(BaseModel):
 
 class ProfileItemUpdate(BaseModel):
     content: str = Field(min_length=1)
+
+
+MemoryFileKind = Literal["soul", "family", "baby", "user"]
+
+
+class MemoryFileSummary(BaseModel):
+    id: str
+    label: str
+    kind: MemoryFileKind
+    filename: str
+    can_edit: bool
+    limit: int
+
+
+class MemoryFileRead(MemoryFileSummary):
+    content: str
+
+
+class MemoryFileUpdate(BaseModel):
+    content: str = Field(max_length=10000)

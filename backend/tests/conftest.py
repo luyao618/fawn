@@ -3,8 +3,10 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import date
+from pathlib import Path
 from typing import AsyncIterator
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event, text as sa_text
@@ -58,6 +60,17 @@ TestSessionFactory = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+
+@pytest.fixture(autouse=True)
+def memory_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    root = tmp_path / "memory"
+    monkeypatch.setenv("MEMORY_ROOT", str(root))
+    from fawn.config import get_settings
+
+    get_settings.cache_clear()
+    yield root
+    get_settings.cache_clear()
 
 
 @pytest_asyncio.fixture(scope="function")
