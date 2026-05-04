@@ -171,7 +171,6 @@ async def list_photos(
         # month format: "YYYY-MM"
         try:
             year, mon = month.split("-")
-            from datetime import date
             start = datetime(int(year), int(mon), 1, tzinfo=UTC)
             if int(mon) == 12:
                 end = datetime(int(year) + 1, 1, 1, tzinfo=UTC)

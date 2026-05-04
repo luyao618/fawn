@@ -5,7 +5,8 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from fawn.db.session import async_session_factory
-from fawn.models import ProfileItem, User
+from fawn.models import User
+from fawn.services import profile as profile_service
 
 
 InjectedUserId = Annotated[str, InjectedState("user_id")]
@@ -34,31 +35,42 @@ async def update_user_profile(
         if action == "add":
             if not content:
                 return {"error": "content is required"}
-            item = ProfileItem(
-                family_id=user.family_id,
-                user_id=user_uuid,
-                scope="user",
-                content=content,
-                source_conversation_id=conversation_uuid,
-            )
-            db.add(item)
-            await db.commit()
-            await db.refresh(item)
+            try:
+                item = await profile_service.create_profile_item(
+                    db,
+                    family_id=user.family_id,
+                    user_id=user_uuid,
+                    scope="user",
+                    content=content,
+                    source_conversation_id=conversation_uuid,
+                )
+            except profile_service.MemorySyncError:
+                return {"error": "长期记忆同步失败，画像未更新"}
             return {"item_id": str(item.id), "action": "add"}
         if not item_id:
             return {"error": "item_id is required"}
-        item = await db.get(ProfileItem, uuid.UUID(item_id))
-        if item is None or item.scope != "user" or item.user_id != user_uuid:
-            return {"error": "profile item not found"}
         if action == "update":
             if not content:
                 return {"error": "content is required"}
-            item.content = content
-            await db.commit()
-            await db.refresh(item)
+            try:
+                item = await profile_service.update_profile_item(
+                    db, user_uuid, uuid.UUID(item_id), content
+                )
+            except profile_service.NotFound:
+                return {"error": "profile item not found"}
+            except profile_service.PermissionDenied:
+                return {"error": "profile item not found"}
+            except profile_service.MemorySyncError:
+                return {"error": "长期记忆同步失败，画像未更新"}
             return {"item_id": str(item.id), "action": "update"}
         if action == "delete":
-            await db.delete(item)
-            await db.commit()
+            try:
+                await profile_service.delete_profile_item(db, user_uuid, uuid.UUID(item_id))
+            except profile_service.NotFound:
+                return {"error": "profile item not found"}
+            except profile_service.PermissionDenied:
+                return {"error": "profile item not found"}
+            except profile_service.MemorySyncError:
+                return {"error": "长期记忆同步失败，画像未更新"}
             return {"item_id": item_id, "action": "delete"}
     return {"error": "unknown action"}

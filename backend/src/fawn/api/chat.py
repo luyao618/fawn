@@ -31,7 +31,9 @@ from fawn.api.schemas import (
 from fawn.config import get_settings
 from fawn.db.session import get_db
 from fawn.dependencies import get_current_user
-from fawn.models import Baby, Conversation, ConversationSummary, Message, ProfileItem, User
+from fawn.models import Conversation, ConversationSummary, Message, User
+from fawn.services.long_term_memory import LongTermMemoryService
+from fawn.services.memory_curator import CuratorTurn, MemoryCurator
 from fawn.services.storage import get_bytes, put_bytes
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -204,42 +206,6 @@ async def search_messages_compat(
     return await _search_messages(q, user, db, page, page_size)
 
 
-async def _prompt_context(
-    db: AsyncSession, user: User
-) -> tuple[Baby | None, list[ProfileItem], list[ProfileItem], list[ConversationSummary]]:
-    baby = await db.scalar(
-        select(Baby).where(Baby.family_id == user.family_id).order_by(Baby.created_at.asc()).limit(1)
-    )
-    user_profile_items = list(
-        (
-            await db.execute(
-                select(ProfileItem).where(ProfileItem.user_id == user.id, ProfileItem.scope == "user")
-            )
-        ).scalars()
-    )
-    family_profile_items = list(
-        (
-            await db.execute(
-                select(ProfileItem).where(
-                    ProfileItem.family_id == user.family_id, ProfileItem.scope == "family"
-                )
-            )
-        ).scalars()
-    )
-    summaries = list(
-        (
-            await db.execute(
-                select(ConversationSummary)
-                .join(Conversation, Conversation.id == ConversationSummary.conversation_id)
-                .where(Conversation.family_id == user.family_id)
-                .order_by(ConversationSummary.created_at.desc())
-                .limit(get_settings().summary_max_recent)
-            )
-        ).scalars()
-    )
-    return baby, family_profile_items, user_profile_items, summaries
-
-
 def _chat_image_key(conversation_id: uuid.UUID, filename: str) -> str:
     return f"chat-images/{conversation_id}/{filename}"
 
@@ -286,6 +252,37 @@ def _message_type_for(content: str) -> str:
     return "safety_alert" if any(term in content for term in safety_terms) else "text"
 
 
+async def _run_post_turn_memory_hook(turn: CuratorTurn) -> None:
+    try:
+        async with asyncio.timeout(get_settings().memory_curator_timeout_seconds):
+            await MemoryCurator().curate_turn(turn)
+    except Exception:
+        logger.warning("Post-turn memory hook failed", exc_info=True)
+
+
+def schedule_post_turn_memory_hook(
+    *,
+    family_id: uuid.UUID,
+    user_id: uuid.UUID,
+    user_role: str,
+    user_name: str,
+    user_content: str,
+    assistant_content: str,
+) -> None:
+    turn = CuratorTurn(
+        family_id=family_id,
+        user_id=user_id,
+        user_role=user_role,
+        user_name=user_name,
+        user_content=user_content,
+        assistant_content=assistant_content,
+    )
+    try:
+        asyncio.create_task(_run_post_turn_memory_hook(turn))
+    except RuntimeError:
+        logger.warning("Unable to schedule post-turn memory hook", exc_info=True)
+
+
 @router.post("/conversations/{conversation_id}/messages")
 async def send_message(
     conversation_id: uuid.UUID,
@@ -311,6 +308,7 @@ async def send_message(
         recent_context = await build_short_term_context(
             db,
             conversation_id,
+            family_id=user.family_id,
             exclude_message_id=user_message.id,
         )
 
@@ -365,12 +363,18 @@ async def send_message(
                         "message_type": assistant_message.message_type,
                     }
                 )
+                schedule_post_turn_memory_hook(
+                    family_id=user.family_id,
+                    user_id=user.id,
+                    user_role=user.role,
+                    user_name=user.display_name,
+                    user_content=body.content,
+                    assistant_content=response_text,
+                )
                 return
 
-        baby, family_profile_items, user_profile_items, summaries = await _prompt_context(db, user)
-        system_prompt = build_system_prompt(
-            user, baby, family_profile_items, user_profile_items, summaries
-        )
+        long_term_memory = await LongTermMemoryService().load_context(db, user)
+        system_prompt = build_system_prompt(user, long_term_memory)
         if not get_settings().llm.tool_calling_enabled:
             system_prompt += (
                 "\n\n## 当前运行模式\n"
@@ -455,6 +459,14 @@ async def send_message(
                 "message_id": str(assistant_message.id),
                 "message_type": assistant_message.message_type,
             }
+        )
+        schedule_post_turn_memory_hook(
+            family_id=user.family_id,
+            user_id=user.id,
+            user_role=user.role,
+            user_name=user.display_name,
+            user_content=body.content,
+            assistant_content=response_text,
         )
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

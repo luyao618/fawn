@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -50,6 +51,9 @@ class Settings(BaseSettings):
 
     rag_top_k: int = 5
     rag_similarity_threshold: float = 0.4
+
+    memory_root: Path = Path("./memory")
+    memory_curator_timeout_seconds: float = 8.0
 
 
 @lru_cache

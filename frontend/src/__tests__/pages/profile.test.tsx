@@ -5,6 +5,7 @@ import ProfilePage from '@/app/(main)/profile/page';
 import { useAuthStore } from '@/lib/auth-store';
 
 const nav = {
+  push: vi.fn(),
   replace: vi.fn(),
 };
 
@@ -16,12 +17,13 @@ describe('profile page', () => {
   beforeEach(async () => {
     process.env.NEXT_PUBLIC_USE_MOCK = 'true';
     window.localStorage.clear();
+    nav.push.mockClear();
     nav.replace.mockClear();
     useAuthStore.getState().logout();
     await useAuthStore.getState().login('admin', 'password');
   });
 
-  it('loads family, privacy, baby profile, and memory sections', async () => {
+  it('loads family, privacy, baby profile, and markdown memory sections', async () => {
     render(<ProfilePage />);
 
     await waitFor(() => expect(screen.getByText('晨晨的家庭')).toBeInTheDocument());
@@ -31,9 +33,24 @@ describe('profile page', () => {
     expect(screen.getByRole('button', { name: '登出账户' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('宝宝档案')).toBeInTheDocument());
     expect(screen.getByText('账号与权限')).toBeInTheDocument();
-    expect(screen.getByText('家庭记忆')).toBeInTheDocument();
-    expect(screen.getByText('我的画像')).toBeInTheDocument();
+    expect(screen.getByText('长期记忆')).toBeInTheDocument();
+    expect(screen.getByText('Memory')).toBeInTheDocument();
+    expect(screen.getByText('Baby')).toBeInTheDocument();
+    expect(screen.getByText('Soul')).toBeInTheDocument();
+    expect(screen.getByText('对 爸爸 的记忆')).toBeInTheDocument();
+    expect(screen.queryByText('家庭记忆')).not.toBeInTheDocument();
+    expect(screen.queryByText('我的画像')).not.toBeInTheDocument();
+    expect(screen.queryByText('Baby.md')).not.toBeInTheDocument();
+    expect(screen.queryByText(/users\//)).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('@nainai')).toBeInTheDocument());
+  });
+
+  it('opens a markdown memory entry from the family tab', async () => {
+    render(<ProfilePage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /Baby/ }));
+
+    expect(nav.push).toHaveBeenCalledWith('/profile/memory/baby');
   });
 
   it('opens account editing in a compact member dialog', async () => {

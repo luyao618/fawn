@@ -36,6 +36,8 @@ import type {
   HealthRecord,
   LoginRequest,
   LoginResponse,
+  MemoryFileRead,
+  MemoryFileSummary,
   Message,
   MessageSearchResult,
   PaginatedResponse,
@@ -199,6 +201,69 @@ function ensureMockFamilyManage() {
   if (user.access_type !== 'parent') {
     throw new ApiError(403, '没有家庭管理权限');
   }
+}
+
+const BABY_PROFILE_START = '<!-- FAWN:BABY_PROFILE:START -->';
+const BABY_PROFILE_END = '<!-- FAWN:BABY_PROFILE:END -->';
+
+function renderMockBabyProfileSection() {
+  return [
+    BABY_PROFILE_START,
+    '## 结构化宝宝档案',
+    `- 姓名: ${mockBaby.name}`,
+    `- 性别: ${mockBaby.gender === 'female' ? '女' : '男'}`,
+    `- 出生日期: ${mockBaby.birth_date}`,
+    `- 出生体重: ${mockBaby.birth_weight_g ?? '未知'}${mockBaby.birth_weight_g ? 'g' : ''}`,
+    `- 出生身长: ${mockBaby.birth_height_cm ?? '未知'}${mockBaby.birth_height_cm ? 'cm' : ''}`,
+    `- 出生头围: ${mockBaby.birth_head_cm ?? '未知'}${mockBaby.birth_head_cm ? 'cm' : ''}`,
+    `- 是否早产: ${mockBaby.is_premature ? '早产' : '足月'}`,
+    `- 孕周: ${mockBaby.gestational_weeks ?? '未知'}`,
+    `- 档案同步时间: ${currentMockTime().slice(0, 16).replace('T', ' ')}`,
+    BABY_PROFILE_END,
+  ].join('\n');
+}
+
+function stripMockBabyProfileSection(content: string) {
+  const start = content.indexOf(BABY_PROFILE_START);
+  const end = content.indexOf(BABY_PROFILE_END);
+  if (start < 0 || end < start) return content.trim();
+  return `${content.slice(0, start)}\n${content.slice(end + BABY_PROFILE_END.length)}`.trim();
+}
+
+function renderMockBabyMemory(content = '') {
+  const freeform = stripMockBabyProfileSection(content);
+  const body = freeform.trim() ? freeform : '## 宝宝记忆\n暂无宝宝记忆';
+  return `${renderMockBabyProfileSection()}\n\n${body}`;
+}
+
+const mockMemoryContents: Record<string, string> = {
+  soul: '# Soul\n- 你是 Fawn，一个服务于晨晨家庭的中文育儿助手。',
+  memory: '# 家庭 Memory\n- 家庭倾向先观察日常状态，异常时及时联系儿科医生。',
+  baby: renderMockBabyMemory('## 宝宝记忆\n- 晨晨睡前对白噪音比较放松。'),
+};
+
+function ensureMockMemoryFiles() {
+  for (const user of mockUsers) {
+    mockMemoryContents[`user:${user.id}`] ??= `# 用户画像\n- ${user.display_name}是${user.role}。`;
+  }
+  mockMemoryContents.baby = renderMockBabyMemory(mockMemoryContents.baby);
+}
+
+function mockMemorySummaries(): MemoryFileSummary[] {
+  const canEdit = currentUserAccessType() === 'parent';
+  return [
+    { id: 'soul', label: 'Soul', kind: 'soul', filename: 'Soul.md', can_edit: canEdit, limit: 3000 },
+    { id: 'memory', label: 'Memory', kind: 'family', filename: 'Memory.md', can_edit: canEdit, limit: 3000 },
+    { id: 'baby', label: 'Baby', kind: 'baby', filename: 'Baby.md', can_edit: canEdit, limit: 2000 },
+    ...mockUsers.map((user) => ({
+      id: `user:${user.id}`,
+      label: `对 ${user.display_name} 的记忆`,
+      kind: 'user' as const,
+      filename: `users/${user.id}.md`,
+      can_edit: canEdit,
+      limit: 1000,
+    })),
+  ];
 }
 
 function refreshMockGrowthViews(record: GrowthRecord) {
@@ -821,6 +886,40 @@ export class ApiClient {
     if (index >= 0) mockProfileItems.splice(index, 1);
   }
 
+  async getMemoryFiles(): Promise<MemoryFileSummary[]> {
+    if (!isMockMode()) return this.request('/memory/files');
+    await delay();
+    requireMockUser();
+    ensureMockMemoryFiles();
+    return clone(mockMemorySummaries());
+  }
+
+  async getMemoryFile(id: string): Promise<MemoryFileRead> {
+    if (!isMockMode()) return this.request(`/memory/files/${encodeURIComponent(id)}`);
+    await delay();
+    requireMockUser();
+    ensureMockMemoryFiles();
+    const summary = mockMemorySummaries().find((item) => item.id === id);
+    if (!summary) throw new ApiError(404, '记忆文件不存在');
+    return clone({ ...summary, content: mockMemoryContents[id] ?? '' });
+  }
+
+  async updateMemoryFile(id: string, content: string): Promise<MemoryFileRead> {
+    if (!isMockMode()) {
+      return this.request(`/memory/files/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ content }),
+      });
+    }
+    await delay();
+    ensureMockFamilyManage();
+    ensureMockMemoryFiles();
+    const summary = mockMemorySummaries().find((item) => item.id === id);
+    if (!summary) throw new ApiError(404, '记忆文件不存在');
+    mockMemoryContents[id] = id === 'baby' ? renderMockBabyMemory(content) : content;
+    return clone({ ...summary, content: mockMemoryContents[id] });
+  }
+
   async getBaby(): Promise<Baby> {
     if (!isMockMode()) return this.request('/baby');
     await delay();
@@ -837,6 +936,7 @@ export class ApiClient {
     await delay();
     ensureMockFamilyManage();
     Object.assign(mockBaby, data);
+    mockMemoryContents.baby = renderMockBabyMemory(mockMemoryContents.baby);
     return clone(mockBaby);
   }
 

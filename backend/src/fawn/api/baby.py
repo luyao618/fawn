@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.api.schemas import BabyRead, BabyUpdate
@@ -34,3 +34,5 @@ async def update_baby(
         return await profile_service.update_baby(db, user.family_id, data)
     except profile_service.NotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except profile_service.MemorySyncError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc

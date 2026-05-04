@@ -9,7 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.agent.intent import TrackerIntent, TrackerIntentSlots
-from fawn.models import AgentTask, Baby, Conversation, FeedingRecord, Message, SleepRecord
+from fawn.models import AgentTask, Baby, FeedingRecord, Message, SleepRecord
+from fawn.services.long_term_memory import LongTermMemoryService, MemoryTarget
 
 
 def _events(payload: str) -> list[dict]:
@@ -192,6 +193,7 @@ async def test_chat_falls_back_to_langgraph_for_unknown_tracker_intent(
         "fawn.agent.tracker_orchestrator.classify_tracker_intent", fake_classifier
     )
     monkeypatch.setattr("fawn.api.chat.get_agent_graph", fake_get_agent_graph)
+    monkeypatch.setattr("fawn.api.chat.schedule_post_turn_memory_hook", lambda *args, **kwargs: None)
     conversation_id = await _create_conversation(client, auth_headers)
 
     response = await client.post(
@@ -233,6 +235,7 @@ async def test_chat_fallback_receives_recent_context(
         "fawn.agent.tracker_orchestrator.classify_tracker_intent", fake_classifier
     )
     monkeypatch.setattr("fawn.api.chat.get_agent_graph", fake_get_agent_graph)
+    monkeypatch.setattr("fawn.api.chat.schedule_post_turn_memory_hook", lambda *args, **kwargs: None)
     conversation_id = uuid.UUID(await _create_conversation(client, auth_headers))
     db.add_all(
         [
@@ -262,6 +265,93 @@ async def test_chat_fallback_receives_recent_context(
     assert "<recent-context>" in human_message.content
     assert "宝宝昨晚睡得不错" in human_message.content
     assert "当前用户消息" in human_message.content
+
+
+async def test_chat_schedules_memory_curator_after_done(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+    monkeypatch,
+) -> None:
+    async def fake_classifier(message: str) -> TrackerIntent:
+        return TrackerIntent(intent="unknown", confidence=0.2)
+
+    class Chunk:
+        content = "普通回复"
+
+    class FakeGraph:
+        async def astream_events(self, input_state, config, version):
+            yield {"event": "on_chat_model_stream", "data": {"chunk": Chunk()}}
+
+    scheduled: list[dict] = []
+
+    async def fake_get_agent_graph():
+        return FakeGraph()
+
+    monkeypatch.setattr(
+        "fawn.agent.tracker_orchestrator.classify_tracker_intent", fake_classifier
+    )
+    monkeypatch.setattr("fawn.api.chat.get_agent_graph", fake_get_agent_graph)
+    monkeypatch.setattr(
+        "fawn.api.chat.schedule_post_turn_memory_hook",
+        lambda **kwargs: scheduled.append(kwargs),
+    )
+    conversation_id = await _create_conversation(client, auth_headers)
+
+    response = await client.post(
+        f"/api/chat/conversations/{conversation_id}/messages",
+        json={"content": "请记住宝宝喜欢白噪音"},
+        headers=auth_headers,
+    )
+
+    events = _events(response.text)
+    done_index = next(index for index, event in enumerate(events) if event["type"] == "done")
+    assert response.status_code == 200
+    assert len(scheduled) == 1
+    assert done_index == len(events) - 1
+    assert scheduled[0]["user_content"] == "请记住宝宝喜欢白噪音"
+
+
+async def test_chat_deterministic_route_schedules_memory_curator_after_done(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+    monkeypatch,
+) -> None:
+    async def fake_classifier(message: str) -> TrackerIntent:
+        return TrackerIntent(
+            intent="record_feeding",
+            confidence=0.96,
+            slots=TrackerIntentSlots(
+                feed_time="2026-05-02T08:30:00+00:00",
+                feed_type="formula",
+                amount_ml=90,
+            ),
+        )
+
+    scheduled: list[dict] = []
+
+    monkeypatch.setattr(
+        "fawn.agent.tracker_orchestrator.classify_tracker_intent", fake_classifier
+    )
+    monkeypatch.setattr(
+        "fawn.api.chat.schedule_post_turn_memory_hook",
+        lambda **kwargs: scheduled.append(kwargs),
+    )
+    conversation_id = await _create_conversation(client, auth_headers)
+
+    response = await client.post(
+        f"/api/chat/conversations/{conversation_id}/messages",
+        json={"content": "今天早上喝了90ml配方奶"},
+        headers=auth_headers,
+    )
+
+    events = _events(response.text)
+    done_index = next(index for index, event in enumerate(events) if event["type"] == "done")
+    assert response.status_code == 200
+    assert len(scheduled) == 1
+    assert done_index == len(events) - 1
+    assert scheduled[0]["assistant_content"].startswith("已记录")
 
 
 async def test_chat_pending_sleep_task_collects_slots_and_confirms(
@@ -672,6 +762,7 @@ async def test_baby_profile_high_risk_update_requires_confirmation(
     auth_headers: dict,
     test_baby: Baby,
     db: AsyncSession,
+    memory_root,
     monkeypatch,
 ) -> None:
     async def fake_classifier(*args, **kwargs) -> TrackerIntent:
@@ -706,3 +797,8 @@ async def test_baby_profile_high_risk_update_requires_confirmation(
     assert confirm.status_code == 200
     await db.refresh(test_baby)
     assert test_baby.birth_date == date(2026, 4, 8)
+    content = await LongTermMemoryService(memory_root).read_memory(
+        test_baby.family_id,
+        MemoryTarget.BABY,
+    )
+    assert "2026-04-08" in content

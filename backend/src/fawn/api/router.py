@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from fawn.api import album, auth, baby, chat, dashboard, family, profile, tracker
+from fawn.api import album, auth, baby, chat, dashboard, family, memory, profile, tracker
 
 api_router = APIRouter()
 
@@ -18,3 +18,4 @@ api_router.include_router(dashboard.router)
 api_router.include_router(album.router)
 api_router.include_router(profile.router)
 api_router.include_router(baby.router)
+api_router.include_router(memory.router)

@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from fawn.models import Message
+from fawn.services.recent_deterministic_context import RecentDeterministicContext
+from fawn.services.recent_deterministic_context import build_recent_deterministic_context
 
 APP_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
@@ -42,12 +44,22 @@ class RecentContextEntry:
 @dataclass(frozen=True)
 class ShortTermContext:
     entries: list[RecentContextEntry]
+    deterministic_context: RecentDeterministicContext | None = None
 
     def format_for_prompt(self) -> str:
+        blocks: list[str] = []
         if not self.entries:
-            return ""
-        lines = "\n".join(entry.format_line() for entry in self.entries)
-        return f"<recent-context>\n{lines}\n</recent-context>"
+            message_block = ""
+        else:
+            lines = "\n".join(entry.format_line() for entry in self.entries)
+            message_block = f"<recent-context>\n{lines}\n</recent-context>"
+        if message_block:
+            blocks.append(message_block)
+        if self.deterministic_context is not None:
+            deterministic_block = self.deterministic_context.render_for_prompt()
+            if deterministic_block:
+                blocks.append(deterministic_block)
+        return "\n\n".join(blocks)
 
 
 def _local_time(value: datetime) -> datetime:
@@ -88,6 +100,7 @@ async def build_short_term_context(
     db: AsyncSession,
     conversation_id: uuid.UUID,
     *,
+    family_id: uuid.UUID | None = None,
     exclude_message_id: uuid.UUID | None = None,
     max_messages: int = 20,
     max_chars_per_message: int = 800,
@@ -121,4 +134,7 @@ async def build_short_term_context(
                 family_role=sender.role if sender else None,
             )
         )
-    return ShortTermContext(entries=entries)
+    deterministic_context = None
+    if family_id is not None:
+        deterministic_context = await build_recent_deterministic_context(db, family_id, now=current)
+    return ShortTermContext(entries=entries, deterministic_context=deterministic_context)
