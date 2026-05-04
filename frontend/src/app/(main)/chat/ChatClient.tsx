@@ -6,11 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import { Clock } from 'lucide-react';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { MessageList } from '@/components/chat/MessageList';
-import { QuickActionChips } from '@/components/chat/QuickActionChips';
 import { TopBar } from '@/components/layout/TopBar';
-import { useAuthStore } from '@/lib/auth-store';
 import { useChatStore } from '@/lib/chat-store';
-import { canWriteTracker } from '@/lib/utils';
 
 export function ChatClient() {
   const searchParams = useSearchParams();
@@ -28,7 +25,6 @@ export function ChatClient() {
     sendMessage,
     uploadChatImage,
   } = useChatStore();
-  const user = useAuthStore((state) => state.user);
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -88,10 +84,6 @@ export function ChatClient() {
         pendingToolCalls={pendingToolCalls}
       />
       {error ? <div className="bg-safety-red-light px-4 py-2 text-sm text-safety-red">{error}</div> : null}
-      <QuickActionChips
-        canWriteTracker={canWriteTracker(user?.access_type)}
-        onSelect={(action) => void sendMessage(action)}
-      />
       <ChatInput
         disabled={isStreaming}
         attachedImage={attachedImage}

@@ -74,6 +74,34 @@ describe('MessageBubble', () => {
     expect(screen.queryByText('不要格式化')).not.toBeInTheDocument();
   });
 
+  it('places family member messages on the right and shows sender identity without an avatar', () => {
+    render(
+      <MessageBubble
+        message={{
+          ...base,
+          role: 'user',
+          content: '晚点再喂一次',
+          sender_user_id: 'user-mama',
+          sender: {
+            id: 'user-mama',
+            family_id: 'family',
+            username: 'mama',
+            display_name: '林雨',
+            access_type: 'parent',
+            role: '妈妈',
+            avatar_url: null,
+            permissions: { can_upload_photos: true, can_write_tracker: true },
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId('user-message-row')).toHaveClass('justify-end');
+    expect(screen.getByText('林雨')).toBeInTheDocument();
+    expect(screen.getByText('妈妈')).toBeInTheDocument();
+    expect(screen.queryByLabelText('林雨 · 妈妈')).not.toBeInTheDocument();
+  });
+
   it('renders safety alerts as quiet assistant copy', () => {
     render(<MessageBubble message={{ ...base, message_type: 'safety_alert', content: '**请尽快就医**' }} />);
     expect(screen.getByText('请尽快就医').tagName).toBe('STRONG');
