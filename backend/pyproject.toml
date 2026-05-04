@@ -1,6 +1,6 @@
 [project]
 name = "fawn-backend"
-version = "2.1.5"
+version = "2.1.6"
 description = "FastAPI backend for Fawn"
 requires-python = ">=3.12"
 dependencies = [

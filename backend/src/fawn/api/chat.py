@@ -16,8 +16,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from fawn.agent.context import ShortTermContext, build_short_term_context
 from fawn.agent.graph import get_agent_graph
 from fawn.agent.prompts import build_system_prompt
+from fawn.agent.tracker_orchestrator import route_tracker_message
 from fawn.api.schemas import (
     ChatImageResponse,
     ConversationDetail,
@@ -247,7 +249,20 @@ def _url_to_storage_key(conversation_id: uuid.UUID, image_url: str) -> str:
     return _chat_image_key(conversation_id, filename)
 
 
-def _human_message(content: str, conversation_id: uuid.UUID, image_url: str | None) -> HumanMessage:
+def _content_with_recent_context(content: str, recent_context: ShortTermContext | None) -> str:
+    context_block = recent_context.format_for_prompt() if recent_context else ""
+    if not context_block:
+        return content
+    return f"{context_block}\n\n当前用户消息：\n{content}"
+
+
+def _human_message(
+    content: str,
+    conversation_id: uuid.UUID,
+    image_url: str | None,
+    recent_context: ShortTermContext | None = None,
+) -> HumanMessage:
+    content = _content_with_recent_context(content, recent_context)
     if not image_url:
         return HumanMessage(content=content)
     storage_key = _url_to_storage_key(conversation_id, image_url)
@@ -291,6 +306,66 @@ async def send_message(
         )
         db.add(user_message)
         await db.commit()
+        await db.refresh(user_message)
+
+        recent_context = await build_short_term_context(
+            db,
+            conversation_id,
+            exclude_message_id=user_message.id,
+        )
+
+        if not body.image_url:
+            try:
+                route_result = await route_tracker_message(
+                    db,
+                    user,
+                    conversation_id,
+                    body.content,
+                    recent_context=recent_context,
+                )
+            except Exception:
+                logger.warning(
+                    "Deterministic tracker route failed for conversation %s",
+                    conversation_id,
+                    exc_info=True,
+                )
+                route_result = None
+            if route_result is not None:
+                if route_result.tool_name:
+                    yield _sse(
+                        {
+                            "type": "tool_call",
+                            "name": route_result.tool_name,
+                            "args": route_result.tool_args,
+                        }
+                    )
+                    yield _sse(
+                        {
+                            "type": "tool_result",
+                            "name": route_result.tool_name,
+                            "result": route_result.tool_result,
+                        }
+                    )
+                response_text = route_result.response_text
+                yield _sse({"type": "token", "content": response_text})
+                assistant_message = Message(
+                    conversation_id=conversation_id,
+                    role="assistant",
+                    content=response_text,
+                    message_type=route_result.message_type,
+                    message_metadata=None,
+                )
+                db.add(assistant_message)
+                await db.commit()
+                await db.refresh(assistant_message)
+                yield _sse(
+                    {
+                        "type": "done",
+                        "message_id": str(assistant_message.id),
+                        "message_type": assistant_message.message_type,
+                    }
+                )
+                return
 
         baby, family_profile_items, user_profile_items, summaries = await _prompt_context(db, user)
         system_prompt = build_system_prompt(
@@ -308,7 +383,12 @@ async def send_message(
             input_state = {
                 "messages": [
                     SystemMessage(content=system_prompt),
-                    _human_message(body.content, conversation_id, body.image_url),
+                    _human_message(
+                        body.content,
+                        conversation_id,
+                        body.image_url,
+                        recent_context,
+                    ),
                 ],
                 "user_id": str(user.id),
                 "user_role": user.role,

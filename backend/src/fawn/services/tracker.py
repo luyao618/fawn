@@ -6,8 +6,9 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.dependencies import can_write_tracker
@@ -22,6 +23,7 @@ from fawn.models import (
 )
 
 TrackerType = Literal["growth", "feeding", "sleep", "health"]
+APP_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 class ServiceError(Exception):
@@ -421,23 +423,45 @@ def _apply_date_filters(
 ) -> Select[tuple[Any]]:
     field = DATE_FIELDS[record_type]
     if date_value:
-        if record_type in {"feeding", "sleep"}:
-            start = datetime.combine(date_value, time.min, tzinfo=UTC)
-            end = datetime.combine(date_value + timedelta(days=1), time.min, tzinfo=UTC)
+        if record_type == "feeding":
+            start, end = _local_date_bounds_utc(date_value)
             return stmt.where(field >= start, field < end)
+        if record_type == "sleep":
+            start, end = _local_date_bounds_utc(date_value)
+            return _apply_sleep_overlap(stmt, start, end)
         return stmt.where(field == date_value)
-    if record_type in {"feeding", "sleep"}:
+    if record_type == "feeding":
         if from_date:
-            stmt = stmt.where(field >= datetime.combine(from_date, time.min, tzinfo=UTC))
+            stmt = stmt.where(field >= _local_date_bounds_utc(from_date)[0])
         if to_date:
-            stmt = stmt.where(
-                field < datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=UTC)
-            )
+            stmt = stmt.where(field < _local_date_bounds_utc(to_date)[1])
         return stmt
+    if record_type == "sleep":
+        start = _local_date_bounds_utc(from_date)[0] if from_date else None
+        end = _local_date_bounds_utc(to_date)[1] if to_date else None
+        return _apply_sleep_overlap(stmt, start, end)
     if from_date:
         stmt = stmt.where(field >= from_date)
     if to_date:
         stmt = stmt.where(field <= to_date)
+    return stmt
+
+
+def _local_date_bounds_utc(value: date) -> tuple[datetime, datetime]:
+    start = datetime.combine(value, time.min, tzinfo=APP_TIMEZONE)
+    end = start + timedelta(days=1)
+    return start.astimezone(UTC), end.astimezone(UTC)
+
+
+def _apply_sleep_overlap(
+    stmt: Select[tuple[Any]],
+    start: datetime | None,
+    end: datetime | None,
+) -> Select[tuple[Any]]:
+    if start is not None:
+        stmt = stmt.where(or_(SleepRecord.sleep_end.is_(None), SleepRecord.sleep_end >= start))
+    if end is not None:
+        stmt = stmt.where(SleepRecord.sleep_start < end)
     return stmt
 
 
