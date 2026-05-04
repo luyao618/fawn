@@ -33,6 +33,8 @@ describe('chat page', () => {
   it('sends a message and updates the message list', async () => {
     render(<ChatClient />);
     await waitFor(() => expect(screen.getByPlaceholderText('输入消息...')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: '记录喂奶' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '睡眠情况' })).not.toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText('输入消息...'), '宝宝今天体重4.2kg，是不是偏轻了？');
     await userEvent.click(screen.getByLabelText('发送'));
     await waitFor(() => expect(screen.getByText(/已记录今天体重/)).toBeInTheDocument(), { timeout: 2000 });
