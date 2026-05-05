@@ -65,6 +65,7 @@ services:
       MINIO_PUBLIC_USE_SSL: "${MINIO_PUBLIC_USE_SSL:-false}"
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       MEMORY_ROOT: /app/memory
+      TOOL_CALLING_ENABLED: "true"
     volumes:
       - memorydata:/app/memory
     depends_on:

@@ -1,5 +1,5 @@
-import uuid
 from datetime import date, datetime
+import uuid
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text, func, text
@@ -57,3 +57,13 @@ class KnowledgeChunk(UUIDMixin, Base):
     )
 
     document = relationship("KnowledgeDocument", back_populates="chunks")
+
+
+class SeedMetadata(Base):
+    __tablename__ = "seed_metadata"
+
+    seed_name: Mapped[str] = mapped_column(String(100), primary_key=True)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    applied_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

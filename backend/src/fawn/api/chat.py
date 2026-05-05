@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from fawn.agent.context import ShortTermContext, build_short_term_context
+from fawn.agent.answer_contract import enforce_answer_contract
 from fawn.agent.graph import get_agent_graph
 from fawn.agent.prompts import build_system_prompt
 from fawn.agent.tracker_orchestrator import route_tracker_message
@@ -382,6 +383,7 @@ async def send_message(
                 "- 用户提供需要记录的数据时，请用自然语言确认并提示可到对应记录页手动填写。"
             )
         response_text = ""
+        knowledge_tool_outputs: list[Any] = []
         try:
             graph = await get_agent_graph()
             input_state = {
@@ -427,11 +429,14 @@ async def send_message(
                             }
                         )
                     elif kind == "on_tool_end":
+                        tool_output = event.get("data", {}).get("output", "")
+                        if event.get("name") == "search_knowledge":
+                            knowledge_tool_outputs.append(tool_output)
                         yield _sse(
                             {
                                 "type": "tool_result",
                                 "name": event.get("name"),
-                                "result": event.get("data", {}).get("output", ""),
+                                "result": tool_output,
                             }
                         )
         except TimeoutError:
@@ -442,6 +447,17 @@ async def send_message(
             logger.warning("Chat response failed for conversation %s", conversation_id, exc_info=True)
             yield _sse({"type": "error", "message": str(exc) or exc.__class__.__name__})
             return
+
+        contracted_response = enforce_answer_contract(
+            response_text,
+            user_query=body.content,
+            knowledge_tool_outputs=knowledge_tool_outputs,
+        )
+        if contracted_response != response_text:
+            suffix = contracted_response[len(response_text):]
+            if suffix:
+                response_text = contracted_response
+                yield _sse({"type": "token", "content": suffix})
 
         assistant_message = Message(
             conversation_id=conversation_id,

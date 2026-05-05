@@ -23,6 +23,8 @@ COPY alembic/ alembic/
 COPY alembic.ini .
 COPY scripts/ scripts/
 COPY config/ config/
+COPY knowledge_eval.yaml .
+COPY knowledge_manifest.yaml .
 COPY seeds/ seeds/
 COPY docker/entrypoint.sh .
 

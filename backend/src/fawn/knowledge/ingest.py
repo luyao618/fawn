@@ -9,6 +9,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fawn.knowledge.chunk_quality import is_reference_like_chunk
 from fawn.knowledge import get_embeddings
 from fawn.models import KnowledgeChunk, KnowledgeDocument
 from fawn.services.storage import put_bytes
@@ -139,6 +140,8 @@ def _chunk_document(
         raw_chunks = _split_chapter(content, chunk_size, overlap)
         cleaned = _apply_quality_guards(raw_chunks)
         for c in cleaned:
+            if is_reference_like_chunk(c, title):
+                continue
             result.append((title, c))
 
     return result
