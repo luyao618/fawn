@@ -9,14 +9,15 @@ from datetime import date
 from pathlib import Path
 
 import yaml
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from fawn.db.session import async_session_factory
 from fawn.knowledge.ingest import ingest_document, is_already_ingested
-from fawn.models import KnowledgeDocument
+from fawn.models import KnowledgeChunk, KnowledgeDocument
 
 
 async def main(manifest_path: Path, doc_filter: str | None, force: bool) -> None:
+    manifest_path = manifest_path.resolve()
     repo_root = manifest_path.parent.parent
     with manifest_path.open() as f:
         manifest = yaml.safe_load(f)
@@ -64,8 +65,14 @@ async def main(manifest_path: Path, doc_filter: str | None, force: bool) -> None
                     document_metadata=doc_entry.get("metadata") or {},
                     publish_date=parsed_date,
                 )
-                total_chars = sum(len(c.content) for c in doc.chunks)
-                print(f"  OK:   {title} -> {len(doc.chunks)} chunks, {total_chars} chars")
+                chunk_stats = await db.execute(
+                    select(
+                        func.count(KnowledgeChunk.id),
+                        func.coalesce(func.sum(func.length(KnowledgeChunk.content)), 0),
+                    ).where(KnowledgeChunk.document_id == doc.id)
+                )
+                chunk_count, total_chars = chunk_stats.one()
+                print(f"  OK:   {title} -> {chunk_count} chunks, {total_chars} chars")
                 ingested += 1
             except Exception:
                 print(f"  FAIL: {title}")
@@ -74,6 +81,8 @@ async def main(manifest_path: Path, doc_filter: str | None, force: bool) -> None
 
     total = ingested + skipped + failed
     print(f"\nDone: {ingested} ingested, {skipped} skipped, {failed} failed, {total} total")
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

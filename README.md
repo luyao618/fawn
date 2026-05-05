@@ -15,7 +15,7 @@ Run everything with Docker:
 ```bash
 cp backend/.env.example backend/.env
 cp backend/config/family.yaml.example backend/config/family.yaml
-docker compose up --build
+docker compose up --build -d
 ```
 
 Then open:
@@ -26,7 +26,9 @@ Then open:
 
 `backend/config/family.yaml` defines the seeded family users. If it is missing, Docker falls back to `family.yaml.example` so the stack can still start, but real deployments should copy and edit it first.
 
-Knowledge seeding is optional. Put `knowledge_seed.sql.gz` in `backend/seeds/` when a prebuilt RAG seed dump is available; otherwise startup skips it.
+RAG knowledge is deployed from the prebuilt seed files in `backend/seeds/`. Keep `knowledge_seed.sql.gz` and `knowledge_seed.provenance.json` together, and rebuild them only when the corpus, manifest, chunking logic, or embedding configuration changes.
+
+Full deployment instructions, including Docker deployment, local deployment, and RAG seed rebuild steps, are in [docs/deployment.md](docs/deployment.md).
 
 ## Local Development
 

@@ -1,0 +1,85 @@
+{
+  "documents": [
+    {
+      "bytes": 2000990,
+      "path": "docs/books/parenting-books/海蒂育儿大百科_0-1岁_完整版.md",
+      "sha256": "7e5ca58d5e16533d877145b61719f38023a0d16598bbd33ccebd44896a778baf",
+      "source": "南海出版公司",
+      "title": "海蒂育儿大百科 0-1岁"
+    },
+    {
+      "bytes": 1790138,
+      "path": "docs/books/parenting-books/美国儿科学会育儿百科（第六版） - 斯蒂文·谢尔弗.txt",
+      "sha256": "abe3c78161f8d6d4c6d19677e152ae6823a0b27a4fb67fb2e03a4d073a65201c",
+      "source": "AAP",
+      "title": "美国儿科学会育儿百科（第六版）"
+    },
+    {
+      "bytes": 347281,
+      "path": "docs/books/WHO-feeding-guidelines/IYCF_model_chapter_2009.md",
+      "sha256": "96867cf386e02b74728e294664aaa7c67f0cb38f89849dc5cdd124b8773468c6",
+      "source": "WHO",
+      "title": "IYCF Model Chapter"
+    },
+    {
+      "bytes": 52683,
+      "path": "docs/books/WHO-feeding-guidelines/WHO-newborn-health-recommendations-2017.md",
+      "sha256": "f256170c5df558e712965220c6af24a26e0b689e12f1271d9f06d5915e606367",
+      "source": "WHO",
+      "title": "WHO Newborn Health Recommendations"
+    },
+    {
+      "bytes": 889,
+      "path": "docs/books/CDC-developmental-milestones/milestones-2-months.md",
+      "sha256": "686949f7075b2533e35a98858f7b8fdf9b12462fd08b9ec45124027abc0a567a",
+      "source": "CDC",
+      "title": "CDC Developmental Milestones - 2 Months"
+    },
+    {
+      "bytes": 1134,
+      "path": "docs/books/CDC-developmental-milestones/milestones-4-months.md",
+      "sha256": "cd6e7f07b1071170f4864d816c01128ae0c314d3c5afa55c0058992820ce5524",
+      "source": "CDC",
+      "title": "CDC Developmental Milestones - 4 Months"
+    },
+    {
+      "bytes": 962,
+      "path": "docs/books/CDC-developmental-milestones/milestones-6-months.md",
+      "sha256": "16b7bf0814a4b600dd017d9ad1e4a2c5cb4831147df22ca050837a1f1ed84400",
+      "source": "CDC",
+      "title": "CDC Developmental Milestones - 6 Months"
+    },
+    {
+      "bytes": 3584,
+      "path": "docs/books/CN-immunization-schedule/schedule.md",
+      "sha256": "6533350aae664801f5ae2e5d14a056046ff47b0fb34d63212db6970a2bec7a4e",
+      "source": "NHC",
+      "title": "中国国家免疫规划疫苗接种程序（2021年版）"
+    }
+  ],
+  "embedding": {
+    "dimensions": 1024,
+    "model": "text-embedding-3-small"
+  },
+  "generated_at": "2026-05-05T13:16:26.311842+00:00",
+  "generation_inputs": [
+    {
+      "path": "src/fawn/knowledge/ingest.py",
+      "sha256": "b15dfac12568ee8e337c6c3b30b35ec93b050fcdb7c5e404a705cf88d2d331b3"
+    },
+    {
+      "path": "src/fawn/knowledge/chunk_quality.py",
+      "sha256": "1e27b87e4bbb43c77fbb14b04f67f0aa983c5d4146390e1f84c48bf582f9d51b"
+    }
+  ],
+  "manifest": {
+    "path": "backend/knowledge_manifest.yaml",
+    "sha256": "b5fdac75f2da48bd157bc9219b2ca5e939009f5fd2f94abed95dc95755b83bf4"
+  },
+  "schema_version": 1,
+  "seed": {
+    "bytes": 32821326,
+    "path": "seeds/knowledge_seed.sql.gz",
+    "sha256": "f82a892f8e52357aac947f29abad0257a03b8dffc153d555b02a9b537a350a60"
+  }
+}
