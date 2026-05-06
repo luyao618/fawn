@@ -6,3 +6,12 @@ node_modules/
 .figma.env
 .figma-assets/
 .superpowers/
+.env
+.env.local
+.env.production
+backend/.env
+backend/.env.local
+backend/.env.production
+docker-compose.override.yml
+backups/
+docs/deployment.local.md
