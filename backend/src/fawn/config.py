@@ -45,6 +45,7 @@ class Settings(BaseSettings):
 
     jwt_secret: str = "change-me-in-env"
     jwt_expire_minutes: int = 1440
+    registration_invite_code: str = "2026"
 
     summary_max_recent: int = 10
     session_timeout_minutes: int = 30

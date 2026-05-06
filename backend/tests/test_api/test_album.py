@@ -71,6 +71,18 @@ async def test_upload_photo_friend_permission_denied(client: AsyncClient, friend
     assert response.status_code == 403
 
 
+async def test_upload_photo_without_baby_returns_profile_cta(
+    client: AsyncClient,
+    auth_headers: dict,
+) -> None:
+    file_content = b"fake image"
+    files = {"file": ("test.jpg", io.BytesIO(file_content), "image/jpeg")}
+    response = await client.post("/api/album/photos", files=files, headers=auth_headers)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "请先在家庭页创建宝宝档案"
+
+
 async def test_confirm_tag_not_found(client: AsyncClient, auth_headers: dict):
     fake_photo = uuid.uuid4()
     fake_tag = uuid.uuid4()

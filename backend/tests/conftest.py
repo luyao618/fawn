@@ -16,6 +16,7 @@ from sqlalchemy.ext.compiler import compiles
 
 from fawn.models import Baby, Base, Family, User
 from fawn.services.auth import create_access_token, hash_password
+from fawn.services.family import normalize_family_name
 
 try:
     from pgvector.sqlalchemy import Vector
@@ -86,7 +87,7 @@ async def db() -> AsyncIterator[AsyncSession]:
 
 @pytest_asyncio.fixture
 async def test_family(db: AsyncSession) -> Family:
-    family = Family(id=uuid.uuid4(), name="Test Family")
+    family = Family(id=uuid.uuid4(), name="Test Family", name_key=normalize_family_name("Test Family"))
     db.add(family)
     await db.commit()
     await db.refresh(family)

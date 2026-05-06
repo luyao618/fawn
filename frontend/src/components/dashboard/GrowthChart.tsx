@@ -219,68 +219,76 @@ export function GrowthChart({ data, birthDate, activeIndicator, onIndicatorChang
           ))}
         </div>
       </div>
-      <div className="h-72 min-w-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={rows} margin={{ top: 8, right: 12, left: 6, bottom: 24 }}>
-            <CartesianGrid stroke="#F2EDE8" vertical={false} />
-            <XAxis
-              type="number"
-              dataKey="age_months"
-              domain={xDomain}
-              ticks={xTicks}
-              tick={{ fontSize: 12 }}
-              tickFormatter={(value) => axisLabel(Number(value), originDate)}
-            />
-            <YAxis
-              tick={{ fontSize: 12 }}
-              width={58}
-              domain={yDomain}
-              tickFormatter={(value) => `${value}${unit}`}
-            />
-            <Tooltip
-              labelFormatter={(value) => tooltipLabel(Number(value), originDate)}
-              formatter={(value, name) => [measurementLabel(value, unit), name]}
-              itemSorter={(item) => -Number(item.value ?? 0)}
-            />
-            {percentileKeys.map((key) => (
-              <Line
-                key={key}
-                type="monotone"
-                dataKey={key}
-                name={percentileLabels[key]}
-                stroke="#C8C0B8"
-                strokeDasharray="4 4"
-                dot={false}
-                strokeWidth={1}
-                connectNulls
-              />
-            ))}
-            <Line
-              type="monotone"
-              dataKey="actual"
-              name={labels[activeIndicator]}
-              stroke="#D4956A"
-              strokeWidth={2.4}
-              dot={{ r: 4, fill: '#D4956A' }}
-              connectNulls
-            />
-            <Brush
-              dataKey="date_label"
-              startIndex={range.startIndex}
-              endIndex={range.endIndex}
-              onChange={(nextRange) => setRange(normalizeChartRange(nextRange, rows.length))}
-              height={22}
-              travellerWidth={8}
-              stroke="#D4956A"
-              fill="#FBF8F4"
-              tickFormatter={() => ''}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-      <p className="mt-1 text-[11px] italic leading-tight text-mid-gray">
-        WHO 参考线为灰色虚线
-      </p>
+      {rows.length === 0 ? (
+        <div className="grid h-72 place-items-center rounded-2xl bg-warm-gray text-sm text-mid-gray">暂无生长记录</div>
+      ) : (
+        <>
+          <div className="h-72 min-w-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={rows} margin={{ top: 8, right: 12, left: 6, bottom: 24 }}>
+                <CartesianGrid stroke="#F2EDE8" vertical={false} />
+                <XAxis
+                  type="number"
+                  dataKey="age_months"
+                  domain={xDomain}
+                  ticks={xTicks}
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(value) => axisLabel(Number(value), originDate)}
+                />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  width={58}
+                  domain={yDomain}
+                  tickFormatter={(value) => `${value}${unit}`}
+                />
+                <Tooltip
+                  labelFormatter={(value) => tooltipLabel(Number(value), originDate)}
+                  formatter={(value, name) => [measurementLabel(value, unit), name]}
+                  itemSorter={(item) => -Number(item.value ?? 0)}
+                />
+                {percentileKeys.map((key) => (
+                  <Line
+                    key={key}
+                    type="monotone"
+                    dataKey={key}
+                    name={percentileLabels[key]}
+                    stroke="#C8C0B8"
+                    strokeDasharray="4 4"
+                    dot={false}
+                    strokeWidth={1}
+                    connectNulls
+                  />
+                ))}
+                <Line
+                  type="monotone"
+                  dataKey="actual"
+                  name={labels[activeIndicator]}
+                  stroke="#D4956A"
+                  strokeWidth={2.4}
+                  dot={{ r: 4, fill: '#D4956A' }}
+                  connectNulls
+                />
+                <Brush
+                  dataKey="date_label"
+                  startIndex={range.startIndex}
+                  endIndex={range.endIndex}
+                  onChange={(nextRange) => setRange(normalizeChartRange(nextRange, rows.length))}
+                  height={22}
+                  travellerWidth={8}
+                  stroke="#D4956A"
+                  fill="#FBF8F4"
+                  tickFormatter={() => ''}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          {reference.p50.length > 0 ? (
+            <p className="mt-1 text-[11px] italic leading-tight text-mid-gray">
+              WHO 参考线为灰色虚线
+            </p>
+          ) : null}
+        </>
+      )}
     </section>
   );
 }

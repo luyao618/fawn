@@ -17,7 +17,8 @@ export function formatDate(value: string | Date, pattern = 'M月d日') {
   return format(date, pattern, { locale: zhCN });
 }
 
-export function getAgeDisplay(birthDate: string, now = new Date()) {
+export function getAgeDisplay(birthDate: string | null | undefined, now = new Date()) {
+  if (!birthDate) return '暂无';
   const duration = intervalToDuration({ start: parseISO(birthDate), end: now });
   const months = (duration.years ?? 0) * 12 + (duration.months ?? 0);
   const days = duration.days ?? 0;
@@ -25,7 +26,8 @@ export function getAgeDisplay(birthDate: string, now = new Date()) {
   return `${months}个月${days}天`;
 }
 
-export function getAgeDays(birthDate: string, now = new Date()) {
+export function getAgeDays(birthDate: string | null | undefined, now = new Date()) {
+  if (!birthDate) return 0;
   const diff = now.getTime() - parseISO(birthDate).getTime();
   return Math.max(0, Math.floor(diff / 86_400_000));
 }

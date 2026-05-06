@@ -49,6 +49,28 @@ const emptyMemberDraft: UserCreate = {
   role: '',
 };
 
+function textOrNull(value: string | null | undefined) {
+  const trimmed = String(value ?? '').trim();
+  return trimmed ? trimmed : null;
+}
+
+function numberOrNull(value: unknown) {
+  if (value === '' || value == null) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function babyDisplayName(baby: Baby | null) {
+  return baby?.name?.trim() || '宝宝档案';
+}
+
+function babySubtitle(baby: Baby | null) {
+  if (!baby) return '尚未创建';
+  const age = baby.birth_date ? getAgeDisplay(baby.birth_date) : '出生日期待填';
+  const gender = baby.gender === 'male' ? '男孩' : baby.gender === 'female' ? '女孩' : '性别待填';
+  return `${gender} · ${age}`;
+}
+
 function memoryIcon(kind: MemoryFileSummary['kind']) {
   if (kind === 'soul') return <Brain className="h-5 w-5" aria-hidden />;
   if (kind === 'baby') return <BabyIcon className="h-5 w-5" aria-hidden />;
@@ -162,7 +184,7 @@ export default function ProfilePage() {
     setFamily(familyData);
     setFamilyName(familyData.name);
     setBaby(babyData);
-    setBabyDraft(babyData);
+    setBabyDraft(babyData ?? {});
     setUsers(usersData);
     setMemoryFiles(memoryData);
   }, []);
@@ -177,7 +199,7 @@ export default function ProfilePage() {
   }
 
   function openBabyEditor() {
-    if (baby) setBabyDraft(baby);
+    setBabyDraft(baby ?? { name: null, gender: null, birth_date: null, is_premature: false });
     setIsBabyEditorOpen(true);
   }
 
@@ -215,7 +237,17 @@ export default function ProfilePage() {
 
   async function updateBaby(event: FormEvent) {
     event.preventDefault();
-    const updated = await api.updateBaby(babyDraft);
+    const updated = await api.updateBaby({
+      ...babyDraft,
+      name: textOrNull(babyDraft.name),
+      gender: babyDraft.gender ?? null,
+      birth_date: textOrNull(babyDraft.birth_date),
+      birth_weight_g: numberOrNull(babyDraft.birth_weight_g),
+      birth_height_cm: numberOrNull(babyDraft.birth_height_cm),
+      birth_head_cm: numberOrNull(babyDraft.birth_head_cm),
+      gestational_weeks: numberOrNull(babyDraft.gestational_weeks),
+      is_premature: babyDraft.is_premature ?? false,
+    });
     setBaby(updated);
     setBabyDraft(updated);
     setIsBabyEditorOpen(false);
@@ -349,26 +381,26 @@ export default function ProfilePage() {
         </div>
       </Card>
 
-      {baby ? (
-        <Card>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-nursery-powder text-info-blue">
-                <BabyIcon className="h-5 w-5" aria-hidden />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm text-dark-gray">宝宝档案</p>
-                <h2 className="truncate text-[17px] font-semibold text-soft-charcoal">
-                  {baby.name} · {getAgeDisplay(baby.birth_date)}
-                </h2>
-              </div>
+      <Card>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-nursery-powder text-info-blue">
+              <BabyIcon className="h-5 w-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm text-dark-gray">宝宝档案</p>
+              <h2 className="truncate text-[17px] font-semibold text-soft-charcoal">
+                {babyDisplayName(baby)} · {babySubtitle(baby)}
+              </h2>
             </div>
-            {canManage ? (
-              <button type="button" onClick={openBabyEditor} className={iconButtonClass} aria-label="修改宝宝档案">
-                <Pencil className="h-4 w-4" aria-hidden />
-              </button>
-            ) : null}
           </div>
+          {canManage ? (
+            <button type="button" onClick={openBabyEditor} className={iconButtonClass} aria-label={baby ? '修改宝宝档案' : '创建宝宝档案'}>
+              {baby ? <Pencil className="h-4 w-4" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
+            </button>
+          ) : null}
+        </div>
+        {baby ? (
           <div className="grid grid-cols-3 gap-2 text-center text-sm">
             <div className="rounded-2xl bg-warm-gray px-2 py-3">
               <p className="text-xs text-dark-gray">出生体重</p>
@@ -383,8 +415,18 @@ export default function ProfilePage() {
               <p className="mt-1 font-semibold text-soft-charcoal">{baby.birth_head_cm ? `${baby.birth_head_cm}cm` : '暂无'}</p>
             </div>
           </div>
-        </Card>
-      ) : null}
+        ) : (
+          <div className="rounded-2xl bg-warm-gray p-4 text-sm leading-6 text-dark-gray">
+            <p>还没有宝宝档案。</p>
+            {canManage ? (
+              <button type="button" onClick={openBabyEditor} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-full bg-white px-4 font-semibold text-fawn-amber shadow-sm">
+                <Plus className="h-4 w-4" aria-hidden />
+                创建档案
+              </button>
+            ) : null}
+          </div>
+        )}
+      </Card>
 
       <Card>
         <div className="mb-4 flex items-center gap-3">
@@ -465,14 +507,13 @@ export default function ProfilePage() {
       ) : null}
 
       {isBabyEditorOpen ? (
-        <Modal title="修改宝宝档案" eyebrow={baby?.name} onClose={() => setIsBabyEditorOpen(false)}>
+        <Modal title={baby ? '修改宝宝档案' : '创建宝宝档案'} eyebrow={baby?.name ?? undefined} onClose={() => setIsBabyEditorOpen(false)}>
           <form onSubmit={updateBaby} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="mb-1 block text-xs text-dark-gray">姓名</span>
                 <input
                   value={babyDraft.name ?? ''}
-                  required
                   onChange={(event) => setBabyDraft((state) => ({ ...state, name: event.target.value }))}
                   className={compactInputClass}
                 />
@@ -482,11 +523,31 @@ export default function ProfilePage() {
                 <input
                   type="date"
                   value={babyDraft.birth_date ?? ''}
-                  required
                   onChange={(event) => setBabyDraft((state) => ({ ...state, birth_date: event.target.value }))}
                   className={compactInputClass}
                 />
               </label>
+            </div>
+            <div>
+              <p className="mb-1 text-xs text-dark-gray">性别</p>
+              <div className="grid grid-cols-3 gap-1 rounded-xl border border-oat-border bg-warm-gray p-1">
+                {[
+                  { value: null, label: '暂不填' },
+                  { value: 'male', label: '男孩' },
+                  { value: 'female', label: '女孩' },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => setBabyDraft((state) => ({ ...state, gender: item.value as Baby['gender'] }))}
+                    className={`min-h-9 rounded-lg text-sm font-semibold ${
+                      (babyDraft.gender ?? null) === item.value ? 'bg-white text-fawn-amber shadow-card' : 'text-dark-gray'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {[

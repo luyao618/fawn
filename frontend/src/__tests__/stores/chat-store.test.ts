@@ -48,6 +48,146 @@ describe('chat-store', () => {
     expect(useChatStore.getState().dataCardDraft?.type).toBe('growth');
   });
 
+  it('clears stale conversation state when the authenticated family changes', async () => {
+    const staleConversation = {
+      id: 'conv-old-family',
+      started_at: '2026-04-29T07:40:00+08:00',
+      ended_at: null,
+      is_active: true,
+      summary: '旧家庭对话',
+      message_count: 1,
+    };
+    useChatStore.setState({
+      currentConversation: staleConversation,
+      conversations: [staleConversation],
+      messages: [
+        {
+          id: 'msg-old-family',
+          conversation_id: staleConversation.id,
+          role: 'assistant',
+          content: '旧家庭消息',
+          message_type: 'text',
+          metadata: null,
+          created_at: '2026-04-29T07:40:00+08:00',
+        },
+      ],
+      error: '旧错误',
+    });
+    const suffix = Date.now();
+    await api.registerFamily({
+      invite_code: '2026',
+      family_name: `聊天隔离家庭 ${suffix}`,
+      username: `chat-switch-${suffix}`,
+      password: 'secret123',
+      display_name: '新妈妈',
+      role: '妈妈',
+    });
+
+    await useAuthStore.getState().login(`chat-switch-${suffix}`, 'secret123');
+
+    expect(useChatStore.getState().currentConversation).toBeNull();
+    expect(useChatStore.getState().messages).toEqual([]);
+    expect(useChatStore.getState().conversations).toEqual([]);
+    expect(useChatStore.getState().error).toBeNull();
+  });
+
+  it('clears stale current conversation when the loaded family list does not include it', async () => {
+    const staleConversation = {
+      id: 'conv-stale',
+      started_at: '2026-04-29T07:40:00+08:00',
+      ended_at: null,
+      is_active: true,
+      summary: null,
+      message_count: 1,
+    };
+    useChatStore.setState({
+      currentConversation: staleConversation,
+      conversations: [staleConversation],
+      messages: [
+        {
+          id: 'msg-stale',
+          conversation_id: staleConversation.id,
+          role: 'assistant',
+          content: '旧消息',
+          message_type: 'text',
+          metadata: null,
+          created_at: '2026-04-29T07:40:00+08:00',
+        },
+      ],
+    });
+    vi.spyOn(api, 'getConversations').mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 20,
+    });
+
+    await useChatStore.getState().loadConversations();
+
+    expect(useChatStore.getState().currentConversation).toBeNull();
+    expect(useChatStore.getState().messages).toEqual([]);
+    expect(useChatStore.getState().conversations).toEqual([]);
+  });
+
+  it('creates a fresh conversation and retries once when the current conversation is missing', async () => {
+    const staleConversation = {
+      id: 'conv-stale-send',
+      started_at: '2026-04-29T07:40:00+08:00',
+      ended_at: null,
+      is_active: true,
+      summary: null,
+      message_count: 1,
+    };
+    const freshConversation = {
+      id: 'conv-fresh-send',
+      started_at: '2026-04-29T08:00:00+08:00',
+      ended_at: null,
+      is_active: true,
+      summary: null,
+      message_count: 0,
+    };
+    useChatStore.setState({
+      currentConversation: staleConversation,
+      conversations: [staleConversation],
+      messages: [
+        {
+          id: 'msg-stale-send',
+          conversation_id: staleConversation.id,
+          role: 'assistant',
+          content: '旧消息',
+          message_type: 'text',
+          metadata: null,
+          created_at: '2026-04-29T07:40:00+08:00',
+        },
+      ],
+    });
+    const send = vi
+      .spyOn(api, 'sendMessage')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Conversation not found' }), { status: 404 }))
+      .mockResolvedValueOnce(
+        createMockSSEResponse(
+          [
+            { type: 'token', content: '新的对话已连接' },
+            { type: 'done', message_id: 'msg-fresh-done', message_type: 'text' },
+          ],
+          1,
+        ),
+      );
+    vi.spyOn(api, 'createConversation').mockResolvedValueOnce(freshConversation);
+
+    await useChatStore.getState().sendMessage('你好');
+    await waitFor(() => expect(useChatStore.getState().isStreaming).toBe(false));
+
+    expect(send).toHaveBeenNthCalledWith(1, staleConversation.id, '你好', undefined);
+    expect(send).toHaveBeenNthCalledWith(2, freshConversation.id, '你好', undefined);
+    expect(useChatStore.getState().currentConversation?.id).toBe(freshConversation.id);
+    expect(useChatStore.getState().messages.map((message) => message.conversation_id)).toEqual([
+      freshConversation.id,
+      freshConversation.id,
+    ]);
+    expect(useChatStore.getState().messages.at(-1)?.content).toBe('新的对话已连接');
+  });
+
   it('automatically creates a new conversation and resends after session_expired', async () => {
     const send = vi
       .spyOn(api, 'sendMessage')

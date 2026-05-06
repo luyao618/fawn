@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.models import Baby
 
@@ -152,3 +153,39 @@ async def test_create_tracker_record_invalid_payload(
     )
 
     assert response.status_code == 422
+
+
+async def test_create_tracker_record_without_baby_returns_profile_cta(
+    client: AsyncClient,
+    auth_headers: dict,
+) -> None:
+    response = await client.post(
+        "/api/tracker/feeding",
+        json={"feed_time": "2026-05-02T08:30:00Z", "feed_type": "breast", "duration_min": 12},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "请先在家庭页创建宝宝档案"
+
+
+async def test_partial_baby_allows_growth_with_null_percentiles(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+    db: AsyncSession,
+) -> None:
+    test_baby.gender = None
+    test_baby.birth_date = None
+    await db.commit()
+
+    response = await client.post(
+        "/api/tracker/growth",
+        json={"measurement_date": "2026-05-02", "weight_g": 6200},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["weight_g"] == 6200
+    assert data["weight_percentile"] is None

@@ -1,92 +1,177 @@
-# Fawn 部署与 RAG 构建文档
+# Fawn 新机器部署与无损更新指南
 
-本文档覆盖三条常用路径：
+本文档面向一台全新的服务器或 NAS，说明如何部署 Fawn，以及代码更新后如何升级服务而不影响已有家庭数据。
 
-- Docker 部署：推荐用于服务器部署。
-- 本地部署：推荐用于开发、调试和验收。
-- 重新构建 RAG：仅在语料、manifest、切片逻辑或 embedding 配置变化后执行。
+推荐生产部署方式是 Docker Compose。除非明确要清空环境，日常部署和更新都不要删除 Docker volumes。
 
-## 1. 部署模型
+## 1. 系统组成和数据边界
 
-Fawn 由四个主要服务组成：
+Fawn 由 4 个主要服务组成：
 
-- `backend`：FastAPI 服务，负责聊天、工具调用、RAG 检索、相册和 tracker API。
-- `frontend`：Next.js 服务。
-- `postgres`：PostgreSQL + pgvector，用于业务数据和 RAG 向量检索。
-- `minio`：对象存储，用于照片等文件。
+- `frontend`: Next.js 前端，默认监听 `3000`。
+- `backend`: FastAPI 后端，默认监听 `8000`。
+- `postgres`: PostgreSQL + pgvector，保存业务数据、账号、家庭、宝宝档案、聊天、tracker 记录、知识库向量。
+- `minio`: 对象存储，保存照片等文件。
 
-RAG 知识库采用 seed 快照部署：
+Docker Compose 中有 3 个持久化 volume：
 
-- 语料入口：`backend/knowledge_manifest.yaml`
-- 预构建 seed：`backend/seeds/knowledge_seed.sql.gz`
-- seed provenance：`backend/seeds/knowledge_seed.provenance.json`
-- readiness 检查：`backend/scripts/check_knowledge_readiness.py`
-- eval 检查：`backend/scripts/eval_knowledge.py`
+- `pgdata`: PostgreSQL 数据。账号、家庭、聊天、记录、RAG 向量都在这里。
+- `miniodata`: MinIO 文件数据。相册照片在这里。
+- `memorydata`: backend 生成的长期记忆 markdown 文件。
 
-服务器部署时不应该在容器启动阶段重新生成 embeddings。容器启动只加载已经构建好的 `knowledge_seed.sql.gz`。
+常规更新命令 `docker compose up -d --build` 只重建镜像和容器，不会删除这些 volumes。
 
-## 2. Docker 部署
+危险命令：
+
+```bash
+docker compose down -v
+```
+
+`-v` 会删除 `pgdata`、`miniodata`、`memorydata`，等同于清空数据库、照片和记忆文件。只有确认要重置整套环境时才使用。
+
+## 2. 新机器首次部署
 
 ### 2.1 前置条件
 
 服务器需要：
 
+- Linux / NAS shell 环境。
 - Docker 和 Docker Compose。
-- 可从 backend 容器访问的 LLM / embedding API。
-- 仓库中存在 RAG seed 文件：
+- Git。
+- 能被 backend 容器访问的 LLM / embedding API。
+- 仓库里带有知识库 seed 文件：
   - `backend/seeds/knowledge_seed.sql.gz`
   - `backend/seeds/knowledge_seed.provenance.json`
 
-当前 seed 使用的 embedding 配置是：
+RAG 查询运行时仍需要 embedding API。预构建 seed 只避免在服务器启动时重新为整套知识库生成 embeddings。
+
+当前 seed 对应的 embedding 配置是：
 
 ```bash
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1024
 ```
 
-线上查询 RAG 时仍然需要 embedding API，因为每个用户问题都要实时生成 query embedding。
+### 2.2 拉取代码
 
-### 2.2 准备配置
+```bash
+git clone <repo-url> fawn
+cd fawn
+git checkout main
+```
+
+如果服务器上已经有仓库，确认当前在 `main`：
+
+```bash
+git status
+git branch --show-current
+```
+
+### 2.3 配置 Compose 变量
+
+仓库根目录的 `.env` 会被 Docker Compose 用来做变量插值。生产部署建议创建：
+
+```bash
+cat > .env <<'EOF'
+COMPOSE_PROJECT_NAME=fawn
+FRONTEND_PORT=3000
+NEXT_PUBLIC_API_URL=/api
+NEXT_PUBLIC_USE_MOCK=false
+INTERNAL_API_URL=http://backend:8000
+JWT_SECRET=replace-with-a-long-random-production-secret
+MINIO_PUBLIC_ENDPOINT=127.0.0.1:9000
+MINIO_PUBLIC_USE_SSL=false
+MINIO_REGION=us-east-1
+EOF
+```
+
+必须修改：
+
+- `JWT_SECRET`: 生产环境必须是长随机字符串。不要使用默认值。
+- `MINIO_PUBLIC_ENDPOINT`: 浏览器访问照片时使用的地址。如果只在局域网使用，可以设为服务器局域网 IP 加端口，例如 `192.168.1.20:9000`。
+
+如果前端、后端都走同一个域名和反向代理，保留：
+
+```bash
+NEXT_PUBLIC_API_URL=/api
+INTERNAL_API_URL=http://backend:8000
+```
+
+注意：`NEXT_PUBLIC_*` 会在 frontend 镜像构建时写入前端产物。修改这些值后，需要重新执行 `docker compose up -d --build`。
+
+### 2.4 配置 backend 环境变量
+
+复制 backend 环境文件：
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+编辑 `backend/.env`。生产部署至少确认：
+
+```bash
+DEFAULT_PROVIDER=openai
+DEFAULT_MODEL=claude-sonnet-4.6
+SUMMARY_PROVIDER=openai
+SUMMARY_MODEL=claude-sonnet-4.6
+VISION_PROVIDER=openai
+VISION_MODEL=claude-sonnet-4.6
+
+OPENAI_API_KEY=replace-with-your-key
+OPENAI_API_BASE=http://host.docker.internal:7024/v1
+
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSIONS=1024
+TOOL_CALLING_ENABLED=true
+
+REGISTRATION_INVITE_CODE=2026
+```
+
+`REGISTRATION_INVITE_CODE` 是注册家庭的邀请码。不设置时后端默认是 `2026`。个人部署可以先用默认值，但只要服务可能被别人访问，就建议改成你自己的值。
+
+Docker Compose 会覆盖 backend 容器内的这些变量：
+
+- `DATABASE_URL`
+- `MINIO_ENDPOINT`
+- `MINIO_ACCESS_KEY`
+- `MINIO_SECRET_KEY`
+- `MINIO_BUCKET`
+- `MINIO_USE_SSL`
+- `JWT_SECRET`
+- `MEMORY_ROOT`
+- `TOOL_CALLING_ENABLED`
+
+其中 `JWT_SECRET` 在 Docker 部署中以仓库根目录 `.env` 为准，不要只改 `backend/.env`。
+
+如果你的 OpenAI-compatible API 代理运行在同一台 Linux 宿主机上，`host.docker.internal` 不一定可用。更稳妥的做法是把 `OPENAI_API_BASE` 改成容器可访问的内网地址或反向代理地址。
+
+### 2.5 配置初始 seed 用户
+
+backend 启动时会自动运行：
+
+```bash
+python -m scripts.seed_users --config config/family.yaml --idempotent
+```
+
+生产部署不要让它回退到示例配置。先复制并编辑：
+
+```bash
+cp backend/config/family.yaml.example backend/config/family.yaml
+```
+
+`family.yaml` 的作用是保留旧的 seed_users 部署流程。现在系统也支持登录页邀请码注册新家庭，两种方式可以并存：
+
+- 如果你想用 seed 方式创建第一个家庭和成员，就把 `family.yaml` 改成真实家庭、真实账号、强密码。
+- 如果你主要使用邀请码注册，也仍然要避免示例账号进入生产环境。至少把示例账号密码改掉，或只保留一个你自己知道的 bootstrap 账号。
+
+不要在生产环境保留 `change-me` 这样的示例密码。
+
+### 2.6 启动
 
 在仓库根目录执行：
 
 ```bash
-cp backend/.env.example backend/.env
-cp backend/config/family.yaml.example backend/config/family.yaml
-```
-
-编辑 `backend/.env`，生产部署至少要替换：
-
-```bash
-JWT_SECRET=replace-with-a-long-random-production-secret
-OPENAI_API_KEY=...
-OPENAI_API_BASE=...
-DEFAULT_PROVIDER=openai
-DEFAULT_MODEL=...
-SUMMARY_PROVIDER=openai
-SUMMARY_MODEL=...
-VISION_PROVIDER=openai
-VISION_MODEL=...
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_DIMENSIONS=1024
-TOOL_CALLING_ENABLED=true
-```
-
-注意：
-
-- 如果默认对话模型使用 Anthropic 或其他 provider，按实际 provider 设置 `DEFAULT_PROVIDER`、`DEFAULT_MODEL` 和对应 API key；RAG embedding 仍需要 `OPENAI_API_KEY` / `OPENAI_API_BASE` 这组 OpenAI-compatible embedding 配置。
-- 使用官方 OpenAI 时，`OPENAI_API_BASE` 可以留空或设为官方兼容地址；使用代理时必须填代理地址。
-- `OPENAI_API_BASE` 必须是 backend 容器内部可以访问的地址。
-- 如果 API 代理跑在同一台 Linux 宿主机上，`host.docker.internal` 不一定默认可用，建议改成容器可达的内网地址或反向代理地址。
-- `docker-compose.yml` 会覆盖容器内的 `DATABASE_URL`、MinIO 地址和 `TOOL_CALLING_ENABLED=true`。
-- `backend/config/family.yaml` 用于初始化家庭用户，真实部署不要直接使用示例密码。
-- 如果通过域名和 HTTPS 访问照片资源，设置 `MINIO_PUBLIC_ENDPOINT` 和 `MINIO_PUBLIC_USE_SSL=true`。
-- 生产服务器建议只通过反向代理暴露 frontend/API，数据库 `5432`、MinIO API `9000`、MinIO console `9001` 至少要受防火墙或内网限制。
-
-### 2.3 启动服务
-
-```bash
-docker compose up --build -d
+docker compose up -d --build
 ```
 
 backend 容器启动时会自动执行：
@@ -99,16 +184,17 @@ python -m scripts.seed_who_data --csv seeds/who_growth_reference.csv --idempoten
 uvicorn fawn.main:app --host 0.0.0.0 --port 8000
 ```
 
-默认端口：
+这些脚本的预期行为：
 
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:8000`
-- Backend API docs: `http://localhost:8000/docs`
-- MinIO console: `http://localhost:9001`
+- Alembic 迁移会把数据库结构升级到当前代码需要的版本。
+- `seed_users --idempotent` 会跳过已经存在的用户名，不会覆盖已有用户密码。
+- `seed_knowledge --idempotent` 会比较 seed hash。hash 一致就跳过；hash 变化时只重建知识库相关表。
+- `seed_who_data --idempotent` 已有 WHO 数据时会跳过。
 
-### 2.4 验证部署
+### 2.7 验证
 
 ```bash
+docker compose ps
 curl -fsS http://localhost:8000/api/health
 docker compose exec -T backend python -m scripts.check_knowledge_readiness
 docker compose exec -T backend python -m scripts.eval_knowledge
@@ -116,47 +202,255 @@ docker compose exec -T backend python -m scripts.eval_knowledge
 
 期望结果：
 
+- `docker compose ps` 中 `backend`、`frontend`、`postgres`、`minio` 都是 `Up`。
 - health 返回 `{"status":"ok"}`。
 - readiness 输出 `Knowledge readiness passed.`。
-- eval 的各项指标均为 `[PASS]`。
+- eval 输出的核心检查为 `[PASS]`。
 
-如果需要看启动日志：
+查看日志：
 
 ```bash
 docker compose logs -f backend
+docker compose logs -f frontend
 ```
 
-### 2.5 更新部署
+### 2.8 首次使用
 
-普通代码更新：
+默认地址：
+
+- Frontend: `http://localhost:3000`
+- Backend API docs: `http://localhost:8000/docs`
+- MinIO console: `http://localhost:9001`
+
+如果使用邀请码注册：
+
+1. 打开前端登录页。
+2. 点击注册入口。
+3. 输入 `REGISTRATION_INVITE_CODE`。
+4. 创建家庭、账号名、昵称、角色和密码。
+5. 注册完成后回到登录页手动登录。
+
+新注册家庭默认没有宝宝档案。登录后先到 `/profile` 创建或补充宝宝资料。宝宝未出生或资料不完整时，可以先只填能确定的信息。
+
+## 3. 生产访问和端口建议
+
+局域网个人部署可以先只开放前端端口：
+
+- 允许访问 `3000`。
+- 限制 `5432`、`9000`、`9001`、`8000` 到内网或本机。
+
+如果用 Nginx、Caddy、Traefik 等反向代理，推荐：
+
+- `https://your-domain/` 代理到 frontend `3000`。
+- `https://your-domain/api/*` 代理到 backend `8000`。
+- 前端保持 `NEXT_PUBLIC_API_URL=/api`。
+
+照片访问依赖 `MINIO_PUBLIC_ENDPOINT`。如果照片需要通过 HTTPS 域名访问，设置：
 
 ```bash
-git pull
-docker compose up --build -d
-docker compose exec -T backend python -m scripts.check_knowledge_readiness
-docker compose exec -T backend python -m scripts.eval_knowledge
+MINIO_PUBLIC_ENDPOINT=your-domain-or-minio-domain
+MINIO_PUBLIC_USE_SSL=true
 ```
 
-不要在常规升级中执行：
+如果 MinIO 只在局域网裸端口访问，设置：
+
+```bash
+MINIO_PUBLIC_ENDPOINT=192.168.1.20:9000
+MINIO_PUBLIC_USE_SSL=false
+```
+
+## 4. 更新部署且保留已有数据
+
+### 4.1 更新前检查
+
+进入服务器上的仓库目录：
+
+```bash
+cd /path/to/fawn
+git status
+```
+
+如果服务器上有未提交的本地改动，先确认这些改动是否需要保留。不要在脏工作区里直接升级。
+
+确认当前服务可用：
+
+```bash
+docker compose ps
+curl -fsS http://localhost:8000/api/health
+```
+
+### 4.2 更新前备份
+
+每次升级前建议做一次备份，尤其是包含 Alembic migration 的更新。
+
+创建备份目录：
+
+```bash
+BACKUP_DIR="backups/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BACKUP_DIR"
+```
+
+为了减少写入中的文件变化，先短暂停止前后端：
+
+```bash
+docker compose stop frontend backend
+```
+
+备份 PostgreSQL：
+
+```bash
+docker compose exec -T postgres pg_dump -U fawn -d fawn -Fc > "$BACKUP_DIR/postgres.dump"
+```
+
+备份 MinIO 文件 volume：
+
+```bash
+docker run --rm \
+  --volumes-from fawn-minio-1 \
+  -v "$PWD/$BACKUP_DIR:/backup" \
+  busybox \
+  tar czf /backup/minio-data.tgz -C / data
+```
+
+备份 backend memory volume：
+
+```bash
+docker run --rm \
+  --volumes-from fawn-backend-1 \
+  -v "$PWD/$BACKUP_DIR:/backup" \
+  busybox \
+  tar czf /backup/memorydata.tgz -C /app memory
+```
+
+备份完成后可以先启动服务，也可以直接进入升级步骤：
+
+```bash
+docker compose start backend frontend
+```
+
+如果你的 Compose project name 不是 `fawn`，容器名可能不是 `fawn-minio-1` / `fawn-backend-1`。用下面命令查看真实名称：
+
+```bash
+docker compose ps
+```
+
+### 4.3 拉取最新代码
+
+```bash
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+```
+
+如果 `git pull --ff-only` 失败，说明服务器本地分支有分叉或本地提交。先处理 Git 状态，不要强行 reset 生产目录。
+
+### 4.4 重建并启动
+
+```bash
+docker compose up -d --build
+```
+
+这一步会：
+
+- 用最新代码重建 backend/frontend 镜像。
+- 按需重建并替换容器。
+- 保留已有 Docker volumes。
+- 启动 backend 时自动执行 Alembic migration 和幂等 seed。
+
+不要执行：
 
 ```bash
 docker compose down -v
 ```
 
-`-v` 会删除 Postgres、MinIO 和 memory volume。只有确认要清空环境时才使用。
+### 4.5 更新后验证
 
-## 3. 本地部署
+```bash
+docker compose ps
+curl -fsS http://localhost:8000/api/health
+docker compose exec -T backend python -m scripts.check_knowledge_readiness
+docker compose exec -T backend python -m scripts.eval_knowledge
+docker compose logs --tail=200 backend
+```
 
-本地推荐使用 Docker 只启动依赖服务，backend/frontend 在宿主机运行，方便调试。
+然后在浏览器检查：
 
-### 3.1 准备配置
+- 登录页可打开。
+- 旧账号可以登录。
+- 旧家庭的宝宝档案、聊天、tracker、相册还在。
+- 新注册家庭只能看到自己的聊天和数据。
+- `/profile` 可以编辑宝宝资料。
+
+### 4.6 为什么常规更新不会影响已有数据
+
+常规更新只替换容器和镜像，数据在 Docker volumes 中：
+
+- Postgres volume 不会因为 `up -d --build` 被删除。
+- MinIO volume 不会因为容器重建被删除。
+- memory volume 不会因为 backend 容器重建被删除。
+- `seed_users --idempotent` 不会覆盖已有用户。
+- `seed_who_data --idempotent` 不会重复导入已有 WHO 参考数据。
+- `seed_knowledge --idempotent` 只处理知识库 seed。seed hash 变化时会重建知识库相关表，不会删除家庭、账号、聊天、tracker 或照片数据。
+
+真正会删除数据的是 `docker compose down -v`、手动删 Docker volumes、手动删数据库表或手动清空 MinIO。
+
+## 5. 恢复备份
+
+恢复前确认你真的要回滚数据。恢复会覆盖当前数据库和文件。
+
+停止前后端：
+
+```bash
+docker compose stop frontend backend
+```
+
+恢复 PostgreSQL：
+
+```bash
+docker compose exec -T postgres dropdb -U fawn --force fawn
+docker compose exec -T postgres createdb -U fawn fawn
+docker compose exec -T postgres pg_restore -U fawn -d fawn --clean --if-exists < backups/YYYYMMDD-HHMMSS/postgres.dump
+```
+
+恢复 MinIO：
+
+```bash
+docker run --rm \
+  --volumes-from fawn-minio-1 \
+  -v "$PWD/backups/YYYYMMDD-HHMMSS:/backup" \
+  busybox \
+  sh -c 'rm -rf /data/* && tar xzf /backup/minio-data.tgz -C /'
+```
+
+恢复 memory：
+
+```bash
+docker run --rm \
+  --volumes-from fawn-backend-1 \
+  -v "$PWD/backups/YYYYMMDD-HHMMSS:/backup" \
+  busybox \
+  sh -c 'rm -rf /app/memory/* && tar xzf /backup/memorydata.tgz -C /app'
+```
+
+启动服务并验证：
+
+```bash
+docker compose up -d
+curl -fsS http://localhost:8000/api/health
+```
+
+## 6. 本地开发部署
+
+本地开发推荐 Docker 只启动依赖服务，backend/frontend 在宿主机运行，方便调试。
+
+### 6.1 准备配置
 
 ```bash
 cp backend/.env.example backend/.env
 cp backend/config/family.yaml.example backend/config/family.yaml
 ```
 
-本地运行 backend 时，建议把 `backend/.env` 调整为：
+本地运行 backend 时，`backend/.env` 建议使用本机地址：
 
 ```bash
 DATABASE_URL=postgresql+asyncpg://fawn:fawn@localhost:5432/fawn
@@ -168,6 +462,7 @@ MINIO_BUCKET=fawn
 MINIO_USE_SSL=false
 MINIO_PUBLIC_USE_SSL=false
 JWT_SECRET=replace-with-local-secret
+REGISTRATION_INVITE_CODE=2026
 OPENAI_API_KEY=...
 OPENAI_API_BASE=http://localhost:7024/v1
 EMBEDDING_MODEL=text-embedding-3-small
@@ -175,19 +470,15 @@ EMBEDDING_DIMENSIONS=1024
 TOOL_CALLING_ENABLED=true
 ```
 
-如果你不使用本地 OpenAI-compatible 代理，把 `OPENAI_API_BASE` 改成实际 provider 地址。
-
-### 3.2 启动 Postgres 和 MinIO
-
-在仓库根目录执行：
+### 6.2 启动依赖
 
 ```bash
 docker compose up -d postgres minio minio-init
 ```
 
-### 3.3 启动 backend
+### 6.3 启动 backend
 
-`scripts.seed_knowledge` 会调用 `psql` 导入 gzip SQL，因此本机需要能执行 `psql` 命令。
+`scripts.seed_knowledge` 会调用 `psql` 导入 gzip SQL，因此宿主机需要能执行 `psql`。
 
 ```bash
 cd backend
@@ -199,15 +490,9 @@ uv run python -m scripts.seed_who_data --csv seeds/who_growth_reference.csv --id
 uv run uvicorn fawn.main:app --reload
 ```
 
-backend 默认运行在：
+### 6.4 启动 frontend
 
-```bash
-http://localhost:8000
-```
-
-### 3.4 启动 frontend
-
-另开一个终端：
+另开终端：
 
 ```bash
 cd frontend
@@ -215,15 +500,9 @@ npm install
 INTERNAL_API_URL=http://localhost:8000 npm run dev
 ```
 
-frontend 默认运行在：
+frontend 默认在 `http://localhost:3000`。`frontend/next.config.ts` 会把 `/api/*` 代理到 `INTERNAL_API_URL`。
 
-```bash
-http://localhost:3000
-```
-
-`frontend/next.config.ts` 会把 `/api/*` 代理到 `INTERNAL_API_URL`，所以本地运行时必须让它指向本地 backend。
-
-### 3.5 本地验证
+### 6.5 本地验证
 
 ```bash
 curl -fsS http://localhost:8000/api/health
@@ -239,21 +518,21 @@ npm run test
 npm run build
 ```
 
-## 4. 重新构建 RAG
+## 7. 重新构建 RAG seed
 
 只有以下情况需要重新构建 RAG seed：
 
 - 修改了 `backend/knowledge_manifest.yaml`。
-- 修改了 manifest 指向的 `docs/books/...` 语料文件。
-- 修改了切片、清洗或质量过滤逻辑，例如：
+- 修改了 manifest 指向的 `docs/books/...` 原始语料。
+- 修改了知识库切片、清洗或质量过滤逻辑，例如：
   - `backend/src/fawn/knowledge/ingest.py`
   - `backend/src/fawn/knowledge/chunk_quality.py`
 - 修改了 embedding 模型或维度。
-- 修改了 RAG 表结构中影响 seed 数据或 pgvector 维度的部分。
+- 修改了知识库表结构或 pgvector 维度。
 
-普通后端或前端代码改动不需要重建 RAG seed。只修改 `backend/knowledge_eval.yaml` 时通常只需要重新运行 eval，不需要重建 seed。
+普通后端或前端代码改动不需要重建 RAG seed。只修改 `backend/knowledge_eval.yaml` 时通常只需要重新运行 eval。
 
-### 4.1 重建前检查
+### 7.1 重建前检查
 
 确认环境变量与目标 seed 一致：
 
@@ -268,11 +547,11 @@ TOOL_CALLING_ENABLED=true
 
 建议在本地或专用 seed-builder 数据库中重建，不要直接在生产库上执行 `--force`。
 
-重建必须在能访问 `docs/books/...` 原始语料的环境里执行。生产 backend Docker 镜像只复制 manifest、eval 和 seeds，不复制完整 `docs/books/` 目录，因此不适合作为 seed 生成环境。
+生产 backend Docker 镜像只复制 manifest、eval 和 seeds，不复制完整 `docs/books/` 目录，因此不适合作为 seed 生成环境。
 
 如果修改 `EMBEDDING_DIMENSIONS`，需要先用 Alembic 修改 `knowledge_chunks.embedding` 的 pgvector 维度，再重新 ingest 和 build seed。
 
-### 4.2 重建命令
+### 7.2 重建命令
 
 在仓库根目录启动本地 Postgres：
 
@@ -280,7 +559,7 @@ TOOL_CALLING_ENABLED=true
 docker compose up -d postgres
 ```
 
-然后执行：
+执行：
 
 ```bash
 cd backend
@@ -300,15 +579,9 @@ backend/seeds/knowledge_seed.sql.gz
 backend/seeds/knowledge_seed.provenance.json
 ```
 
-把这两个文件随代码一起提交或上传到服务器，然后重新 Docker 部署：
+把这两个文件随代码一起提交或上传到服务器，然后按第 4 节执行更新部署。
 
-```bash
-docker compose up --build -d
-docker compose exec -T backend python -m scripts.check_knowledge_readiness
-docker compose exec -T backend python -m scripts.eval_knowledge
-```
-
-### 4.3 seed provenance 的作用
+### 7.3 seed provenance
 
 `knowledge_seed.provenance.json` 记录：
 
@@ -318,30 +591,73 @@ docker compose exec -T backend python -m scripts.eval_knowledge
 - embedding 模型和维度。
 - seed 文件自身 hash。
 
-部署时 `scripts.seed_knowledge` 会校验 seed 文件 hash。`scripts.check_knowledge_readiness` 还会检查数据库中的 `seed_metadata` 是否与当前 seed artifact 匹配。
+部署时 `scripts.seed_knowledge` 会校验 seed 文件 hash。`scripts.check_knowledge_readiness` 会检查数据库中的 `seed_metadata` 是否与当前 seed artifact 匹配。
 
-## 5. 常见问题
+## 8. 常见问题
 
-### RAG readiness 提示 `RAG tool calling is disabled`
+### Docker 启动后仍然使用默认 JWT secret
 
-确认环境变量：
+Docker 部署中 `docker-compose.yml` 显式设置 `JWT_SECRET`，它来自仓库根目录 `.env` 或 shell 环境，不来自 `backend/.env`。
+
+确认：
+
+```bash
+docker compose config | grep JWT_SECRET
+```
+
+### 注册邀请码没有生效
+
+邀请码由 backend 设置读取：
+
+```bash
+REGISTRATION_INVITE_CODE=your-code
+```
+
+这个值应写在 `backend/.env` 中。修改后重启 backend：
+
+```bash
+docker compose up -d --build backend
+```
+
+### 新部署出现示例账号或示例宝宝
+
+说明 backend 启动时使用了 `backend/config/family.yaml.example` 或你复制后没有改内容。
+
+处理方式：
+
+1. 编辑 `backend/config/family.yaml`，改成真实账号和强密码。
+2. 如果示例数据已经进入数据库，使用 UI/API 删除或修改，不要直接删表。
+
+### Migration 失败，提示重复家庭名
+
+注册功能引入了家庭名唯一约束。迁移会按 trim、空白折叠和 casefold 生成 `families.name_key`。如果已有数据库里存在规范化后相同的家庭名，迁移会中止，避免错误合并数据。
+
+处理方式：
+
+1. 先备份数据库。
+2. 在旧版本或数据库中把重复家庭名改成不同名称。
+3. 重新执行更新部署。
+
+### RAG readiness 提示 tool calling disabled
+
+确认：
 
 ```bash
 TOOL_CALLING_ENABLED=true
 ```
 
-Docker 部署中 `docker-compose.yml` 已经显式设置该值。本地运行 backend 时需要在 `backend/.env` 中设置。
+Docker 部署中 Compose 已经设置该值。本地运行 backend 时需要在 `backend/.env` 中设置。
 
 ### seed hash 不匹配
 
-通常是 `knowledge_seed.sql.gz` 和 `knowledge_seed.provenance.json` 不是同一次生成的。重新执行：
+通常是 `knowledge_seed.sql.gz` 和 `knowledge_seed.provenance.json` 不是同一次生成的。重新构建 seed：
 
 ```bash
 cd backend
 uv run python -m scripts.build_knowledge_seed
 ```
 
-然后重新部署或重新 seed：
+然后重新部署，或在确认环境正确后重新 seed：
 
 ```bash
 uv run python -m scripts.seed_knowledge --force
@@ -368,6 +684,6 @@ INTERNAL_API_URL=http://localhost:8000
 
 否则 Next.js rewrite 会默认代理到 Docker 网络里的 `http://backend:8000`。
 
-### 本地 seed 失败并提示找不到 `psql`
+### 本地 seed 失败并提示找不到 psql
 
 安装 PostgreSQL client，并确认 `psql` 在 `PATH` 中。Docker backend 镜像已经内置 `postgresql-client`，本地宿主机运行脚本时需要自行安装。

@@ -16,9 +16,9 @@ class Baby(UUIDMixin, TimestampMixin, Base):
     family_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("families.id"), nullable=False
     )
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
-    gender: Mapped[str] = mapped_column(String(10), nullable=False)
-    birth_date: Mapped[date] = mapped_column(Date, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    gender: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     birth_weight_g: Mapped[int | None] = mapped_column(Integer)
     birth_height_cm: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     birth_head_cm: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))

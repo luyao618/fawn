@@ -386,7 +386,7 @@ async def get_baby_profile(user_id: InjectedUserId = "") -> dict[str, Any] | str
             "id": str(baby.id),
             "name": baby.name,
             "gender": baby.gender,
-            "birth_date": baby.birth_date.isoformat(),
+            "birth_date": baby.birth_date.isoformat() if baby.birth_date is not None else None,
             "birth_weight_g": baby.birth_weight_g,
             "is_premature": baby.is_premature,
             "gestational_weeks": baby.gestational_weeks,

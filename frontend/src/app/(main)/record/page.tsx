@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Moon, Ruler, Stethoscope, Utensils } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -285,7 +286,7 @@ export default function RecordPage() {
   const [growthReference, setGrowthReference] = useState<GrowthReferenceP50 | null>(null);
   const [growthReferenceLoading, setGrowthReferenceLoading] = useState(false);
   const [growthReferenceUnavailable, setGrowthReferenceUnavailable] = useState(false);
-  const growthReferenceCache = useRef(new Map<string, GrowthReferenceP50>());
+  const growthReferenceCache = useRef(new Map<string, GrowthReferenceP50 | null>());
   const [health, setHealth] = useState(initialHealthForm);
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -305,6 +306,12 @@ export default function RecordPage() {
 
   useEffect(() => {
     if (activeKind !== 'growth' || !growth.measurement_date) return undefined;
+    if (!summary?.baby?.birth_date || !summary.baby.gender) {
+      setGrowthReference(null);
+      setGrowthReferenceUnavailable(false);
+      setGrowthReferenceLoading(false);
+      return undefined;
+    }
     const cached = growthReferenceCache.current.get(growth.measurement_date);
     if (growthReferenceCache.current.has(growth.measurement_date)) {
       setGrowthReference(cached ?? null);
@@ -323,7 +330,7 @@ export default function RecordPage() {
         growthReferenceCache.current.set(growth.measurement_date, data);
         if (active) {
           setGrowthReference(data);
-          setGrowthReferenceUnavailable(false);
+          setGrowthReferenceUnavailable(data == null);
         }
       })
       .catch(() => {
@@ -338,11 +345,14 @@ export default function RecordPage() {
     return () => {
       active = false;
     };
-  }, [activeKind, growth.measurement_date]);
+  }, [activeKind, growth.measurement_date, summary?.baby?.birth_date, summary?.baby?.gender]);
 
   const activeCard = useMemo(() => recordCards.find((card) => card.kind === activeKind) ?? recordCards[0], [activeKind]);
   const ActiveIcon = activeCard.icon;
-  const birthDate = summary?.baby.birth_date;
+  const babyMissing = summary?.baby === null;
+  const formDisabled = !canWrite || babyMissing;
+  const canShowGrowthReference = Boolean(summary?.baby?.birth_date && summary.baby.gender);
+  const birthDate = summary?.baby?.birth_date ?? undefined;
   const minDateTime = minDateTimeValue(birthDate);
   const maxDate = localDateInputValue();
   const maxDateTime = localDateTimeInputValue();
@@ -357,6 +367,10 @@ export default function RecordPage() {
   async function submitRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canWrite) return;
+    if (babyMissing) {
+      setStatus({ type: 'error', message: '请先在家庭页创建宝宝档案' });
+      return;
+    }
 
     setSubmitting(true);
     setStatus(null);
@@ -427,7 +441,7 @@ export default function RecordPage() {
       <section className="space-y-1 px-1">
         <p className="text-xs font-semibold text-fawn-amber">{formatDate(new Date(), 'M月d日 EEEE')}</p>
         <h2 className="text-[20px] font-semibold leading-tight text-soft-charcoal">
-          记录{summary?.baby.name ?? '宝宝'}今天的变化
+          记录{summary?.baby?.name ?? '宝宝'}今天的变化
         </h2>
         <p className="line-clamp-1 text-[11px] italic leading-tight text-mid-gray">
           保存后会同步到成长看板和后续对话参考。
@@ -437,6 +451,15 @@ export default function RecordPage() {
       {!canWrite ? (
         <div className="rounded-card border border-warning-amber bg-warning-amber-light p-4 text-sm leading-6 text-dark-gray" role="status">
           当前账号只有查看权限，无法新增记录。请让父母或管理员账号记录，已有数据仍可在成长页查看。
+        </div>
+      ) : null}
+
+      {babyMissing ? (
+        <div className="rounded-card border border-info-blue bg-nursery-powder p-4 text-sm leading-6 text-dark-gray" role="status">
+          <p>还没有宝宝档案，暂时不能保存记录。</p>
+          <Link href="/profile" className="mt-3 inline-flex min-h-10 items-center rounded-full bg-white px-4 font-semibold text-info-blue shadow-sm">
+            去家庭页
+          </Link>
         </div>
       ) : null}
 
@@ -488,7 +511,7 @@ export default function RecordPage() {
                   required
                   value={feeding.feed_time}
                   onChange={(event) => setFeeding((value) => ({ ...value, feed_time: event.target.value }))}
-                  disabled={!canWrite}
+                  disabled={formDisabled}
                   min={minDateTime}
                   max={maxDateTime}
                   className={inputClass}
@@ -499,7 +522,7 @@ export default function RecordPage() {
                 ariaLabel="喂养类型"
                 options={feedingTypeOptions}
                 value={feeding.feed_type}
-                disabled={!canWrite}
+                disabled={formDisabled}
                 onChange={(feedType) => setFeeding((value) => ({ ...value, feed_type: feedType }))}
               />
               <div className="grid grid-cols-1 gap-3">
@@ -513,7 +536,7 @@ export default function RecordPage() {
                       inputMode="numeric"
                       value={feeding.amount_ml}
                       onChange={(event) => setFeeding((value) => ({ ...value, amount_ml: event.target.value }))}
-                      disabled={!canWrite}
+                      disabled={formDisabled}
                       className={inputClass}
                     />
                   </label>
@@ -528,7 +551,7 @@ export default function RecordPage() {
                       inputMode="numeric"
                       value={feeding.duration_min}
                       onChange={(event) => setFeeding((value) => ({ ...value, duration_min: event.target.value }))}
-                      disabled={!canWrite}
+                      disabled={formDisabled}
                       className={inputClass}
                     />
                   </label>
@@ -540,7 +563,7 @@ export default function RecordPage() {
                   rows={3}
                   value={feeding.notes}
                   onChange={(event) => setFeeding((value) => ({ ...value, notes: event.target.value }))}
-                  disabled={!canWrite}
+                  disabled={formDisabled}
                   className={`${inputClass} py-3`}
                   placeholder="例如：精神好，喝完后拍嗝顺利"
                 />
@@ -558,7 +581,7 @@ export default function RecordPage() {
                     required
                     value={sleep.sleep_start}
                     onChange={(event) => setSleep((value) => ({ ...value, sleep_start: event.target.value }))}
-                    disabled={!canWrite}
+                    disabled={formDisabled}
                     min={minDateTime}
                     max={maxDateTime}
                     className={inputClass}
@@ -570,7 +593,7 @@ export default function RecordPage() {
                     type="datetime-local"
                     value={sleep.sleep_end}
                     onChange={(event) => setSleep((value) => ({ ...value, sleep_end: event.target.value }))}
-                    disabled={!canWrite}
+                    disabled={formDisabled}
                     min={minDateTime}
                     max={maxDateTime}
                     className={inputClass}
@@ -583,7 +606,7 @@ export default function RecordPage() {
                   ariaLabel="睡眠类型"
                   options={sleepTypeOptions}
                   value={sleep.sleep_type}
-                  disabled={!canWrite}
+                  disabled={formDisabled}
                   onChange={(sleepType) =>
                     setSleep((value) => ({
                       ...value,
@@ -601,7 +624,7 @@ export default function RecordPage() {
                       inputMode="numeric"
                       value={sleep.night_wakings}
                       onChange={(event) => setSleep((value) => ({ ...value, night_wakings: event.target.value }))}
-                      disabled={!canWrite}
+                      disabled={formDisabled}
                       className={inputClass}
                     />
                   </label>
@@ -613,7 +636,7 @@ export default function RecordPage() {
                   rows={2}
                   value={sleep.notes}
                   onChange={(event) => setSleep((value) => ({ ...value, notes: event.target.value }))}
-                  disabled={!canWrite}
+                  disabled={formDisabled}
                   className={`${inputClass} py-3`}
                   placeholder={sleep.sleep_type === 'night' ? '例如：胀气醒、换尿布后继续睡' : '例如：入睡方式、醒来状态'}
                 />
@@ -630,7 +653,7 @@ export default function RecordPage() {
                   required
                   value={growth.measurement_date}
                   onChange={(event) => setGrowth((value) => ({ ...value, measurement_date: event.target.value }))}
-                  disabled={!canWrite}
+                  disabled={formDisabled}
                   min={birthDate}
                   max={maxDate}
                   className={inputClass}
@@ -648,12 +671,14 @@ export default function RecordPage() {
                     inputMode="numeric"
                     value={growth.weight_g}
                     onChange={(event) => setGrowth((value) => ({ ...value, weight_g: event.target.value }))}
-                    disabled={!canWrite}
+                    disabled={formDisabled}
                     className={inputClass}
                   />
-                  <span className={helperClass}>
-                    {formatP50Hint(growthReference, growthReferenceLoading, 'weight_g', 'g')}
-                  </span>
+                  {canShowGrowthReference ? (
+                    <span className={helperClass}>
+                      {formatP50Hint(growthReference, growthReferenceLoading, 'weight_g', 'g')}
+                    </span>
+                  ) : null}
                 </div>
                 <div>
                   <label className={labelClass} htmlFor="growth-height">
@@ -667,12 +692,14 @@ export default function RecordPage() {
                     inputMode="decimal"
                     value={growth.height_cm}
                     onChange={(event) => setGrowth((value) => ({ ...value, height_cm: event.target.value }))}
-                    disabled={!canWrite}
+                    disabled={formDisabled}
                     className={inputClass}
                   />
-                  <span className={helperClass}>
-                    {formatP50Hint(growthReference, growthReferenceLoading, 'height_cm', 'cm')}
-                  </span>
+                  {canShowGrowthReference ? (
+                    <span className={helperClass}>
+                      {formatP50Hint(growthReference, growthReferenceLoading, 'height_cm', 'cm')}
+                    </span>
+                  ) : null}
                 </div>
                 <div>
                   <label className={labelClass} htmlFor="growth-head">
@@ -686,15 +713,17 @@ export default function RecordPage() {
                     inputMode="decimal"
                     value={growth.head_cm}
                     onChange={(event) => setGrowth((value) => ({ ...value, head_cm: event.target.value }))}
-                    disabled={!canWrite}
+                    disabled={formDisabled}
                     className={inputClass}
                   />
-                  <span className={helperClass}>
-                    {formatP50Hint(growthReference, growthReferenceLoading, 'head_cm', 'cm')}
-                  </span>
+                  {canShowGrowthReference ? (
+                    <span className={helperClass}>
+                      {formatP50Hint(growthReference, growthReferenceLoading, 'head_cm', 'cm')}
+                    </span>
+                  ) : null}
                 </div>
               </div>
-              {growthReferenceUnavailable ? (
+              {growthReferenceUnavailable && canShowGrowthReference ? (
                 <p className="text-[11px] italic leading-tight text-mid-gray">WHO P50 暂时不可用，可先保存实际测量值。</p>
               ) : null}
               <label className={labelClass}>
@@ -703,7 +732,7 @@ export default function RecordPage() {
                   rows={2}
                   value={growth.notes}
                   onChange={(event) => setGrowth((value) => ({ ...value, notes: event.target.value }))}
-                  disabled={!canWrite}
+                  disabled={formDisabled}
                   className={`${inputClass} py-3`}
                   placeholder="例如：家用软尺测量、饭后称重、复查时记录"
                 />
@@ -720,7 +749,7 @@ export default function RecordPage() {
                   required
                   value={health.record_date}
                   onChange={(event) => setHealth((value) => ({ ...value, record_date: event.target.value }))}
-                  disabled={!canWrite}
+                  disabled={formDisabled}
                   min={birthDate}
                   max={maxDate}
                   className={inputClass}
@@ -732,7 +761,7 @@ export default function RecordPage() {
                 options={healthTypeOptions}
                 value={health.record_type}
                 columns={3}
-                disabled={!canWrite}
+                disabled={formDisabled}
                 onChange={(recordType) => setHealth((value) => ({ ...value, record_type: recordType }))}
               />
               <label className={labelClass}>
@@ -742,7 +771,7 @@ export default function RecordPage() {
                   maxLength={200}
                   value={health.title}
                   onChange={(event) => setHealth((value) => ({ ...value, title: event.target.value }))}
-                  disabled={!canWrite}
+                  disabled={formDisabled}
                   className={inputClass}
                   placeholder="例如：儿保复查"
                 />
@@ -753,7 +782,7 @@ export default function RecordPage() {
                   rows={3}
                   value={health.description}
                   onChange={(event) => setHealth((value) => ({ ...value, description: event.target.value }))}
-                  disabled={!canWrite}
+                  disabled={formDisabled}
                   className={`${inputClass} py-3`}
                   placeholder="记录医生建议、症状或观察重点"
                 />
@@ -774,7 +803,7 @@ export default function RecordPage() {
             </p>
           ) : null}
 
-          <Button type="submit" loading={submitting} disabled={!canWrite} className="w-full">
+          <Button type="submit" loading={submitting} disabled={formDisabled} className="w-full">
             保存{activeCard.label}
           </Button>
         </form>

@@ -32,7 +32,7 @@ describe('api mock layer', () => {
     expect(login.user.role).toBe('妈妈');
     window.localStorage.setItem('access_token', login.access_token);
     expect((await api.getMe()).username).toBe('mama');
-    expect((await api.getDashboardSummary()).baby.name).toBe('晨晨');
+    expect((await api.getDashboardSummary()).baby?.name).toBe('晨晨');
     expect((await api.getPhotos()).items[0].tags.length).toBeGreaterThan(0);
   });
 
@@ -51,7 +51,7 @@ describe('api mock layer', () => {
     expect(growth.notes).toBe('家用体重秤测量');
     expect((await api.getGrowthChart()).records.some((record) => record.date === '2026-05-02')).toBe(true);
     expect((await api.getDashboardSummary()).latest_growth?.date).toBe('2026-05-02');
-    expect((await api.getGrowthReferenceP50('2026-04-29')).age_display).toBeTruthy();
+    expect((await api.getGrowthReferenceP50('2026-04-29'))?.age_display).toBeTruthy();
 
     const feeding = await api.createFeedingRecord({
       feed_time: '2026-04-29T15:30:00+08:00',
@@ -102,6 +102,57 @@ describe('api mock layer', () => {
   it('throws ApiError for non-401 mock errors', async () => {
     await expect(api.getConversation('missing')).rejects.toBeInstanceOf(ApiError);
     await expect(api.getConversation('missing')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('registers a mock family without creating a session or baby', async () => {
+    const response = await api.registerFamily({
+      invite_code: '2026',
+      family_name: '新家庭 API',
+      username: 'registered-api',
+      password: 'secret123',
+      display_name: '新爸爸',
+      role: '爸爸',
+    });
+
+    expect(response.user.username).toBe('registered-api');
+    expect('access_token' in response).toBe(false);
+    expect(window.localStorage.getItem('access_token')).toBeNull();
+
+    const login = await api.login({ username: 'registered-api', password: 'secret123' });
+    window.localStorage.setItem('access_token', login.access_token);
+    expect(await api.getBaby()).toBeNull();
+    expect((await api.getDashboardSummary()).baby).toBeNull();
+    expect((await api.getConversations()).items).toEqual([]);
+    const conversation = await api.createConversation();
+    expect(conversation.message_count).toBe(0);
+    expect((await api.getConversations()).items.map((item) => item.id)).toContain(conversation.id);
+    await expect(
+      api.createFeedingRecord({
+        feed_time: '2026-04-29T15:30:00+08:00',
+        feed_type: 'breast',
+        duration_min: 10,
+      }),
+    ).rejects.toMatchObject({ status: 422, message: '请先在家庭页创建宝宝档案' });
+  });
+
+  it('uses FastAPI detail when real HTTP requests fail', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: '家庭名称已存在' }), {
+        status: 409,
+      }),
+    );
+
+    await expect(
+      api.registerFamily({
+        invite_code: '2026',
+        family_name: '重复家庭',
+        username: 'dup',
+        password: 'secret123',
+        display_name: '重复',
+        role: '妈妈',
+      }),
+    ).rejects.toMatchObject({ status: 409, message: '家庭名称已存在' });
   });
 
   it('reads and updates markdown memory files in mock mode', async () => {

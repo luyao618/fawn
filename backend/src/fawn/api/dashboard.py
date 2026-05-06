@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +16,7 @@ from fawn.api.schemas import (
 )
 from fawn.db.session import get_db
 from fawn.dependencies import get_current_user
-from fawn.models import FeedingRecord, GrowthRecord, SleepRecord, User, WhoGrowthReference
+from fawn.models import Baby, FeedingRecord, GrowthRecord, SleepRecord, User, WhoGrowthReference
 from fawn.services.tracker import (
     NotFound,
     calculate_age_months,
@@ -77,8 +77,10 @@ def dashboard_local_date(value: datetime) -> date:
     return value.astimezone(DASHBOARD_TIMEZONE).date()
 
 
-def dashboard_stats_start_date(today: date, birth_date: date, days: int) -> date:
+def dashboard_stats_start_date(today: date, birth_date: date | None, days: int) -> date:
     requested_start = today - timedelta(days=days - 1)
+    if birth_date is None:
+        return requested_start
     return min(today, max(requested_start, birth_date))
 
 
@@ -104,6 +106,61 @@ def growth_reference_span_months(
     return start, end
 
 
+def empty_who_reference() -> dict[str, WHOReferenceLines]:
+    return {
+        indicator: WHOReferenceLines(**{key: [] for key in PERCENTILE_Z})
+        for indicator in ("weight", "height", "head")
+    }
+
+
+def baby_summary_payload(baby: Baby, today: date) -> dict:
+    age_days = (today - baby.birth_date).days if baby.birth_date is not None else None
+    return {
+        "name": baby.name,
+        "gender": baby.gender,
+        "birth_date": baby.birth_date,
+        "age_days": age_days,
+        "age_display": age_display(age_days) if age_days is not None else None,
+    }
+
+
+def empty_feeding_stats(today: date, days: int) -> FeedingStatsData:
+    start_date = today - timedelta(days=days - 1)
+    daily = [
+        {
+            "date": (start_date + timedelta(days=index)).isoformat(),
+            "total_ml": 0,
+            "breast_duration_min": 0,
+            "count": 0,
+        }
+        for index in range(days)
+    ]
+    return FeedingStatsData(
+        days=days,
+        daily=daily,
+        average_daily_ml=0.0,
+        average_daily_breast_duration_min=0.0,
+        average_daily_count=0.0,
+    )
+
+
+def empty_sleep_stats(today: date, days: int) -> SleepStatsData:
+    start_date = today - timedelta(days=days - 1)
+    return SleepStatsData(
+        days=days,
+        daily=[
+            {
+                "date": (start_date + timedelta(days=index)).isoformat(),
+                "total_hours": None,
+                "night_wakings": None,
+            }
+            for index in range(days)
+        ],
+        average_daily_hours=None,
+        average_night_wakings=None,
+    )
+
+
 @router.get("/summary", response_model=DashboardSummary)
 async def summary(
     user: User = Depends(get_current_user),
@@ -111,10 +168,19 @@ async def summary(
 ) -> DashboardSummary:
     try:
         baby = await get_default_baby(db, user.family_id)
-    except NotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except NotFound:
+        return DashboardSummary(
+            baby=None,
+            latest_growth=None,
+            today_feeding={
+                "total_ml": 0,
+                "breast_duration_min": 0,
+                "count": 0,
+                "last_feed_time": None,
+            },
+            today_sleep={"total_hours": None, "night_wakings": None},
+        )
     today = dashboard_today()
-    age_days = (today - baby.birth_date).days
 
     latest_growth = await db.scalar(
         select(GrowthRecord)
@@ -167,13 +233,7 @@ async def summary(
     )
 
     return DashboardSummary(
-        baby={
-            "name": baby.name,
-            "gender": baby.gender,
-            "birth_date": baby.birth_date.isoformat(),
-            "age_days": age_days,
-            "age_display": age_display(age_days),
-        },
+        baby=baby_summary_payload(baby, today),
         latest_growth=latest_growth_payload,
         today_feeding={
             "total_ml": total_ml,
@@ -197,8 +257,8 @@ async def growth_chart(
 ) -> GrowthChartData:
     try:
         baby = await get_default_baby(db, user.family_id)
-    except NotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except NotFound:
+        return GrowthChartData(records=[], who_reference=empty_who_reference())
     records = list(
         (
             await db.execute(
@@ -208,6 +268,20 @@ async def growth_chart(
             )
         ).scalars()
     )
+    if baby.birth_date is None or baby.gender is None:
+        return GrowthChartData(
+            records=[
+                {
+                    "date": record.measurement_date.isoformat(),
+                    "weight_g": record.weight_g,
+                    "height_cm": decimal_float(record.height_cm),
+                    "head_cm": decimal_float(record.head_cm),
+                }
+                for record in records
+            ],
+            who_reference=empty_who_reference(),
+        )
+
     record_ages = [calculate_age_months(baby, record.measurement_date) for record in records]
     reference_start_months, reference_end_months = growth_reference_span_months(
         calculate_age_months(baby, dashboard_today()), record_ages
@@ -253,16 +327,18 @@ async def growth_chart(
     )
 
 
-@router.get("/growth-reference-p50", response_model=GrowthReferenceP50)
+@router.get("/growth-reference-p50", response_model=GrowthReferenceP50 | None)
 async def growth_reference_p50(
     measurement_date: date = Query(...),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> GrowthReferenceP50:
+) -> GrowthReferenceP50 | None:
     try:
         baby = await get_default_baby(db, user.family_id)
-    except NotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except NotFound:
+        return None
+    if baby.birth_date is None or baby.gender is None:
+        return None
 
     age_days = (measurement_date - baby.birth_date).days
     values = {
@@ -286,8 +362,8 @@ async def feeding_stats(
 ) -> FeedingStatsData:
     try:
         baby = await get_default_baby(db, user.family_id)
-    except NotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except NotFound:
+        return empty_feeding_stats(dashboard_today(), days)
     today = dashboard_today()
     start_date = dashboard_stats_start_date(today, baby.birth_date, days)
     day_count = (today - start_date).days + 1
@@ -340,8 +416,8 @@ async def sleep_stats(
 ) -> SleepStatsData:
     try:
         baby = await get_default_baby(db, user.family_id)
-    except NotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except NotFound:
+        return empty_sleep_stats(dashboard_today(), days)
     today = dashboard_today()
     start_date = dashboard_stats_start_date(today, baby.birth_date, days)
     day_count = (today - start_date).days + 1

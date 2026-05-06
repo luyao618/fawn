@@ -8,6 +8,7 @@ class Family(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "families"
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name_key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
 
     users = relationship("User", back_populates="family")
     babies = relationship("Baby", back_populates="family")

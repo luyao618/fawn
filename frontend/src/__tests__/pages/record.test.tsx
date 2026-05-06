@@ -152,4 +152,23 @@ describe('record page', () => {
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('当前账号只有查看权限'));
     expect(screen.getByRole('button', { name: '保存喂养' })).toBeDisabled();
   });
+
+  it('disables save and links to profile when no baby exists', async () => {
+    await api.registerFamily({
+      invite_code: '2026',
+      family_name: 'Record 空宝宝家庭',
+      username: 'record-empty-baby',
+      password: 'secret123',
+      display_name: 'Record 爸爸',
+      role: '爸爸',
+    });
+    useAuthStore.getState().logout();
+    await useAuthStore.getState().login('record-empty-baby', 'secret123');
+
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByText('还没有宝宝档案，暂时不能保存记录。')).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: '去家庭页' })).toHaveAttribute('href', '/profile');
+    expect(screen.getByRole('button', { name: '保存喂养' })).toBeDisabled();
+  });
 });

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.models import Baby
@@ -17,7 +18,32 @@ async def test_get_baby(client: AsyncClient, auth_headers: dict, test_baby: Baby
 
 async def test_get_baby_not_found(client: AsyncClient, auth_headers: dict):
     response = await client.get("/api/baby", headers=auth_headers)
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert response.json() is None
+
+
+async def test_update_baby_creates_profile_when_missing(
+    client: AsyncClient,
+    auth_headers: dict,
+    db: AsyncSession,
+) -> None:
+    response = await client.patch(
+        "/api/baby",
+        json={"name": None, "gender": None, "birth_date": None},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] is None
+    assert data["gender"] is None
+    assert data["birth_date"] is None
+
+    baby = await db.scalar(select(Baby))
+    assert baby is not None
+    assert baby.name is None
+    assert baby.gender is None
+    assert baby.birth_date is None
 
 
 async def test_update_baby(client: AsyncClient, auth_headers: dict, test_baby: Baby):
@@ -28,6 +54,29 @@ async def test_update_baby(client: AsyncClient, auth_headers: dict, test_baby: B
     )
     assert response.status_code == 200
     assert response.json()["name"] == "New Name"
+
+
+async def test_update_baby_persists_explicit_nulls(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+    db: AsyncSession,
+) -> None:
+    response = await client.patch(
+        "/api/baby",
+        json={"name": None, "gender": None, "birth_date": None},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] is None
+    assert data["gender"] is None
+    assert data["birth_date"] is None
+    await db.refresh(test_baby)
+    assert test_baby.name is None
+    assert test_baby.gender is None
+    assert test_baby.birth_date is None
 
 
 async def test_update_baby_syncs_markdown(
