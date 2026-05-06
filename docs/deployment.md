@@ -36,9 +36,10 @@ docker compose down -v
 服务器需要：
 
 - Linux / NAS shell 环境。
-- Docker 和 Docker Compose。
+- Docker 和 Docker Compose v2。本文的生产 override 示例使用 Compose `!override`，建议使用较新的 Compose 插件。
 - Git。
 - 能被 backend 容器访问的 LLM / embedding API。
+- 如果公网访问，建议准备 Nginx/Caddy/Traefik 等反向代理和 HTTPS 证书工具。
 - 仓库里带有知识库 seed 文件：
   - `backend/seeds/knowledge_seed.sql.gz`
   - `backend/seeds/knowledge_seed.provenance.json`
@@ -67,6 +68,16 @@ git status
 git branch --show-current
 ```
 
+生产机器上会有本地环境文件和 override 文件。它们通常不提交到仓库：
+
+```bash
+.env
+backend/.env
+docker-compose.override.yml
+```
+
+这些文件应加入 `.gitignore`，避免把密钥、邀请码、对象存储密码或 Raven/OpenAI key 推到 GitHub。
+
 ### 2.3 配置 Compose 变量
 
 仓库根目录的 `.env` 会被 Docker Compose 用来做变量插值。生产部署建议创建：
@@ -79,8 +90,11 @@ NEXT_PUBLIC_API_URL=/api
 NEXT_PUBLIC_USE_MOCK=false
 INTERNAL_API_URL=http://backend:8000
 JWT_SECRET=replace-with-a-long-random-production-secret
-MINIO_PUBLIC_ENDPOINT=127.0.0.1:9000
-MINIO_PUBLIC_USE_SSL=false
+POSTGRES_PASSWORD=replace-with-a-long-random-db-password
+MINIO_ROOT_USER=fawnminio
+MINIO_ROOT_PASSWORD=replace-with-a-long-random-minio-password
+MINIO_PUBLIC_ENDPOINT=your-domain.com
+MINIO_PUBLIC_USE_SSL=true
 MINIO_REGION=us-east-1
 EOF
 ```
@@ -88,7 +102,9 @@ EOF
 必须修改：
 
 - `JWT_SECRET`: 生产环境必须是长随机字符串。不要使用默认值。
-- `MINIO_PUBLIC_ENDPOINT`: 浏览器访问照片时使用的地址。如果只在局域网使用，可以设为服务器局域网 IP 加端口，例如 `192.168.1.20:9000`。
+- `POSTGRES_PASSWORD`: 首次初始化数据库前设置。数据库 volume 创建后不要随意更改，否则容器环境变量和数据库内已有密码会不一致。
+- `MINIO_ROOT_PASSWORD`: 首次初始化 MinIO 前设置。不要使用默认 `minioadmin`。
+- `MINIO_PUBLIC_ENDPOINT`: 浏览器访问照片时使用的地址。如果走单域名 HTTPS 反向代理，填域名，不带协议，例如 `your-domain.com`。
 
 如果前端、后端都走同一个域名和反向代理，保留：
 
@@ -98,6 +114,15 @@ INTERNAL_API_URL=http://backend:8000
 ```
 
 注意：`NEXT_PUBLIC_*` 会在 frontend 镜像构建时写入前端产物。修改这些值后，需要重新执行 `docker compose up -d --build`。
+
+如果只在局域网裸端口访问 MinIO，可以改成：
+
+```bash
+MINIO_PUBLIC_ENDPOINT=192.168.1.20:9000
+MINIO_PUBLIC_USE_SSL=false
+```
+
+如果公网页面是 HTTPS，照片 URL 也必须是 HTTPS，否则浏览器会拦截混合内容。
 
 ### 2.4 配置 backend 环境变量
 
@@ -143,9 +168,72 @@ Docker Compose 会覆盖 backend 容器内的这些变量：
 
 其中 `JWT_SECRET` 在 Docker 部署中以仓库根目录 `.env` 为准，不要只改 `backend/.env`。
 
-如果你的 OpenAI-compatible API 代理运行在同一台 Linux 宿主机上，`host.docker.internal` 不一定可用。更稳妥的做法是把 `OPENAI_API_BASE` 改成容器可访问的内网地址或反向代理地址。
+如果你的 OpenAI-compatible API 代理运行在同一台 Linux 宿主机上，backend 容器需要能访问宿主机端口。常见做法是在 backend 服务里加入：
 
-### 2.5 配置初始 seed 用户
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+同时让宿主机上的代理监听 Docker 可达地址，例如 Docker bridge 网关 `172.17.0.1`，而不是只监听 `127.0.0.1`。如果代理只监听 `127.0.0.1`，容器访问 `host.docker.internal:7024` 通常仍会失败。
+
+如果启用了 UFW/firewalld，还要允许 Docker bridge 到宿主机代理端口，例如允许 Fawn Docker 网络访问 `172.17.0.1:7024`。
+
+### 2.5 收口 Docker 端口
+
+仓库默认 `docker-compose.yml` 适合快速启动，会把 `3000`、`8000`、`5432`、`9000`、`9001` 映射到宿主机。生产环境建议使用本地 `docker-compose.override.yml` 收口端口，只让 Nginx/Caddy 暴露 `80/443`。
+
+示例 override：
+
+```yaml
+services:
+  postgres:
+    restart: unless-stopped
+    ports: !override []
+    environment:
+      POSTGRES_USER: fawn
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: fawn
+
+  minio:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+
+  minio-init:
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required} ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required};
+      mc mb local/fawn --ignore-existing;
+      exit 0;
+      "
+
+  backend:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fawn:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/fawn
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+
+  frontend:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+```
+
+不要把 `docker-compose.override.yml` 提交到仓库，除非它不含任何本机部署假设或密钥。
+
+`docker compose config` 会展开并打印 `.env` 中的密钥。可以在本机排查时使用，但不要把输出粘贴到 issue、PR 或聊天记录里。
+
+### 2.6 配置初始 seed 用户
 
 backend 启动时会检查是否存在真实的家庭 seed 配置：
 
@@ -173,7 +261,7 @@ cp backend/config/family.yaml.example backend/config/family.yaml
 
 不要在生产环境保留 `change-me` 这样的示例密码。
 
-### 2.6 启动
+### 2.7 启动
 
 在仓库根目录执行：
 
@@ -198,7 +286,7 @@ uvicorn fawn.main:app --host 0.0.0.0 --port 8000
 - `seed_knowledge --idempotent` 会比较 seed hash。hash 一致就跳过；hash 变化时只重建知识库相关表。
 - `seed_who_data --idempotent` 已有 WHO 数据时会跳过。
 
-### 2.7 验证
+### 2.8 验证
 
 ```bash
 docker compose ps
@@ -214,6 +302,25 @@ docker compose exec -T backend python -m scripts.eval_knowledge
 - readiness 输出 `Knowledge readiness passed.`。
 - eval 输出的核心检查为 `[PASS]`。
 
+如果 backend 通过同机 Raven/OpenAI-compatible 代理访问模型，可以额外验证容器内是否能访问 embeddings 和聊天模型：
+
+```bash
+docker compose exec -T backend python - <<'PY'
+from fawn.config import get_settings
+from langchain_openai import OpenAIEmbeddings
+
+s = get_settings()
+emb = OpenAIEmbeddings(
+    model=s.llm.embedding_model,
+    dimensions=s.llm.embedding_dimensions,
+    api_key=s.llm.openai_api_key,
+    base_url=s.llm.openai_api_base,
+    check_embedding_ctx_length=False,
+)
+print("embedding_dimensions", len(emb.embed_query("hello")))
+PY
+```
+
 查看日志：
 
 ```bash
@@ -221,7 +328,7 @@ docker compose logs -f backend
 docker compose logs -f frontend
 ```
 
-### 2.8 首次使用
+### 2.9 首次使用
 
 默认地址：
 
@@ -250,6 +357,7 @@ docker compose logs -f frontend
 
 - `https://your-domain/` 代理到 frontend `3000`。
 - `https://your-domain/api/*` 代理到 backend `8000`。
+- `https://your-domain/fawn/*` 代理到 MinIO `9000`，用于私有 bucket 的 presigned 照片 URL。
 - 前端保持 `NEXT_PUBLIC_API_URL=/api`。
 
 照片访问依赖 `MINIO_PUBLIC_ENDPOINT`。如果照片需要通过 HTTPS 域名访问，设置：
@@ -264,6 +372,102 @@ MINIO_PUBLIC_USE_SSL=true
 ```bash
 MINIO_PUBLIC_ENDPOINT=192.168.1.20:9000
 MINIO_PUBLIC_USE_SSL=false
+```
+
+### 3.1 单域名 Nginx 示例
+
+下面示例使用单域名：
+
+- `/` 转发到 frontend。
+- `/api/` 转发到 backend，并关闭 buffering，保证聊天 SSE 流式输出正常。
+- `/fawn/` 转发到 MinIO。bucket 仍是 private，只有后端生成的 presigned URL 能访问照片。
+
+先安装 Nginx 并配置 HTTP：
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name your-domain.com;
+
+    client_max_body_size 100m;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /fawn/ {
+        access_log off;
+        proxy_pass http://127.0.0.1:9000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+然后申请 HTTPS 证书：
+
+```bash
+certbot --nginx -d your-domain.com
+```
+
+Certbot 会把 443 证书配置写入对应 Nginx site，并配置自动续期。部署后验证：
+
+```bash
+curl -fsS https://your-domain.com/api/health
+curl -I http://your-domain.com
+```
+
+`/fawn/` 不带 presigned query 时返回 `403` 是正常的，说明 MinIO bucket 没有公开。
+
+### 3.2 只开放 80/443 时的防火墙建议
+
+应用端口建议只绑定 `127.0.0.1`，公网入站只放行：
+
+```bash
+ufw allow OpenSSH
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw enable
+```
+
+如果 backend 需要访问宿主机上的 Raven/OpenAI-compatible 代理，还需要允许 Docker bridge 访问该代理端口。示例：
+
+```bash
+ufw allow in on br-xxxxxxxxxxxx to 172.17.0.1 port 7024 proto tcp
+```
+
+实际 bridge 名称和网段用下面命令确认：
+
+```bash
+ip -4 addr show type bridge
+docker network inspect fawn_default
 ```
 
 ## 4. 更新部署且保留已有数据
@@ -351,6 +555,8 @@ git pull --ff-only origin main
 
 如果 `git pull --ff-only` 失败，说明服务器本地分支有分叉或本地提交。先处理 Git 状态，不要强行 reset 生产目录。
 
+本地 `.env`、`backend/.env`、`docker-compose.override.yml` 应该被 `.gitignore` 忽略，不会被 `git pull` 覆盖。升级前确认这些文件仍然存在。
+
 ### 4.4 重建并启动
 
 ```bash
@@ -363,6 +569,8 @@ docker compose up -d --build
 - 按需重建并替换容器。
 - 保留已有 Docker volumes。
 - 启动 backend 时自动执行 Alembic migration、知识库 seed、WHO 数据 seed；如果容器内存在真实 `FAWN_FAMILY_CONFIG` / `config/family.yaml`，还会执行幂等用户 seed。
+
+如果本次代码修改了 `NEXT_PUBLIC_*`、Nginx 代理路径或 Dockerfile，必须保留 `--build`。如果只改环境变量，也建议重建 frontend，避免前端构建产物仍使用旧值。
 
 不要执行：
 
@@ -400,6 +608,10 @@ docker compose logs --tail=200 backend
 - `seed_knowledge --idempotent` 只处理知识库 seed。seed hash 变化时会重建知识库相关表，不会删除家庭、账号、聊天、tracker 或照片数据。
 
 真正会删除数据的是 `docker compose down -v`、手动删 Docker volumes、手动删数据库表或手动清空 MinIO。
+
+还要避免随意修改 `COMPOSE_PROJECT_NAME`。Compose project name 会影响 volume 名称；如果从 `fawn` 改成别的名字，服务可能会创建一套新的空 volume，看起来像数据丢失。
+
+已初始化数据库后，不要直接改 `.env` 里的 `POSTGRES_PASSWORD` 并重启。Postgres 初始化密码只在空数据目录首次创建时生效，后续改环境变量不会自动修改数据库内用户密码。
 
 ## 5. 恢复备份
 
@@ -609,8 +821,15 @@ Docker 部署中 `docker-compose.yml` 显式设置 `JWT_SECRET`，它来自仓�
 确认：
 
 ```bash
-docker compose config | grep JWT_SECRET
+docker compose exec -T backend python - <<'PY'
+from fawn.config import get_settings
+
+secret = get_settings().jwt_secret
+print("jwt_secret_configured", bool(secret and "change-me" not in secret and "replace-with" not in secret))
+PY
 ```
+
+避免把 `docker compose config` 的完整输出粘贴到外部渠道，因为它会展开 `.env` 中的密钥。
 
 ### 注册邀请码没有生效
 
@@ -694,3 +913,24 @@ INTERNAL_API_URL=http://localhost:8000
 ### 本地 seed 失败并提示找不到 psql
 
 安装 PostgreSQL client，并确认 `psql` 在 `PATH` 中。Docker backend 镜像已经内置 `postgresql-client`，本地宿主机运行脚本时需要自行安装。
+
+### backend 容器访问不到宿主机 Raven / OpenAI-compatible 代理
+
+先确认 backend 容器里能解析 host gateway：
+
+```bash
+docker compose exec -T backend getent hosts host.docker.internal
+```
+
+如果没有结果，在 backend 服务中加入：
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+再确认宿主机代理不是只监听 `127.0.0.1`。在 Linux 上，容器访问 `host.docker.internal` 命中的通常是宿主机网关地址，不是宿主机 loopback。代理应监听 Docker 可达地址，例如 `172.17.0.1:7024`，或监听 `0.0.0.0` 并用防火墙限制公网访问。
+
+### `/fawn/` 返回 403
+
+直接打开 `/fawn/` 返回 `403` 是正常的。MinIO bucket 应保持 private，照片只能通过后端生成的 presigned URL 访问。只要登录后相册里的照片能显示，就不需要把 bucket 设为 public。
