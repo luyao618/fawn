@@ -24,7 +24,7 @@ Then open:
 - Backend API docs: http://localhost:8000/docs
 - MinIO console: http://localhost:9001
 
-`backend/config/family.yaml` defines the seeded family users. If it is missing, Docker falls back to `family.yaml.example` so the stack can still start, but real deployments should copy and edit it first.
+`backend/config/family.yaml` defines optional seeded family users. If it is missing, Docker skips user seeding; create the first family from the login page with the invite code, or provide a real seed config via `FAWN_FAMILY_CONFIG`.
 
 RAG knowledge is deployed from the prebuilt seed files in `backend/seeds/`. Keep `knowledge_seed.sql.gz` and `knowledge_seed.provenance.json` together, and rebuild them only when the corpus, manifest, chunking logic, or embedding configuration changes.
 

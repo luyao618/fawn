@@ -7,10 +7,11 @@ alembic upgrade head
 echo "Seeding users..."
 FAMILY_CONFIG="${FAWN_FAMILY_CONFIG:-config/family.yaml}"
 if [ ! -f "$FAMILY_CONFIG" ]; then
-  echo "WARNING: $FAMILY_CONFIG not found; using config/family.yaml.example."
-  FAMILY_CONFIG="config/family.yaml.example"
+  echo "No family seed config found at $FAMILY_CONFIG; skipping user seed."
+  echo "Use invite registration on the login page, or provide FAWN_FAMILY_CONFIG to seed users."
+else
+  python -m scripts.seed_users --config "$FAMILY_CONFIG" --idempotent
 fi
-python -m scripts.seed_users --config "$FAMILY_CONFIG" --idempotent
 
 echo "Seeding knowledge base..."
 python -m scripts.seed_knowledge --idempotent

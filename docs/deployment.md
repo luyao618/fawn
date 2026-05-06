@@ -147,22 +147,29 @@ Docker Compose 会覆盖 backend 容器内的这些变量：
 
 ### 2.5 配置初始 seed 用户
 
-backend 启动时会自动运行：
+backend 启动时会检查是否存在真实的家庭 seed 配置：
 
 ```bash
-python -m scripts.seed_users --config config/family.yaml --idempotent
+FAMILY_CONFIG="${FAWN_FAMILY_CONFIG:-config/family.yaml}"
+if [ -f "$FAMILY_CONFIG" ]; then
+  python -m scripts.seed_users --config "$FAMILY_CONFIG" --idempotent
+fi
 ```
 
-生产部署不要让它回退到示例配置。先复制并编辑：
+如果 `config/family.yaml` 不存在，Docker 部署会跳过用户 seed，不会回退执行 `family.yaml.example`。这是为了避免在生产环境自动创建示例账号。
+
+默认 Docker 部署推荐直接用登录页的邀请码注册创建第一个家庭。如果你想继续用 seed 方式创建第一个家庭和成员，先复制并编辑：
 
 ```bash
 cp backend/config/family.yaml.example backend/config/family.yaml
 ```
 
-`family.yaml` 的作用是保留旧的 seed_users 部署流程。现在系统也支持登录页邀请码注册新家庭，两种方式可以并存：
+`backend/config/family.yaml` 不会被默认镜像打包进去。Docker 部署要使用它时，需要通过 Compose override 或额外 volume 把真实配置挂载进 backend 容器，并把 `FAWN_FAMILY_CONFIG` 指向容器内路径。
+
+`family.yaml` 的作用是保留旧的 seed_users 部署流程。现在系统也支持登录页邀请码注册新家庭，两种方式可以并存，但生产部署不要使用示例配置：
 
 - 如果你想用 seed 方式创建第一个家庭和成员，就把 `family.yaml` 改成真实家庭、真实账号、强密码。
-- 如果你主要使用邀请码注册，也仍然要避免示例账号进入生产环境。至少把示例账号密码改掉，或只保留一个你自己知道的 bootstrap 账号。
+- 如果你主要使用邀请码注册，可以不提供 `family.yaml`，让系统跳过用户 seed。
 
 不要在生产环境保留 `change-me` 这样的示例密码。
 
@@ -178,7 +185,7 @@ backend 容器启动时会自动执行：
 
 ```bash
 alembic upgrade head
-python -m scripts.seed_users --config config/family.yaml --idempotent
+# 如果存在真实家庭 seed 配置，才执行 seed_users
 python -m scripts.seed_knowledge --idempotent
 python -m scripts.seed_who_data --csv seeds/who_growth_reference.csv --idempotent
 uvicorn fawn.main:app --host 0.0.0.0 --port 8000
@@ -355,7 +362,7 @@ docker compose up -d --build
 - 用最新代码重建 backend/frontend 镜像。
 - 按需重建并替换容器。
 - 保留已有 Docker volumes。
-- 启动 backend 时自动执行 Alembic migration 和幂等 seed。
+- 启动 backend 时自动执行 Alembic migration、知识库 seed、WHO 数据 seed；如果容器内存在真实 `FAWN_FAMILY_CONFIG` / `config/family.yaml`，还会执行幂等用户 seed。
 
 不要执行：
 
