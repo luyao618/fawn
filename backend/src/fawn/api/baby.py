@@ -12,15 +12,12 @@ from fawn.services import profile as profile_service
 router = APIRouter(prefix="/baby", tags=["baby"])
 
 
-@router.get("", response_model=BabyRead)
+@router.get("", response_model=BabyRead | None)
 async def get_baby(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    try:
-        return await profile_service.get_baby(db, user.family_id)
-    except profile_service.NotFound as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return await profile_service.get_baby_optional(db, user.family_id)
 
 
 @router.patch("", response_model=BabyRead)
@@ -32,7 +29,5 @@ async def update_baby(
     try:
         data = body.model_dump(exclude_unset=True)
         return await profile_service.update_baby(db, user.family_id, data)
-    except profile_service.NotFound as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except profile_service.MemorySyncError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

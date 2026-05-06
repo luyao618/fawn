@@ -46,9 +46,12 @@ export default function AlbumPage() {
 
   async function upload(file: File) {
     setUploading(true);
+    setErrorMessage(null);
     try {
       await api.uploadPhoto(file);
       await loadPhotos();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '照片上传失败，请稍后再试。');
     } finally {
       setUploading(false);
     }

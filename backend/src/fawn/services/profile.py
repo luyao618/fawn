@@ -164,20 +164,28 @@ async def delete_family_profile_item(
 
 
 async def get_baby(db: AsyncSession, family_id: uuid.UUID) -> Baby:
-    baby = await db.scalar(
-        select(Baby).where(Baby.family_id == family_id).order_by(Baby.created_at.asc()).limit(1)
-    )
+    baby = await get_baby_optional(db, family_id)
     if baby is None:
         raise NotFound("Baby profile not found")
     return baby
 
 
+async def get_baby_optional(db: AsyncSession, family_id: uuid.UUID) -> Baby | None:
+    baby = await db.scalar(
+        select(Baby).where(Baby.family_id == family_id).order_by(Baby.created_at.asc()).limit(1)
+    )
+    return baby
+
+
 async def update_baby(db: AsyncSession, family_id: uuid.UUID, data: dict[str, Any]) -> Baby:
-    baby = await get_baby(db, family_id)
+    baby = await get_baby_optional(db, family_id)
+    if baby is None:
+        baby = Baby(family_id=family_id)
+        db.add(baby)
     allowed = {"name", "gender", "birth_date", "birth_weight_g", "birth_height_cm",
                "birth_head_cm", "is_premature", "gestational_weeks"}
     for key, value in data.items():
-        if key in allowed and value is not None:
+        if key in allowed:
             setattr(baby, key, value)
     await db.flush()
     await _sync_or_rollback(

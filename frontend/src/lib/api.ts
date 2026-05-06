@@ -45,6 +45,8 @@ import type {
   PhotoDownloadResponse,
   PhotoTag,
   ProfileItem,
+  RegistrationRequest,
+  RegistrationResponse,
   SleepRecordCreate,
   SleepRecord,
   SleepStatsData,
@@ -122,6 +124,87 @@ function requireMockUser(): User {
   return user;
 }
 
+const mockBabyProfiles = new Map<string, Baby | null>();
+const mockFamiliesByUsername = new Map<string, Family>();
+const mockPasswordsByUsername = new Map<string, string>();
+
+interface MockChatData {
+  conversations: Conversation[];
+  messages: Message[];
+}
+
+const mockChatDataByFamilyId = new Map<string, MockChatData>([
+  [mockFamily.id, { conversations: mockConversations, messages: mockMessages }],
+]);
+
+function currentMockUser(): User | null {
+  return tokenToUser(getAuthToken());
+}
+
+function currentMockBaby(): Baby | null {
+  const user = currentMockUser();
+  if (!user) return mockBaby;
+  return mockBabyProfiles.has(user.username) ? mockBabyProfiles.get(user.username)! : mockBaby;
+}
+
+function usesSharedMockData() {
+  return currentMockBaby()?.id === mockBaby.id;
+}
+
+function currentMockFamily(): Family {
+  const user = currentMockUser();
+  return (user ? mockFamiliesByUsername.get(user.username) : null) ?? mockFamily;
+}
+
+function currentMockChatData(): MockChatData {
+  const familyId = currentMockUser()?.family_id ?? mockFamily.id;
+  let data = mockChatDataByFamilyId.get(familyId);
+  if (!data) {
+    data = { conversations: [], messages: [] };
+    mockChatDataByFamilyId.set(familyId, data);
+  }
+  return data;
+}
+
+function setCurrentMockBaby(baby: Baby | null) {
+  const user = requireMockUser();
+  mockBabyProfiles.set(user.username, baby);
+  if (baby && ['admin', 'mama', 'nainai', 'doctor'].includes(user.username)) {
+    Object.assign(mockBaby, baby);
+  }
+}
+
+function ensureMockBaby() {
+  if (!currentMockBaby()) {
+    throw new ApiError(422, '请先在家庭页创建宝宝档案');
+  }
+}
+
+function displayMockFamilyName(value: string) {
+  const name = value.trim().replace(/\s+/g, ' ');
+  if (!name) throw new ApiError(422, '家庭名称不能为空');
+  return name;
+}
+
+function normalizeMockFamilyName(value: string) {
+  return displayMockFamilyName(value).toLocaleLowerCase();
+}
+
+function apiErrorMessage(body: unknown, fallback: string) {
+  const payload = body as { detail?: unknown; message?: unknown } | null;
+  const detail = payload?.detail ?? payload?.message;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === 'object' && 'msg' in item) return String(item.msg);
+        return String(item);
+      })
+      .join('；');
+  }
+  if (detail && typeof detail === 'object') return JSON.stringify(detail);
+  return detail ? String(detail) : fallback;
+}
+
 function paginate<T>(items: T[], page = 1, page_size = 20): PaginatedResponse<T> {
   const start = (page - 1) * page_size;
   return {
@@ -147,6 +230,83 @@ function ageDisplay(ageDays: number) {
   const months = Math.floor(ageDays / 30);
   const days = ageDays % 30;
   return months <= 0 ? `${days}天` : `${months}个月${days}天`;
+}
+
+function emptyReferenceLines(): GrowthChartData['who_reference'] {
+  const lines = { p3: [], p15: [], p50: [], p85: [], p97: [] };
+  return {
+    weight: clone(lines),
+    height: clone(lines),
+    head: clone(lines),
+  };
+}
+
+function emptyDailyDates(days: number) {
+  const today = new Date(currentMockDate());
+  return Array.from({ length: days }, (_, index) => {
+    const day = new Date(today);
+    day.setDate(today.getDate() - (days - 1 - index));
+    return day.toISOString().slice(0, 10);
+  });
+}
+
+function emptyMockDashboardSummary(): DashboardSummary {
+  return {
+    baby: null,
+    latest_growth: null,
+    today_feeding: {
+      total_ml: 0,
+      breast_duration_min: 0,
+      count: 0,
+      last_feed_time: null,
+    },
+    today_sleep: {
+      total_hours: null,
+      night_wakings: null,
+    },
+  };
+}
+
+function mockSummaryForBaby(baby: Baby): DashboardSummary {
+  if (baby.id === mockBaby.id) return clone(mockDashboardSummary);
+  return {
+    ...emptyMockDashboardSummary(),
+    baby: {
+      name: baby.name,
+      gender: baby.gender,
+      birth_date: baby.birth_date,
+      age_days: null,
+      age_display: null,
+    },
+  };
+}
+
+function emptyMockFeedingStats(days: number): FeedingStatsData {
+  return {
+    days,
+    daily: emptyDailyDates(days).map((date) => ({
+      date,
+      total_ml: 0,
+      breast_duration_min: 0,
+      count: 0,
+    })),
+    average_daily_ml: 0,
+    average_daily_breast_duration_min: 0,
+    average_daily_count: 0,
+  };
+}
+
+function emptyMockSleepStats(days: number): SleepStatsData {
+  return {
+    days,
+    daily: emptyDailyDates(days).map((date) => ({
+      date,
+      total_hours: null,
+      night_wakings: null,
+    })),
+    average_daily_hours: null,
+    average_night_wakings: null,
+  };
 }
 
 function interpolateP50(
@@ -206,18 +366,18 @@ function ensureMockFamilyManage() {
 const BABY_PROFILE_START = '<!-- FAWN:BABY_PROFILE:START -->';
 const BABY_PROFILE_END = '<!-- FAWN:BABY_PROFILE:END -->';
 
-function renderMockBabyProfileSection() {
+function renderMockBabyProfileSection(baby = currentMockBaby()) {
   return [
     BABY_PROFILE_START,
     '## 结构化宝宝档案',
-    `- 姓名: ${mockBaby.name}`,
-    `- 性别: ${mockBaby.gender === 'female' ? '女' : '男'}`,
-    `- 出生日期: ${mockBaby.birth_date}`,
-    `- 出生体重: ${mockBaby.birth_weight_g ?? '未知'}${mockBaby.birth_weight_g ? 'g' : ''}`,
-    `- 出生身长: ${mockBaby.birth_height_cm ?? '未知'}${mockBaby.birth_height_cm ? 'cm' : ''}`,
-    `- 出生头围: ${mockBaby.birth_head_cm ?? '未知'}${mockBaby.birth_head_cm ? 'cm' : ''}`,
-    `- 是否早产: ${mockBaby.is_premature ? '早产' : '足月'}`,
-    `- 孕周: ${mockBaby.gestational_weeks ?? '未知'}`,
+    `- 姓名: ${baby?.name ?? '未知'}`,
+    `- 性别: ${baby?.gender === 'female' ? '女' : baby?.gender === 'male' ? '男' : '未知'}`,
+    `- 出生日期: ${baby?.birth_date ?? '未知'}`,
+    `- 出生体重: ${baby?.birth_weight_g ?? '未知'}${baby?.birth_weight_g ? 'g' : ''}`,
+    `- 出生身长: ${baby?.birth_height_cm ?? '未知'}${baby?.birth_height_cm ? 'cm' : ''}`,
+    `- 出生头围: ${baby?.birth_head_cm ?? '未知'}${baby?.birth_head_cm ? 'cm' : ''}`,
+    `- 是否早产: ${baby?.is_premature ? '早产' : '足月'}`,
+    `- 孕周: ${baby?.gestational_weeks ?? '未知'}`,
     `- 档案同步时间: ${currentMockTime().slice(0, 16).replace('T', ' ')}`,
     BABY_PROFILE_END,
   ].join('\n');
@@ -405,7 +565,7 @@ export class ApiClient {
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({ message: response.statusText }));
-      throw new ApiError(response.status, String(body.message ?? '请求失败'));
+      throw new ApiError(response.status, apiErrorMessage(body, response.statusText || '请求失败'));
     }
 
     if (response.status === 204) return undefined as T;
@@ -422,10 +582,57 @@ export class ApiClient {
 
     await delay();
     const user = mockUsers.find((item) => item.username === data.username);
-    if (!user || data.password !== mockPassword) {
+    const expectedPassword = mockPasswordsByUsername.get(data.username) ?? mockPassword;
+    if (!user || data.password !== expectedPassword) {
       throw new ApiError(401, '用户名或密码错误');
     }
     return clone(makeLoginResponse(user));
+  }
+
+  async registerFamily(data: RegistrationRequest): Promise<RegistrationResponse> {
+    if (!isMockMode()) {
+      return this.request<RegistrationResponse>('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    }
+
+    await delay();
+    if (data.invite_code !== '2026') throw new ApiError(403, '邀请码不正确');
+    const username = data.username.trim();
+    const displayName = data.display_name.trim();
+    if (!username) throw new ApiError(422, '用户名不能为空');
+    if (!displayName) throw new ApiError(422, '昵称不能为空');
+    if (mockUsers.some((user) => user.username === username)) throw new ApiError(409, '用户名已存在');
+    const familyName = displayMockFamilyName(data.family_name);
+    const familyNameKey = normalizeMockFamilyName(familyName);
+    const familyNames = [mockFamily, ...mockFamiliesByUsername.values()].map((family) =>
+      normalizeMockFamilyName(family.name),
+    );
+    if (familyNames.includes(familyNameKey)) {
+      throw new ApiError(409, '家庭名称已存在');
+    }
+
+    const family: Family = {
+      id: `family-${Date.now()}`,
+      name: familyName,
+    };
+    const user: User = {
+      id: `user-${Date.now()}`,
+      family_id: family.id,
+      username,
+      display_name: displayName,
+      access_type: 'parent',
+      role: data.role,
+      avatar_url: null,
+      permissions: { can_upload_photos: true, can_write_tracker: true },
+    };
+    mockUsers.push(user);
+    mockFamiliesByUsername.set(username, family);
+    mockBabyProfiles.set(username, null);
+    mockPasswordsByUsername.set(username, data.password);
+    mockChatDataByFamilyId.set(family.id, { conversations: [], messages: [] });
+    return clone({ family, user });
   }
 
   async refreshToken(): Promise<{ access_token: string }> {
@@ -453,6 +660,7 @@ export class ApiClient {
   async createConversation(): Promise<Conversation> {
     if (!isMockMode()) return this.request('/chat/conversations', { method: 'POST' });
     await delay();
+    const chatData = currentMockChatData();
     const conversation: Conversation = {
       id: `conv-${Date.now()}`,
       started_at: currentMockTime(),
@@ -461,24 +669,25 @@ export class ApiClient {
       summary: null,
       message_count: 0,
     };
-    mockConversations.unshift(conversation);
+    chatData.conversations.unshift(conversation);
     return clone(conversation);
   }
 
   async getConversations(page = 1): Promise<PaginatedResponse<Conversation>> {
     if (!isMockMode()) return this.request(`/chat/conversations?page=${page}`);
     await delay();
-    return paginate(mockConversations, page);
+    return paginate(currentMockChatData().conversations, page);
   }
 
   async getConversation(id: string): Promise<{ conversation: Conversation; messages: Message[] }> {
     if (!isMockMode()) return this.request(`/chat/conversations/${id}`);
     await delay();
-    const conversation = mockConversations.find((item) => item.id === id);
+    const chatData = currentMockChatData();
+    const conversation = chatData.conversations.find((item) => item.id === id);
     if (!conversation) throw new ApiError(404, '对话不存在');
     return {
       conversation: clone(conversation),
-      messages: clone(mockMessages.filter((message) => message.conversation_id === id)),
+      messages: clone(chatData.messages.filter((message) => message.conversation_id === id)),
     };
   }
 
@@ -514,10 +723,11 @@ export class ApiClient {
   async searchMessages(query: string): Promise<PaginatedResponse<MessageSearchResult>> {
     if (!isMockMode()) return this.request(`/chat/messages/search?q=${encodeURIComponent(query)}`);
     await delay();
-    const results = mockMessages
+    const chatData = currentMockChatData();
+    const results = chatData.messages
       .filter((message) => message.content.includes(query))
       .map((message) => {
-        const conversation = mockConversations.find((item) => item.id === message.conversation_id);
+        const conversation = chatData.conversations.find((item) => item.id === message.conversation_id);
         return { ...message, conversation_started_at: conversation?.started_at ?? message.created_at };
       });
     return paginate(results);
@@ -526,24 +736,28 @@ export class ApiClient {
   async getGrowthRecords(): Promise<GrowthRecord[]> {
     if (!isMockMode()) return this.request('/tracker/growth');
     await delay();
+    if (!usesSharedMockData()) return [];
     return clone(mockGrowthRecords);
   }
 
   async getFeedingRecords(date?: string): Promise<FeedingRecord[]> {
     if (!isMockMode()) return this.request(`/tracker/feeding${date ? `?date=${date}` : ''}`);
     await delay();
+    if (!usesSharedMockData()) return [];
     return clone(mockFeedingRecords);
   }
 
   async getSleepRecords(date?: string): Promise<SleepRecord[]> {
     if (!isMockMode()) return this.request(`/tracker/sleep${date ? `?date=${date}` : ''}`);
     await delay();
+    if (!usesSharedMockData()) return [];
     return clone(mockSleepRecords);
   }
 
   async getHealthRecords(): Promise<HealthRecord[]> {
     if (!isMockMode()) return this.request('/tracker/health');
     await delay();
+    if (!usesSharedMockData()) return [];
     return clone(mockHealthRecords);
   }
 
@@ -557,6 +771,7 @@ export class ApiClient {
 
     await delay();
     ensureMockTrackerWrite();
+    ensureMockBaby();
     const record: GrowthRecord = {
       id: `growth-${Date.now()}`,
       measurement_date: data.measurement_date,
@@ -583,6 +798,7 @@ export class ApiClient {
 
     await delay();
     ensureMockTrackerWrite();
+    ensureMockBaby();
     const record: FeedingRecord = {
       id: `feeding-${Date.now()}`,
       feed_time: data.feed_time,
@@ -606,6 +822,7 @@ export class ApiClient {
 
     await delay();
     ensureMockTrackerWrite();
+    ensureMockBaby();
     const record: SleepRecord = {
       id: `sleep-${Date.now()}`,
       sleep_start: data.sleep_start,
@@ -629,6 +846,7 @@ export class ApiClient {
 
     await delay();
     ensureMockTrackerWrite();
+    ensureMockBaby();
     const record: HealthRecord = {
       id: `health-${Date.now()}`,
       record_date: data.record_date,
@@ -673,24 +891,30 @@ export class ApiClient {
   async getDashboardSummary(): Promise<DashboardSummary> {
     if (!isMockMode()) return this.request('/dashboard/summary');
     await delay();
-    return clone(mockDashboardSummary);
+    const baby = currentMockBaby();
+    return baby ? mockSummaryForBaby(baby) : emptyMockDashboardSummary();
   }
 
   async getGrowthChart(): Promise<GrowthChartData> {
     if (!isMockMode()) return this.request('/dashboard/growth-chart');
     await delay();
+    if (!usesSharedMockData()) {
+      return { records: [], who_reference: emptyReferenceLines() };
+    }
     return clone(mockGrowthChart);
   }
 
-  async getGrowthReferenceP50(measurementDate: string): Promise<GrowthReferenceP50> {
+  async getGrowthReferenceP50(measurementDate: string): Promise<GrowthReferenceP50 | null> {
     if (!isMockMode()) {
       return this.request(`/dashboard/growth-reference-p50?measurement_date=${encodeURIComponent(measurementDate)}`);
     }
 
     await delay();
+    const baby = currentMockBaby();
+    if (!baby?.birth_date || !baby.gender) return null;
     const ageDays = Math.floor(
       (new Date(`${measurementDate}T00:00:00+08:00`).getTime() -
-        new Date(`${mockBaby.birth_date}T00:00:00+08:00`).getTime()) /
+        new Date(`${baby.birth_date}T00:00:00+08:00`).getTime()) /
         86_400_000,
     );
     const ageMonths = ageDays / 30.4375;
@@ -707,12 +931,14 @@ export class ApiClient {
   async getFeedingStats(days = 7): Promise<FeedingStatsData> {
     if (!isMockMode()) return this.request(`/dashboard/feeding-stats?days=${days}`);
     await delay();
+    if (!usesSharedMockData()) return emptyMockFeedingStats(days);
     return clone({ ...mockFeedingStats, days });
   }
 
   async getSleepStats(days = 7): Promise<SleepStatsData> {
     if (!isMockMode()) return this.request(`/dashboard/sleep-stats?days=${days}`);
     await delay();
+    if (!usesSharedMockData()) return emptyMockSleepStats(days);
     return clone({ ...mockSleepStats, days });
   }
 
@@ -725,6 +951,7 @@ export class ApiClient {
 
     await delay();
     ensureMockPhotoWrite();
+    ensureMockBaby();
     const photo: Photo = {
       id: `photo-${Date.now()}`,
       storage_url: URL.createObjectURL(file),
@@ -748,6 +975,7 @@ export class ApiClient {
       return this.request(`/album/photos?${search.toString()}`);
     }
     await delay();
+    if (!usesSharedMockData()) return paginate([]);
     return paginate(mockPhotos);
   }
 
@@ -920,10 +1148,10 @@ export class ApiClient {
     return clone({ ...summary, content: mockMemoryContents[id] });
   }
 
-  async getBaby(): Promise<Baby> {
+  async getBaby(): Promise<Baby | null> {
     if (!isMockMode()) return this.request('/baby');
     await delay();
-    return clone(mockBaby);
+    return clone(currentMockBaby());
   }
 
   async updateBaby(data: Partial<Baby>): Promise<Baby> {
@@ -935,9 +1163,23 @@ export class ApiClient {
     }
     await delay();
     ensureMockFamilyManage();
-    Object.assign(mockBaby, data);
+    const existing = currentMockBaby();
+    const updated: Baby = {
+      id: existing?.id ?? `baby-${Date.now()}`,
+      name: data.name === undefined ? (existing?.name ?? null) : data.name,
+      gender: data.gender === undefined ? (existing?.gender ?? null) : data.gender,
+      birth_date: data.birth_date === undefined ? (existing?.birth_date ?? null) : data.birth_date,
+      birth_weight_g: data.birth_weight_g === undefined ? (existing?.birth_weight_g ?? null) : data.birth_weight_g,
+      birth_height_cm:
+        data.birth_height_cm === undefined ? (existing?.birth_height_cm ?? null) : data.birth_height_cm,
+      birth_head_cm: data.birth_head_cm === undefined ? (existing?.birth_head_cm ?? null) : data.birth_head_cm,
+      is_premature: data.is_premature ?? existing?.is_premature ?? false,
+      gestational_weeks:
+        data.gestational_weeks === undefined ? (existing?.gestational_weeks ?? null) : data.gestational_weeks,
+    };
+    setCurrentMockBaby(updated);
     mockMemoryContents.baby = renderMockBabyMemory(mockMemoryContents.baby);
-    return clone(mockBaby);
+    return clone(updated);
   }
 
   async getUsers(): Promise<User[]> {
@@ -949,7 +1191,7 @@ export class ApiClient {
   async getFamily(): Promise<Family> {
     if (!isMockMode()) return this.request('/family');
     await delay();
-    return clone(mockFamily);
+    return clone(currentMockFamily());
   }
 
   async updateFamily(data: Partial<Family>): Promise<Family> {
@@ -961,8 +1203,9 @@ export class ApiClient {
     }
     await delay();
     ensureMockFamilyManage();
-    Object.assign(mockFamily, data);
-    return clone(mockFamily);
+    const family = currentMockFamily();
+    Object.assign(family, data);
+    return clone(family);
   }
 
   async createUser(data: UserCreate): Promise<User> {
@@ -977,7 +1220,7 @@ export class ApiClient {
     if (mockUsers.some((user) => user.username === data.username)) throw new ApiError(409, '用户名已存在');
     const user: User = {
       id: `user-${Date.now()}`,
-      family_id: mockFamily.id,
+      family_id: currentMockFamily().id,
       username: data.username,
       display_name: data.display_name,
       access_type: data.access_type,

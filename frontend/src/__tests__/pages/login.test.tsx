@@ -34,6 +34,41 @@ describe('login and auth routing', () => {
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/chat'));
   });
 
+  it('registers with an invite code then logs in to /profile', async () => {
+    render(<LoginPage />);
+
+    await userEvent.click(screen.getByRole('button', { name: '注册账号' }));
+    await userEvent.type(screen.getByLabelText('邀请码'), '2026');
+    await userEvent.type(screen.getByLabelText('家庭名称'), '登录页新家庭');
+    await userEvent.type(screen.getByLabelText('昵称'), '新妈妈');
+    await userEvent.click(screen.getByRole('button', { name: '妈妈' }));
+    await userEvent.type(screen.getByLabelText('账号名'), 'registered-login');
+    await userEvent.type(screen.getByLabelText('密码', { selector: 'input[autocomplete="new-password"]' }), 'secret123');
+    await userEvent.click(screen.getByRole('button', { name: '创建' }));
+
+    await waitFor(() => expect(screen.getByText('注册成功，请使用新账号登录。')).toBeInTheDocument());
+    expect(window.localStorage.getItem('access_token')).toBeNull();
+
+    await userEvent.type(screen.getByLabelText('密码', { selector: 'input[autocomplete="current-password"]' }), 'secret123');
+    await userEvent.click(screen.getByRole('button', { name: '登录' }));
+
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/profile'));
+  });
+
+  it('shows invite errors on registration', async () => {
+    render(<LoginPage />);
+
+    await userEvent.click(screen.getByRole('button', { name: '注册账号' }));
+    await userEvent.type(screen.getByLabelText('邀请码'), 'bad');
+    await userEvent.type(screen.getByLabelText('家庭名称'), '错误邀请码家庭');
+    await userEvent.type(screen.getByLabelText('昵称'), '新爸爸');
+    await userEvent.type(screen.getByLabelText('账号名'), 'bad-invite-login');
+    await userEvent.type(screen.getByLabelText('密码', { selector: 'input[autocomplete="new-password"]' }), 'secret123');
+    await userEvent.click(screen.getByRole('button', { name: '创建' }));
+
+    await waitFor(() => expect(screen.getByText('邀请码不正确')).toBeInTheDocument());
+  });
+
   it('redirects unauthenticated main routes to /login', async () => {
     render(
       <AuthGuard>

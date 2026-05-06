@@ -150,25 +150,50 @@ function StatChip({ label, value, hint }: { label: string; value: string; hint?:
 }
 
 function DashboardOverview({ summary, latestRecord }: { summary: DashboardSummary; latestRecord?: RecentRecord }) {
+  if (!summary.baby) {
+    return (
+      <Card className="p-4">
+        <div className="flex items-center gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-nursery-powder text-info-blue">
+            <ClipboardList className="h-5 w-5" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-fawn-amber">今日摘要</p>
+            <h2 className="mt-1 text-[17px] font-semibold leading-tight text-soft-charcoal">还没有宝宝档案</h2>
+            <p className="mt-1 text-xs text-dark-gray">喂养、睡眠和生长记录会在创建档案后开始显示。</p>
+          </div>
+        </div>
+        <Link
+          href="/profile"
+          className="mt-3 inline-flex min-h-10 items-center justify-center rounded-full bg-nursery-mint px-4 text-sm font-semibold text-brand-strong"
+        >
+          去家庭页
+        </Link>
+      </Card>
+    );
+  }
+
   const latestGrowth = summary.latest_growth;
   const todaySleepValue =
     summary.today_sleep.total_hours == null ? '没数据' : `${summary.today_sleep.total_hours.toFixed(1)}h`;
   const todayBreastDuration = summary.today_feeding.breast_duration_min;
   const latestRecordText = latestRecord ? `${latestRecord.type} · ${latestRecord.title}` : '暂无最近记录';
+  const babyName = summary.baby.name ?? '宝宝档案';
+  const babyAge = summary.baby.age_display ?? '出生日期待填';
 
   return (
     <Card className="p-4">
       <div className="flex items-center gap-3">
-        <Avatar label={summary.baby.name} role="baby" size="md" />
+        <Avatar label={babyName} role="baby" size="md" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold text-fawn-amber">今日摘要</p>
             <span className="rounded-full bg-nursery-mint px-2 py-1 text-[11px] font-semibold text-brand-strong">
-              {summary.baby.age_display}
+              {babyAge}
             </span>
           </div>
           <h2 className="mt-1 truncate text-[17px] font-semibold leading-tight text-soft-charcoal">
-            {summary.baby.name} · 喂养 {summary.today_feeding.count} 次 · 睡眠 {todaySleepValue}
+            {babyName} · 喂养 {summary.today_feeding.count} 次 · 睡眠 {todaySleepValue}
           </h2>
           <p className="mt-1 line-clamp-1 text-xs text-dark-gray">最近：{latestRecordText}</p>
         </div>
@@ -346,7 +371,7 @@ export default function DashboardPage() {
         {growth ? (
           <GrowthChart
             data={growth}
-            birthDate={summary?.baby.birth_date}
+            birthDate={summary?.baby?.birth_date ?? undefined}
             activeIndicator={indicator}
             onIndicatorChange={setIndicator}
           />

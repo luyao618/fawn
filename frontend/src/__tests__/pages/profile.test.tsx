@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProfilePage from '@/app/(main)/profile/page';
+import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
 
 const nav = {
@@ -87,6 +88,27 @@ describe('profile page', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '查看权限说明' }));
     expect(screen.getByRole('dialog', { name: '权限说明' })).toBeInTheDocument();
+  });
+
+  it('shows an empty baby card and creation dialog for registered families', async () => {
+    await api.registerFamily({
+      invite_code: '2026',
+      family_name: 'Profile 空宝宝家庭',
+      username: 'profile-empty-baby',
+      password: 'secret123',
+      display_name: 'Profile 爸爸',
+      role: '爸爸',
+    });
+    useAuthStore.getState().logout();
+    await useAuthStore.getState().login('profile-empty-baby', 'secret123');
+
+    render(<ProfilePage />);
+
+    await waitFor(() => expect(screen.getByText('Profile 空宝宝家庭')).toBeInTheDocument());
+    expect(screen.getByText('还没有宝宝档案。')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '创建档案' }));
+    expect(screen.getByRole('dialog', { name: '创建宝宝档案' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '暂不填' })).toBeInTheDocument();
   });
 
   it('logs out from the family summary card', async () => {

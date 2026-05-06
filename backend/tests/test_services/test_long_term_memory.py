@@ -134,3 +134,22 @@ async def test_long_term_memory_rejects_unknown_target(memory_root, test_family)
 
     with pytest.raises(UnknownMemoryTarget):
         await service.read_memory(test_family.id, "users/../../escape.md")  # type: ignore[arg-type]
+
+
+async def test_long_term_memory_renders_unknown_for_partial_baby(
+    db,
+    memory_root,
+    test_family,
+    test_user,
+    test_baby,
+) -> None:
+    test_baby.name = None
+    test_baby.gender = None
+    test_baby.birth_date = None
+    await db.commit()
+
+    context = await LongTermMemoryService(memory_root).load_context(db, test_user)
+
+    assert "- 姓名: 未知" in context.baby
+    assert "- 性别: 未知" in context.baby
+    assert "- 出生日期: 未知" in context.baby

@@ -71,7 +71,16 @@ async def get_default_baby(db: AsyncSession, family_id: uuid.UUID) -> Baby:
     return baby
 
 
+async def get_default_baby_for_recording(db: AsyncSession, family_id: uuid.UUID) -> Baby:
+    try:
+        return await get_default_baby(db, family_id)
+    except NotFound as exc:
+        raise ValidationError("请先在家庭页创建宝宝档案") from exc
+
+
 def calculate_age_months(baby: Baby, measurement_date: date) -> float:
+    if baby.birth_date is None:
+        raise ValidationError("Baby birth date is required for age calculations")
     age_months = (measurement_date - baby.birth_date).days / 30.4375
     if baby.is_premature and baby.gestational_weeks is not None and baby.gestational_weeks < 37:
         age_months -= (40 - baby.gestational_weeks) / 4.345
@@ -120,6 +129,8 @@ async def _reference_lms(
     indicator: Literal["weight", "height", "head"],
     measurement_date: date,
 ) -> tuple[float, float, float] | None:
+    if baby.birth_date is None or baby.gender is None:
+        return None
     age_months = calculate_age_months(baby, measurement_date)
     if age_months < 0:
         return None
@@ -221,7 +232,11 @@ async def create_growth_record(
     source_conversation_id: uuid.UUID | None = None,
 ) -> GrowthRecord:
     ensure_tracker_write(user)
-    baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db, user.family_id)
+    baby = (
+        await db.get(Baby, baby_id)
+        if baby_id
+        else await get_default_baby_for_recording(db, user.family_id)
+    )
     if baby is None:
         raise NotFound("Baby profile not found")
     if baby.family_id != user.family_id:
@@ -257,7 +272,11 @@ async def create_feeding_record(
     source_conversation_id: uuid.UUID | None = None,
 ) -> FeedingRecord:
     ensure_tracker_write(user)
-    baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db, user.family_id)
+    baby = (
+        await db.get(Baby, baby_id)
+        if baby_id
+        else await get_default_baby_for_recording(db, user.family_id)
+    )
     if baby is None:
         raise NotFound("Baby profile not found")
     if baby.family_id != user.family_id:
@@ -291,7 +310,11 @@ async def create_sleep_record(
     source_conversation_id: uuid.UUID | None = None,
 ) -> SleepRecord:
     ensure_tracker_write(user)
-    baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db, user.family_id)
+    baby = (
+        await db.get(Baby, baby_id)
+        if baby_id
+        else await get_default_baby_for_recording(db, user.family_id)
+    )
     if baby is None:
         raise NotFound("Baby profile not found")
     if baby.family_id != user.family_id:
@@ -326,7 +349,11 @@ async def create_health_record(
     source_conversation_id: uuid.UUID | None = None,
 ) -> HealthRecord:
     ensure_tracker_write(user)
-    baby = await db.get(Baby, baby_id) if baby_id else await get_default_baby(db, user.family_id)
+    baby = (
+        await db.get(Baby, baby_id)
+        if baby_id
+        else await get_default_baby_for_recording(db, user.family_id)
+    )
     if baby is None:
         raise NotFound("Baby profile not found")
     if baby.family_id != user.family_id:

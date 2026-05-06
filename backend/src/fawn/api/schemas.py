@@ -38,6 +38,15 @@ class FamilyUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
 
 
+class RegistrationRequest(BaseModel):
+    invite_code: str = Field(min_length=1, max_length=128)
+    family_name: str = Field(min_length=1, max_length=100)
+    username: str = Field(min_length=1, max_length=50)
+    display_name: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=6, max_length=128)
+    role: Literal["爸爸", "妈妈"]
+
+
 class UserCreate(BaseModel):
     username: str = Field(min_length=1, max_length=50)
     display_name: str = Field(min_length=1, max_length=100)
@@ -70,6 +79,11 @@ class LoginResponse(TokenResponse):
     user: UserRead
 
 
+class RegistrationResponse(BaseModel):
+    family: FamilyRead
+    user: UserRead
+
+
 class PermissionUpdate(UserPermissions):
     pass
 
@@ -78,9 +92,9 @@ class BabyRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    name: str
-    gender: Literal["male", "female"]
-    birth_date: date
+    name: str | None = None
+    gender: Literal["male", "female"] | None = None
+    birth_date: date | None = None
     birth_weight_g: int | None = None
     birth_height_cm: float | None = None
     birth_head_cm: float | None = None
@@ -255,11 +269,11 @@ class TrackerUpdate(BaseModel):
 
 
 class DashboardBabySummary(BaseModel):
-    name: str
-    gender: Literal["male", "female"]
-    birth_date: date
-    age_days: int
-    age_display: str
+    name: str | None = None
+    gender: Literal["male", "female"] | None = None
+    birth_date: date | None = None
+    age_days: int | None = None
+    age_display: str | None = None
 
 
 class DashboardLatestGrowth(BaseModel):
@@ -283,7 +297,7 @@ class DashboardTodaySleep(BaseModel):
 
 
 class DashboardSummary(BaseModel):
-    baby: DashboardBabySummary
+    baby: DashboardBabySummary | None
     latest_growth: DashboardLatestGrowth | None
     today_feeding: DashboardTodayFeeding
     today_sleep: DashboardTodaySleep

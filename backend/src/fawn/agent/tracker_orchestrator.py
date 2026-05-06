@@ -790,12 +790,18 @@ async def _query_record(
             except tracker_service.NotFound:
                 response = "还没有宝宝档案。"
             else:
-                today = datetime.now(APP_TIMEZONE).date()
-                age_days = (today - baby.birth_date).days
-                response = (
-                    f"{baby.name}，{'男孩' if baby.gender == 'male' else '女孩'}，"
-                    f"出生日期 {baby.birth_date.isoformat()}，现在 {age_days} 天。"
-                )
+                details = [
+                    baby.name or "宝宝姓名未知",
+                    {"male": "男孩", "female": "女孩"}.get(baby.gender or "", "性别未知"),
+                ]
+                if baby.birth_date is None:
+                    details.append("出生日期未知")
+                else:
+                    today = datetime.now(APP_TIMEZONE).date()
+                    age_days = (today - baby.birth_date).days
+                    details.append(f"出生日期 {baby.birth_date.isoformat()}")
+                    details.append(f"现在 {age_days} 天")
+                response = "，".join(details) + "。"
         case _:
             response = "我还不能查询这类记录。"
 

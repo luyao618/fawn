@@ -46,11 +46,25 @@ export interface LoginResponse {
   user: User;
 }
 
+export interface RegistrationRequest {
+  invite_code: string;
+  family_name: string;
+  username: string;
+  password: string;
+  display_name: string;
+  role: '爸爸' | '妈妈';
+}
+
+export interface RegistrationResponse {
+  family: Family;
+  user: User;
+}
+
 export interface Baby {
   id: string;
-  name: string;
-  gender: 'male' | 'female';
-  birth_date: string;
+  name: string | null;
+  gender: 'male' | 'female' | null;
+  birth_date: string | null;
   birth_weight_g: number | null;
   birth_height_cm: number | null;
   birth_head_cm: number | null;
@@ -171,12 +185,12 @@ export interface HealthRecordCreate {
 
 export interface DashboardSummary {
   baby: {
-    name: string;
-    gender: 'male' | 'female';
-    birth_date: string;
-    age_days: number;
-    age_display: string;
-  };
+    name: string | null;
+    gender: 'male' | 'female' | null;
+    birth_date: string | null;
+    age_days: number | null;
+    age_display: string | null;
+  } | null;
   latest_growth: {
     date: string;
     weight_g: number | null;

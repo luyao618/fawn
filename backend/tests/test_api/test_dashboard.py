@@ -2,7 +2,7 @@ from decimal import Decimal
 from datetime import UTC, datetime, time, timedelta
 
 from fawn.api.dashboard import DASHBOARD_TIMEZONE, dashboard_today, growth_reference_span_months
-from fawn.models import Baby, FeedingRecord, SleepRecord, User, WhoGrowthReference
+from fawn.models import Baby, FeedingRecord, GrowthRecord, SleepRecord, User, WhoGrowthReference
 from sqlalchemy.ext.asyncio import AsyncSession
 from httpx import AsyncClient
 
@@ -97,6 +97,86 @@ async def test_growth_reference_p50_returns_values_for_measurement_date(
     assert data["weight_g"] is not None
     assert data["height_cm"] is not None
     assert data["head_cm"] is not None
+
+
+async def test_dashboard_returns_empty_contracts_without_baby(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    summary_response = await client.get("/api/dashboard/summary", headers=auth_headers)
+    chart_response = await client.get("/api/dashboard/growth-chart", headers=auth_headers)
+    p50_response = await client.get(
+        f"/api/dashboard/growth-reference-p50?measurement_date={dashboard_today().isoformat()}",
+        headers=auth_headers,
+    )
+    feeding_response = await client.get("/api/dashboard/feeding-stats?days=2", headers=auth_headers)
+    sleep_response = await client.get("/api/dashboard/sleep-stats?days=2", headers=auth_headers)
+
+    assert summary_response.status_code == 200
+    assert summary_response.json()["baby"] is None
+    assert summary_response.json()["latest_growth"] is None
+    assert summary_response.json()["today_feeding"] == {
+        "total_ml": 0,
+        "breast_duration_min": 0,
+        "count": 0,
+        "last_feed_time": None,
+    }
+    assert summary_response.json()["today_sleep"] == {
+        "total_hours": None,
+        "night_wakings": None,
+    }
+    assert chart_response.status_code == 200
+    assert chart_response.json()["records"] == []
+    assert chart_response.json()["who_reference"]["weight"]["p50"] == []
+    assert p50_response.status_code == 200
+    assert p50_response.json() is None
+    assert feeding_response.status_code == 200
+    assert feeding_response.json()["days"] == 2
+    assert feeding_response.json()["average_daily_count"] == 0.0
+    assert sleep_response.status_code == 200
+    assert sleep_response.json()["days"] == 2
+    assert sleep_response.json()["average_daily_hours"] is None
+
+
+async def test_dashboard_handles_partial_baby_without_who_or_fake_age(
+    client: AsyncClient,
+    db: AsyncSession,
+    auth_headers: dict[str, str],
+    test_baby: Baby,
+    test_user: User,
+) -> None:
+    test_baby.name = None
+    test_baby.gender = None
+    test_baby.birth_date = None
+    db.add(
+        GrowthRecord(
+            baby_id=test_baby.id,
+            recorded_by=test_user.id,
+            measurement_date=dashboard_today(),
+            weight_g=6200,
+        )
+    )
+    await db.commit()
+
+    summary_response = await client.get("/api/dashboard/summary", headers=auth_headers)
+    chart_response = await client.get("/api/dashboard/growth-chart", headers=auth_headers)
+    p50_response = await client.get(
+        f"/api/dashboard/growth-reference-p50?measurement_date={dashboard_today().isoformat()}",
+        headers=auth_headers,
+    )
+
+    assert summary_response.status_code == 200
+    baby = summary_response.json()["baby"]
+    assert baby["name"] is None
+    assert baby["gender"] is None
+    assert baby["birth_date"] is None
+    assert baby["age_days"] is None
+    assert baby["age_display"] is None
+    assert chart_response.status_code == 200
+    assert chart_response.json()["records"][0]["weight_g"] == 6200
+    assert chart_response.json()["who_reference"]["weight"]["p50"] == []
+    assert p50_response.status_code == 200
+    assert p50_response.json() is None
 
 
 async def test_sleep_stats_marks_missing_days_as_no_data(

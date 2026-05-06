@@ -141,9 +141,11 @@ def _render_baby_profile_section(baby: Baby | None) -> str:
     if baby is None:
         name = gender = birth_date = birth_weight = birth_height = birth_head = premature = weeks = "未知"
     else:
-        gender = {"male": "男", "female": "女"}.get(str(baby.gender), str(baby.gender))
-        name = baby.name
-        birth_date = baby.birth_date.isoformat()
+        gender = {"male": "男", "female": "女"}.get(baby.gender or "", "未知")
+        name = _format_baby_value(baby.name)
+        birth_date = _format_baby_value(
+            baby.birth_date.isoformat() if baby.birth_date is not None else None
+        )
         birth_weight = _format_baby_value(baby.birth_weight_g, "g")
         birth_height = _format_baby_value(baby.birth_height_cm, "cm")
         birth_head = _format_baby_value(baby.birth_head_cm, "cm")

@@ -36,4 +36,24 @@ describe('dashboard page', () => {
     expect(screen.getByText('睡眠统计')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('有 1 项数据暂时没更新');
   });
+
+  it('renders setup state without fake baby data for registered empty families', async () => {
+    await api.registerFamily({
+      invite_code: '2026',
+      family_name: 'Dashboard 空宝宝家庭',
+      username: 'dashboard-empty-baby',
+      password: 'secret123',
+      display_name: 'Dashboard 妈妈',
+      role: '妈妈',
+    });
+    useAuthStore.getState().logout();
+    await useAuthStore.getState().login('dashboard-empty-baby', 'secret123');
+
+    render(<DashboardPage />);
+
+    await waitFor(() => expect(screen.getByText('还没有宝宝档案')).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: '去家庭页' })).toHaveAttribute('href', '/profile');
+    expect(screen.getByText('暂无生长记录')).toBeInTheDocument();
+    expect(screen.queryByText(/晨晨/)).not.toBeInTheDocument();
+  });
 });

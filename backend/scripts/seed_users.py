@@ -13,6 +13,7 @@ from sqlalchemy import select
 from fawn.db.session import async_session_factory
 from fawn.models import Baby, Family, User
 from fawn.services.auth import hash_password
+from fawn.services.family import display_family_name, normalize_family_name
 
 DEFAULT_PERMISSIONS = {"can_upload_photos": True, "can_write_tracker": False}
 
@@ -57,7 +58,11 @@ async def ensure_family(session, config: dict[str, Any]) -> Family:
     family_name = config.get("family_name") or (
         f"{baby_config['name']}的家庭" if baby_config.get("name") else "默认家庭"
     )
-    family = Family(name=family_name)
+    family_display_name = display_family_name(family_name)
+    family = Family(
+        name=family_display_name,
+        name_key=normalize_family_name(family_display_name),
+    )
     session.add(family)
     await session.flush()
     return family
