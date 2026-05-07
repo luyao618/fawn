@@ -19,7 +19,7 @@ function needsSeparator(previous: Message | undefined, current: Message) {
 }
 
 export function MessageList({ messages, streamingContent, isStreaming, pendingToolCalls }: MessageListProps) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const streamingMessage = useMemo<Message | null>(() => {
     if (!streamingContent) return null;
     return {
@@ -34,11 +34,17 @@ export function MessageList({ messages, streamingContent, isStreaming, pendingTo
   }, [streamingContent]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    const list = listRef.current;
+    if (!list) return;
+    if (typeof list.scrollTo === 'function') {
+      list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' });
+      return;
+    }
+    list.scrollTop = list.scrollHeight;
   }, [messages.length, streamingContent, pendingToolCalls.length]);
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+    <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5">
       <div className="space-y-4">
         {messages.map((message, index) => (
           <div key={message.id}>
@@ -48,7 +54,6 @@ export function MessageList({ messages, streamingContent, isStreaming, pendingTo
         ))}
         {pendingToolCalls.length > 0 ? <TypingIndicator /> : null}
         {streamingMessage ? <MessageBubble message={streamingMessage} isStreaming={isStreaming} /> : null}
-        <div ref={bottomRef} />
       </div>
     </div>
   );
