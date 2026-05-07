@@ -1,12 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Clock } from 'lucide-react';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { MessageList } from '@/components/chat/MessageList';
-import { TopBar } from '@/components/layout/TopBar';
 import { useChatStore } from '@/lib/chat-store';
 
 export function ChatClient() {
@@ -58,19 +55,7 @@ export function ChatClient() {
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-transparent pb-[calc(100px+var(--safe-area-bottom))]">
-      <TopBar
-        title="管家"
-        rightAction={
-          <Link
-            href="/history"
-            className="flex min-h-11 items-center gap-1 rounded-full bg-white/80 px-3 text-sm font-semibold text-fawn-amber shadow-card"
-          >
-            <Clock className="h-4 w-4" aria-hidden />
-            历史
-          </Link>
-        }
-      />
+    <div className="flex h-[100dvh] min-h-0 flex-col bg-transparent pb-[calc(100px+var(--safe-area-bottom))]">
       {messages.length === 0 && !isStreaming ? (
         <div className="mx-4 my-3 rounded-card bg-white/90 p-4 text-sm leading-6 text-dark-gray shadow-card ring-1 ring-white/70">
           <p className="text-base font-semibold text-soft-charcoal">今天想先记录什么？</p>
@@ -90,6 +75,7 @@ export function ChatClient() {
         onAttach={handleAttach}
         onRemoveImage={() => setAttachedImage(null)}
         onSend={handleSend}
+        historyHref="/history"
       />
     </div>
   );

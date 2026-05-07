@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ClipboardList, Moon, RefreshCw, Ruler, Stethoscope, Utensils } from 'lucide-react';
+import { ClipboardList, Moon, Ruler, Stethoscope, Utensils } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { FeedingStats } from '@/components/dashboard/FeedingStats';
 import { GrowthChart } from '@/components/dashboard/GrowthChart';
 import { HealthTimeline } from '@/components/dashboard/HealthTimeline';
 import { SleepStats } from '@/components/dashboard/SleepStats';
-import { TopBar } from '@/components/layout/TopBar';
 import { Card } from '@/components/ui/Card';
 import { api } from '@/lib/api';
 import { cn, formatDate, formatDateTime, toKg } from '@/lib/utils';
@@ -273,65 +272,59 @@ export default function DashboardPage() {
   const [health, setHealth] = useState<HealthRecord[] | null>(null);
   const [recentRecords, setRecentRecords] = useState<RecentRecord[]>([]);
   const [indicator, setIndicator] = useState<Indicator>('weight');
-  const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      const [
-        summaryData,
-        growthData,
-        feedingData,
-        sleepData,
-        healthData,
-        growthRecords,
-        feedingRecords,
-        sleepRecords,
-      ] = await Promise.allSettled([
-        api.getDashboardSummary(),
-        api.getGrowthChart(),
-        api.getFeedingStats(STATS_HISTORY_DAYS),
-        api.getSleepStats(STATS_HISTORY_DAYS),
-        api.getHealthRecords(),
-        api.getGrowthRecords(),
-        api.getFeedingRecords(),
-        api.getSleepRecords(),
-      ] as const);
-      const failedCount = [
-        summaryData,
-        growthData,
-        feedingData,
-        sleepData,
-        healthData,
-        growthRecords,
-        feedingRecords,
-        sleepRecords,
-      ].filter((result) => result.status === 'rejected').length;
+    const [
+      summaryData,
+      growthData,
+      feedingData,
+      sleepData,
+      healthData,
+      growthRecords,
+      feedingRecords,
+      sleepRecords,
+    ] = await Promise.allSettled([
+      api.getDashboardSummary(),
+      api.getGrowthChart(),
+      api.getFeedingStats(STATS_HISTORY_DAYS),
+      api.getSleepStats(STATS_HISTORY_DAYS),
+      api.getHealthRecords(),
+      api.getGrowthRecords(),
+      api.getFeedingRecords(),
+      api.getSleepRecords(),
+    ] as const);
+    const failedCount = [
+      summaryData,
+      growthData,
+      feedingData,
+      sleepData,
+      healthData,
+      growthRecords,
+      feedingRecords,
+      sleepRecords,
+    ].filter((result) => result.status === 'rejected').length;
 
-      if (summaryData.status === 'fulfilled') setSummary(summaryData.value);
-      if (growthData.status === 'fulfilled') setGrowth(growthData.value);
-      if (feedingData.status === 'fulfilled') setFeeding(feedingData.value);
-      if (sleepData.status === 'fulfilled') setSleep(sleepData.value);
-      if (healthData.status === 'fulfilled') setHealth(healthData.value);
-      if (
-        growthRecords.status === 'fulfilled' &&
-        feedingRecords.status === 'fulfilled' &&
-        sleepRecords.status === 'fulfilled'
-      ) {
-        setRecentRecords(
-          recentFromRecords(
-            growthRecords.value,
-            feedingRecords.value,
-            sleepRecords.value,
-            fulfilledValue(healthData, []),
-          ),
-        );
-      }
-      setLoadError(failedCount > 0 ? `有 ${failedCount} 项数据暂时没更新，已保留可用内容。` : null);
-    } finally {
-      setRefreshing(false);
+    if (summaryData.status === 'fulfilled') setSummary(summaryData.value);
+    if (growthData.status === 'fulfilled') setGrowth(growthData.value);
+    if (feedingData.status === 'fulfilled') setFeeding(feedingData.value);
+    if (sleepData.status === 'fulfilled') setSleep(sleepData.value);
+    if (healthData.status === 'fulfilled') setHealth(healthData.value);
+    if (
+      growthRecords.status === 'fulfilled' &&
+      feedingRecords.status === 'fulfilled' &&
+      sleepRecords.status === 'fulfilled'
+    ) {
+      setRecentRecords(
+        recentFromRecords(
+          growthRecords.value,
+          feedingRecords.value,
+          sleepRecords.value,
+          fulfilledValue(healthData, []),
+        ),
+      );
     }
+    setLoadError(failedCount > 0 ? `有 ${failedCount} 项数据暂时没更新，已保留可用内容。` : null);
   }, []);
 
   useEffect(() => {
@@ -339,54 +332,38 @@ export default function DashboardPage() {
   }, [loadDashboard]);
 
   return (
-    <>
-      <TopBar
-        title="成长"
-        rightAction={
-          <button
-            type="button"
-            onClick={() => void loadDashboard()}
-            disabled={refreshing}
-            className="flex min-h-11 items-center gap-1 rounded-full bg-white/80 px-3 text-sm font-semibold text-fawn-amber shadow-card disabled:opacity-70"
-          >
-            <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} aria-hidden />
-            刷新
-          </button>
-        }
-      />
-      <div className="space-y-4 px-4 pt-3 pb-6">
-        {loadError ? (
-          <div
-            role="status"
-            className="rounded-2xl border border-fawn-amber/30 bg-fawn-amber-light px-3 py-2 text-xs leading-5 text-soft-charcoal"
-          >
-            {loadError}
-          </div>
-        ) : null}
-        {summary ? (
-          <DashboardOverview summary={summary} latestRecord={recentRecords[0]} />
-        ) : (
-          <Skeleton className="h-36" />
-        )}
-        {growth ? (
-          <GrowthChart
-            data={growth}
-            birthDate={summary?.baby?.birth_date ?? undefined}
-            activeIndicator={indicator}
-            onIndicatorChange={setIndicator}
-          />
-        ) : (
-          <Skeleton className="h-80" />
-        )}
-
-        <div className="grid grid-cols-1 gap-4">
-          {feeding ? <FeedingStats data={feeding} /> : <Skeleton className="h-48" />}
-          {sleep ? <SleepStats data={sleep} /> : <Skeleton className="h-48" />}
+    <div className="space-y-4 px-4 pt-4 pb-6">
+      {loadError ? (
+        <div
+          role="status"
+          className="rounded-2xl border border-fawn-amber/30 bg-fawn-amber-light px-3 py-2 text-xs leading-5 text-soft-charcoal"
+        >
+          {loadError}
         </div>
+      ) : null}
+      {summary ? (
+        <DashboardOverview summary={summary} latestRecord={recentRecords[0]} />
+      ) : (
+        <Skeleton className="h-36" />
+      )}
+      {growth ? (
+        <GrowthChart
+          data={growth}
+          birthDate={summary?.baby?.birth_date ?? undefined}
+          activeIndicator={indicator}
+          onIndicatorChange={setIndicator}
+        />
+      ) : (
+        <Skeleton className="h-80" />
+      )}
 
-        {health ? <HealthTimeline records={health} /> : <Skeleton className="h-52" />}
-        <RecentRecords records={recentRecords} />
+      <div className="grid grid-cols-1 gap-4">
+        {feeding ? <FeedingStats data={feeding} /> : <Skeleton className="h-48" />}
+        {sleep ? <SleepStats data={sleep} /> : <Skeleton className="h-48" />}
       </div>
-    </>
+
+      {health ? <HealthTimeline records={health} /> : <Skeleton className="h-52" />}
+      <RecentRecords records={recentRecords} />
+    </div>
   );
 }

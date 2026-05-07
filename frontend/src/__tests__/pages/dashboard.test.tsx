@@ -21,11 +21,11 @@ describe('dashboard page', () => {
     expect(screen.getByText('睡眠统计')).toBeInTheDocument();
     expect(screen.getByText('健康时间线')).toBeInTheDocument();
     expect(screen.getByText('最近记录')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /刷新/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /刷新/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /去记录/ })).not.toBeInTheDocument();
   });
 
-  it('keeps available dashboard sections visible when one refresh source fails', async () => {
+  it('keeps available dashboard sections visible when one load source fails', async () => {
     vi.spyOn(api, 'getHealthRecords').mockRejectedValueOnce(new Error('health unavailable'));
 
     render(<DashboardPage />);

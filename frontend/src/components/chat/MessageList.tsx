@@ -38,7 +38,7 @@ export function MessageList({ messages, streamingContent, isStreaming, pendingTo
   }, [messages.length, streamingContent, pendingToolCalls.length]);
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-5">
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
       <div className="space-y-4">
         {messages.map((message, index) => (
           <div key={message.id}>

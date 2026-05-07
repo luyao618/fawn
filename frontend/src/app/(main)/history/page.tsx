@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Search } from 'lucide-react';
+import { ChevronLeft, Search } from 'lucide-react';
 import { useChatStore } from '@/lib/chat-store';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
@@ -29,6 +29,16 @@ export default function HistoryPage() {
 
   return (
     <div className="px-4 py-4">
+      <div className="mb-3 flex items-center">
+        <Link
+          href="/chat"
+          className="inline-flex min-h-10 items-center gap-1 rounded-full bg-white/85 px-3 text-sm font-semibold text-fawn-amber shadow-card ring-1 ring-white/70"
+        >
+          <ChevronLeft className="h-4 w-4" strokeWidth={1.9} aria-hidden />
+          返回管家
+        </Link>
+      </div>
+
       <form onSubmit={onSearch} className="mb-4 flex items-center gap-2 rounded-input bg-white px-3 shadow-card">
         <Search className="h-5 w-5 text-mid-gray" aria-hidden />
         <input
