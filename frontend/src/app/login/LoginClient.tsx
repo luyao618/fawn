@@ -86,9 +86,23 @@ export function LoginClient() {
           onSubmit={onSubmit}
           className="w-full rounded-card border border-oat-border bg-white p-5 shadow-card"
         >
-          <div className="mb-8">
-            <p className="text-sm text-dark-gray">欢迎回来</p>
-            <h1 className="mt-1 text-2xl font-semibold text-soft-charcoal">Fawn</h1>
+          <div className="mb-8 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm text-dark-gray">欢迎回来</p>
+              <h1 className="mt-1 text-2xl font-semibold text-soft-charcoal">Fawn</h1>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegisterOpen((value) => !value);
+                setRegisterError('');
+              }}
+              className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full bg-warm-gray px-3 text-xs font-semibold text-fawn-amber transition-colors active:bg-nursery-mint"
+              aria-expanded={isRegisterOpen}
+            >
+              <UserPlus className="h-3.5 w-3.5" aria-hidden />
+              注册账号
+            </button>
           </div>
 
           {registerSuccess ? (
@@ -129,18 +143,6 @@ export function LoginClient() {
           <Button type="submit" className="w-full" loading={isLoading}>
             登录
           </Button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setIsRegisterOpen((value) => !value);
-              setRegisterError('');
-            }}
-            className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-2xl bg-warm-gray px-3 text-sm font-semibold text-fawn-amber"
-          >
-            <UserPlus className="h-4 w-4" aria-hidden />
-            注册账号
-          </button>
         </form>
 
         {isRegisterOpen ? (

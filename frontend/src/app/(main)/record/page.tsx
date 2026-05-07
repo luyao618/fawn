@@ -76,9 +76,9 @@ const healthTypeOptions: Array<{ value: HealthRecordCreate['record_type']; label
 ];
 
 const inputClass =
-  'mt-1 min-h-11 w-full rounded-2xl border border-oat-border bg-white px-3 text-base text-soft-charcoal outline-none transition-colors focus:border-fawn-amber disabled:bg-warm-gray disabled:text-mid-gray';
-const labelClass = 'block text-sm font-semibold text-dark-gray';
-const helperClass = 'mt-1 block whitespace-nowrap text-[10px] italic leading-tight text-mid-gray';
+  'mt-1 min-h-10 w-full rounded-xl border border-oat-border bg-white px-3 text-sm text-soft-charcoal outline-none transition-colors focus:border-fawn-amber disabled:bg-warm-gray disabled:text-mid-gray';
+const labelClass = 'block text-xs font-semibold text-dark-gray';
+const helperClass = 'mt-0.5 block whitespace-nowrap text-[10px] italic leading-tight text-mid-gray';
 
 interface SegmentedChoiceProps<T extends string> {
   label: string;
@@ -107,7 +107,7 @@ function SegmentedChoice<T extends string>({
       <div
         role="group"
         aria-label={ariaLabel}
-        className={`mt-1 grid ${columnsClass} gap-1 rounded-2xl border border-oat-border bg-warm-gray p-1`}
+        className={`mt-1 grid ${columnsClass} gap-1 rounded-xl border border-oat-border bg-warm-gray p-1`}
       >
         {options.map((option) => {
           const selected = value === option.value;
@@ -118,7 +118,7 @@ function SegmentedChoice<T extends string>({
               onClick={() => onChange(option.value)}
               disabled={disabled}
               aria-pressed={selected}
-              className={`min-h-11 rounded-xl px-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:text-mid-gray ${
+              className={`min-h-10 rounded-lg px-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:text-mid-gray ${
                 selected ? 'bg-white text-fawn-amber shadow-card' : 'text-dark-gray hover:bg-white/70'
               }`}
             >
@@ -437,8 +437,8 @@ export default function RecordPage() {
   }
 
   return (
-    <div className="space-y-3 px-4 py-3">
-      <section className="space-y-1 px-1">
+    <div className="space-y-2.5 px-3 py-2">
+      <section className="space-y-0.5 px-1">
         <p className="text-xs font-semibold text-fawn-amber">{formatDate(new Date(), 'M月d日 EEEE')}</p>
         <h2 className="text-[20px] font-semibold leading-tight text-soft-charcoal">
           记录{summary?.baby?.name ?? '宝宝'}今天的变化
@@ -449,13 +449,13 @@ export default function RecordPage() {
       </section>
 
       {!canWrite ? (
-        <div className="rounded-card border border-warning-amber bg-warning-amber-light p-4 text-sm leading-6 text-dark-gray" role="status">
+        <div className="rounded-card border border-warning-amber bg-warning-amber-light p-3 text-sm leading-6 text-dark-gray" role="status">
           当前账号只有查看权限，无法新增记录。请让父母或管理员账号记录，已有数据仍可在成长页查看。
         </div>
       ) : null}
 
       {babyMissing ? (
-        <div className="rounded-card border border-info-blue bg-nursery-powder p-4 text-sm leading-6 text-dark-gray" role="status">
+        <div className="rounded-card border border-info-blue bg-nursery-powder p-3 text-sm leading-6 text-dark-gray" role="status">
           <p>还没有宝宝档案，暂时不能保存记录。</p>
           <Link href="/profile" className="mt-3 inline-flex min-h-10 items-center rounded-full bg-white px-4 font-semibold text-info-blue shadow-sm">
             去家庭页
@@ -463,7 +463,7 @@ export default function RecordPage() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-4 gap-1.5">
         {recordCards.map((card) => {
           const Icon = card.icon;
           const active = card.kind === activeKind;
@@ -477,31 +477,31 @@ export default function RecordPage() {
               }}
               aria-pressed={active}
               aria-label={`${card.label}：${card.description}`}
-              className={`min-h-[70px] rounded-2xl border bg-white px-2 py-2 text-center shadow-card transition-colors ${
+              className={`min-h-14 rounded-xl border bg-white px-1.5 py-1.5 text-center shadow-card transition-colors ${
                 active ? 'border-fawn-amber bg-nursery-mint/40 ring-2 ring-nursery-mint' : 'border-white/70'
               }`}
             >
-              <span className={`mx-auto grid h-8 w-8 place-items-center rounded-xl ${card.tint}`}>
-                <Icon className="h-4 w-4" aria-hidden />
+              <span className={`mx-auto grid h-7 w-7 place-items-center rounded-lg ${card.tint}`}>
+                <Icon className="h-3.5 w-3.5" aria-hidden />
               </span>
-              <span className="mt-1 block text-[13px] font-semibold leading-tight text-soft-charcoal">{card.label}</span>
+              <span className="mt-0.5 block text-xs font-semibold leading-tight text-soft-charcoal">{card.label}</span>
             </button>
           );
         })}
       </div>
 
-      <Card className="space-y-3 p-4">
-        <div className="flex items-center gap-3">
-          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${activeCard.tint}`}>
-            <ActiveIcon className="h-4 w-4" aria-hidden />
+      <Card className="space-y-2.5 p-3">
+        <div className="flex items-center gap-2.5">
+          <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${activeCard.tint}`}>
+            <ActiveIcon className="h-3.5 w-3.5" aria-hidden />
           </span>
           <div className="min-w-0">
-            <h3 className="text-[17px] font-semibold leading-tight text-soft-charcoal">保存{activeCard.label}</h3>
-            <p className="mt-0.5 text-xs text-dark-gray">{activeCard.description}</p>
+            <h3 className="text-[15px] font-semibold leading-tight text-soft-charcoal">保存{activeCard.label}</h3>
+            <p className="mt-0.5 text-[11px] leading-tight text-dark-gray">{activeCard.description}</p>
           </div>
         </div>
 
-        <form onSubmit={submitRecord} className="space-y-4">
+        <form onSubmit={submitRecord} className="space-y-3">
           {activeKind === 'feeding' ? (
             <>
               <label className={labelClass}>
@@ -525,7 +525,7 @@ export default function RecordPage() {
                 disabled={formDisabled}
                 onChange={(feedType) => setFeeding((value) => ({ ...value, feed_type: feedType }))}
               />
-              <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 gap-2.5">
                 {feeding.feed_type === 'formula' ? (
                   <label className={labelClass}>
                     配方奶量 (ml)
@@ -560,11 +560,11 @@ export default function RecordPage() {
               <label className={labelClass}>
                 备注
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={feeding.notes}
                   onChange={(event) => setFeeding((value) => ({ ...value, notes: event.target.value }))}
                   disabled={formDisabled}
-                  className={`${inputClass} py-3`}
+                  className={`${inputClass} py-2.5`}
                   placeholder="例如：精神好，喝完后拍嗝顺利"
                 />
               </label>
@@ -573,7 +573,7 @@ export default function RecordPage() {
 
           {activeKind === 'sleep' ? (
             <>
-              <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 gap-2.5">
                 <label className={labelClass}>
                   开始
                   <input
@@ -600,7 +600,7 @@ export default function RecordPage() {
                   />
                 </label>
               </div>
-              <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 gap-2.5">
                 <SegmentedChoice
                   label="类型"
                   ariaLabel="睡眠类型"
@@ -637,7 +637,7 @@ export default function RecordPage() {
                   value={sleep.notes}
                   onChange={(event) => setSleep((value) => ({ ...value, notes: event.target.value }))}
                   disabled={formDisabled}
-                  className={`${inputClass} py-3`}
+                  className={`${inputClass} py-2.5`}
                   placeholder={sleep.sleep_type === 'night' ? '例如：胀气醒、换尿布后继续睡' : '例如：入睡方式、醒来状态'}
                 />
               </label>
@@ -659,7 +659,7 @@ export default function RecordPage() {
                   className={inputClass}
                 />
               </label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-1.5">
                 <div>
                   <label className={labelClass} htmlFor="growth-weight">
                     体重 (g)
@@ -733,7 +733,7 @@ export default function RecordPage() {
                   value={growth.notes}
                   onChange={(event) => setGrowth((value) => ({ ...value, notes: event.target.value }))}
                   disabled={formDisabled}
-                  className={`${inputClass} py-3`}
+                  className={`${inputClass} py-2.5`}
                   placeholder="例如：家用软尺测量、饭后称重、复查时记录"
                 />
               </label>
@@ -779,11 +779,11 @@ export default function RecordPage() {
               <label className={labelClass}>
                 说明
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={health.description}
                   onChange={(event) => setHealth((value) => ({ ...value, description: event.target.value }))}
                   disabled={formDisabled}
-                  className={`${inputClass} py-3`}
+                  className={`${inputClass} py-2.5`}
                   placeholder="记录医生建议、症状或观察重点"
                 />
               </label>
@@ -803,7 +803,7 @@ export default function RecordPage() {
             </p>
           ) : null}
 
-          <Button type="submit" loading={submitting} disabled={formDisabled} className="w-full">
+          <Button type="submit" loading={submitting} disabled={formDisabled} className="min-h-10 w-full py-2.5">
             保存{activeCard.label}
           </Button>
         </form>

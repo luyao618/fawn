@@ -37,7 +37,12 @@ describe('login and auth routing', () => {
   it('registers with an invite code then logs in to /profile', async () => {
     render(<LoginPage />);
 
-    await userEvent.click(screen.getByRole('button', { name: '注册账号' }));
+    const loginButton = screen.getByRole('button', { name: '登录' });
+    const registerButton = screen.getByRole('button', { name: '注册账号' });
+    expect(loginButton).toHaveClass('w-full');
+    expect(registerButton).not.toHaveClass('w-full');
+
+    await userEvent.click(registerButton);
     await userEvent.type(screen.getByLabelText('邀请码'), '2026');
     await userEvent.type(screen.getByLabelText('家庭名称'), '登录页新家庭');
     await userEvent.type(screen.getByLabelText('昵称'), '新妈妈');

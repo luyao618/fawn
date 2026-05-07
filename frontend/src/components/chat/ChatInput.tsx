@@ -1,7 +1,8 @@
 'use client';
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
-import { ImagePlus, Plus, Send, X } from 'lucide-react';
+import Link from 'next/link';
+import { Plus, Send, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ChatInputProps {
@@ -10,9 +11,17 @@ interface ChatInputProps {
   disabled?: boolean;
   attachedImage: string | null;
   onRemoveImage: () => void;
+  historyHref?: string;
 }
 
-export function ChatInput({ onSend, onAttach, disabled, attachedImage, onRemoveImage }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  onAttach,
+  disabled,
+  attachedImage,
+  onRemoveImage,
+  historyHref,
+}: ChatInputProps) {
   const [content, setContent] = useState('');
   const [isUploading, setUploading] = useState(false);
   const [isActionMenuOpen, setActionMenuOpen] = useState(false);
@@ -20,7 +29,8 @@ export function ChatInput({ onSend, onAttach, disabled, attachedImage, onRemoveI
   const menuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const canSend = Boolean(content.trim() || attachedImage) && !disabled && !isUploading;
-  const canOpenActions = !disabled && !isUploading;
+  const canUpload = !disabled && !isUploading;
+  const canOpenActions = canUpload || Boolean(historyHref);
 
   useEffect(() => {
     if (!isActionMenuOpen) return;
@@ -36,6 +46,7 @@ export function ChatInput({ onSend, onAttach, disabled, attachedImage, onRemoveI
   }, [isActionMenuOpen]);
 
   function openPhotoPicker() {
+    if (!canUpload) return;
     setActionMenuOpen(false);
     fileInputRef.current?.click();
   }
@@ -60,15 +71,8 @@ export function ChatInput({ onSend, onAttach, disabled, attachedImage, onRemoveI
     setContent('');
   }
 
-  function keepInputVisibleOnMobile() {
-    setActionMenuOpen(false);
-    const keepVisible = () => textareaRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
-    window.setTimeout(keepVisible, 120);
-    window.setTimeout(keepVisible, 360);
-  }
-
   return (
-    <form onSubmit={submit} className="bg-transparent px-4 pb-3 pt-2">
+    <form onSubmit={submit} className="shrink-0 bg-transparent px-4 pb-3 pt-2">
       {attachedImage ? (
         <div className="mb-2 flex items-center gap-2 rounded-2xl bg-white/90 p-2 shadow-card">
           <img src={attachedImage} alt="已选择图片" className="h-16 w-16 rounded-2xl object-cover" />
@@ -89,15 +93,25 @@ export function ChatInput({ onSend, onAttach, disabled, attachedImage, onRemoveI
           {isActionMenuOpen ? (
             <div
               role="menu"
-              className="absolute bottom-[calc(100%+8px)] left-0 z-20 w-40 rounded-2xl border border-white/70 bg-white/95 p-1.5 shadow-float backdrop-blur"
+              className="absolute bottom-[calc(100%+8px)] left-0 z-20 w-44 rounded-2xl border border-white/70 bg-white/95 p-1.5 shadow-float backdrop-blur"
             >
+              {historyHref ? (
+                <Link
+                  href={historyHref}
+                  role="menuitem"
+                  className="flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm font-semibold text-soft-charcoal hover:bg-warm-gray active:bg-nursery-mint"
+                  onClick={() => setActionMenuOpen(false)}
+                >
+                  历史记录
+                </Link>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"
                 onClick={openPhotoPicker}
-                className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-soft-charcoal hover:bg-warm-gray active:bg-nursery-mint"
+                disabled={!canUpload}
+                className="flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm font-semibold text-soft-charcoal hover:bg-warm-gray active:bg-nursery-mint"
               >
-                <ImagePlus className="h-4 w-4 text-dark-gray" aria-hidden />
                 上传照片
               </button>
             </div>
@@ -118,7 +132,7 @@ export function ChatInput({ onSend, onAttach, disabled, attachedImage, onRemoveI
           ref={textareaRef}
           value={content}
           onChange={(event) => setContent(event.target.value)}
-          onFocus={keepInputVisibleOnMobile}
+          onFocus={() => setActionMenuOpen(false)}
           disabled={disabled}
           rows={1}
           placeholder={isUploading ? '图片上传中...' : '输入消息...'}

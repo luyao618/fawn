@@ -33,6 +33,10 @@ describe('chat page', () => {
   it('sends a message and updates the message list', async () => {
     render(<ChatClient />);
     await waitFor(() => expect(screen.getByPlaceholderText('输入消息...')).toBeInTheDocument());
+    expect(screen.queryByRole('link', { name: /历史/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText('更多操作'));
+    expect(screen.getByRole('menuitem', { name: '历史记录' })).toHaveAttribute('href', '/history');
+    await userEvent.click(screen.getByPlaceholderText('输入消息...'));
     expect(screen.queryByRole('button', { name: '记录喂奶' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '睡眠情况' })).not.toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText('输入消息...'), '宝宝今天体重4.2kg，是不是偏轻了？');
