@@ -21,7 +21,7 @@ describe('dashboard page', () => {
   it('loads dashboard mock data', async () => {
     render(<DashboardPage />);
     await waitFor(() => expect(screen.getByText(/晨晨/)).toBeInTheDocument(), { timeout: 2000 });
-    expect(screen.getByText('最新成长')).toBeInTheDocument();
+    expect(screen.getByText('体重')).toBeInTheDocument();
     expect(screen.getByText('喂养统计')).toBeInTheDocument();
     expect(screen.getByText('睡眠统计')).toBeInTheDocument();
     expect(screen.getByText('健康时间线')).toBeInTheDocument();
@@ -36,7 +36,7 @@ describe('dashboard page', () => {
     render(<DashboardPage />);
 
     await waitFor(() => expect(screen.getByText(/晨晨/)).toBeInTheDocument(), { timeout: 2000 });
-    expect(screen.getByText('最新成长')).toBeInTheDocument();
+    expect(screen.getByText('体重')).toBeInTheDocument();
     expect(screen.getByText('喂养统计')).toBeInTheDocument();
     expect(screen.getByText('睡眠统计')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('有 1 项数据暂时没更新');
@@ -58,7 +58,7 @@ describe('dashboard page', () => {
 
     await waitFor(() => expect(screen.getByText('还没有宝宝档案')).toBeInTheDocument());
     expect(screen.getByRole('link', { name: '去家庭页' })).toHaveAttribute('href', '/profile');
-    expect(screen.getByText('暂无成长记录')).toBeInTheDocument();
+    expect(screen.getByText('最新成长 · 暂无记录')).toBeInTheDocument();
     expect(screen.queryByText(/晨晨/)).not.toBeInTheDocument();
   });
 });
