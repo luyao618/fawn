@@ -182,21 +182,36 @@ async def summary(
         )
     today = dashboard_today()
 
-    latest_growth = await db.scalar(
-        select(GrowthRecord)
-        .where(GrowthRecord.baby_id == baby.id, GrowthRecord.deleted_at.is_(None))
-        .order_by(GrowthRecord.measurement_date.desc())
-        .limit(1)
-    )
-    latest_growth_payload = None
-    if latest_growth:
-        latest_growth_payload = {
-            "date": latest_growth.measurement_date.isoformat(),
-            "weight_g": latest_growth.weight_g,
-            "weight_percentile": decimal_float(latest_growth.weight_percentile),
-            "height_cm": decimal_float(latest_growth.height_cm),
-            "height_percentile": decimal_float(latest_growth.height_percentile),
+    async def latest_metric(field, value_attr, percentile_attr):
+        record = await db.scalar(
+            select(GrowthRecord)
+            .where(
+                GrowthRecord.baby_id == baby.id,
+                GrowthRecord.deleted_at.is_(None),
+                field.isnot(None),
+            )
+            .order_by(GrowthRecord.measurement_date.desc())
+            .limit(1)
+        )
+        if record is None:
+            return None
+        return {
+            "date": record.measurement_date.isoformat(),
+            "value": decimal_float(getattr(record, value_attr)),
+            "percentile": decimal_float(getattr(record, percentile_attr)),
         }
+
+    weight_metric = await latest_metric(GrowthRecord.weight_g, "weight_g", "weight_percentile")
+    height_metric = await latest_metric(GrowthRecord.height_cm, "height_cm", "height_percentile")
+    head_metric = await latest_metric(GrowthRecord.head_cm, "head_cm", "head_percentile")
+    if any([weight_metric, height_metric, head_metric]):
+        latest_growth_payload = {
+            "weight": weight_metric,
+            "height": height_metric,
+            "head": head_metric,
+        }
+    else:
+        latest_growth_payload = None
 
     start, end = dashboard_day_bounds(today)
     feeding_rows = (

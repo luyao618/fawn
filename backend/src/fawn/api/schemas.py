@@ -276,12 +276,16 @@ class DashboardBabySummary(BaseModel):
     age_display: str | None = None
 
 
-class DashboardLatestGrowth(BaseModel):
+class DashboardLatestGrowthMetric(BaseModel):
     date: date
-    weight_g: int | None = None
-    weight_percentile: float | None = None
-    height_cm: float | None = None
-    height_percentile: float | None = None
+    value: float
+    percentile: float | None = None
+
+
+class DashboardLatestGrowth(BaseModel):
+    weight: DashboardLatestGrowthMetric | None = None
+    height: DashboardLatestGrowthMetric | None = None
+    head: DashboardLatestGrowthMetric | None = None
 
 
 class DashboardTodayFeeding(BaseModel):

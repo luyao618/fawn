@@ -426,7 +426,13 @@ function mockMemorySummaries(): MemoryFileSummary[] {
   ];
 }
 
-function refreshMockGrowthViews(record: GrowthRecord) {
+function latestRecordWithField(field: keyof GrowthRecord) {
+  return mockGrowthRecords
+    .filter((item) => item[field] != null)
+    .sort((a, b) => b.measurement_date.localeCompare(a.measurement_date))[0];
+}
+
+function refreshMockGrowthViews() {
   mockGrowthChart.records = mockGrowthRecords
     .map((item) => ({
       date: item.measurement_date,
@@ -436,21 +442,26 @@ function refreshMockGrowthViews(record: GrowthRecord) {
     }))
     .sort((left, right) => left.date.localeCompare(right.date));
 
-  const latest = mockGrowthRecords.reduce((current, item) => {
-    return item.measurement_date > current.measurement_date ? item : current;
-  }, mockGrowthRecords[0]);
+  const latestWithWeight = latestRecordWithField('weight_g');
+  const latestWithHeight = latestRecordWithField('height_cm');
+  const latestWithHead = latestRecordWithField('head_cm');
 
-  if (latest?.id === record.id || latest?.measurement_date === record.measurement_date) {
-    mockDashboardSummary.latest_growth = latest.weight_g
-      ? {
-          date: latest.measurement_date,
-          weight_g: latest.weight_g,
-          weight_percentile: latest.weight_percentile ?? 0,
-          height_cm: latest.height_cm ?? 0,
-          height_percentile: latest.height_percentile ?? 0,
-        }
-      : null;
+  if (!latestWithWeight && !latestWithHeight && !latestWithHead) {
+    mockDashboardSummary.latest_growth = null;
+    return;
   }
+
+  mockDashboardSummary.latest_growth = {
+    weight: latestWithWeight
+      ? { date: latestWithWeight.measurement_date, value: latestWithWeight.weight_g!, percentile: latestWithWeight.weight_percentile ?? null }
+      : null,
+    height: latestWithHeight
+      ? { date: latestWithHeight.measurement_date, value: latestWithHeight.height_cm!, percentile: latestWithHeight.height_percentile ?? null }
+      : null,
+    head: latestWithHead
+      ? { date: latestWithHead.measurement_date, value: latestWithHead.head_cm!, percentile: latestWithHead.head_percentile ?? null }
+      : null,
+  };
 }
 
 function refreshMockFeedingViews(record: FeedingRecord) {
@@ -784,7 +795,7 @@ export class ApiClient {
       notes: data.notes ?? null,
     };
     mockGrowthRecords.unshift(record);
-    refreshMockGrowthViews(record);
+    refreshMockGrowthViews();
     return clone(record);
   }
 

@@ -50,7 +50,7 @@ describe('api mock layer', () => {
     expect((await api.getGrowthRecords()).some((record) => record.id === growth.id)).toBe(true);
     expect(growth.notes).toBe('家用体重秤测量');
     expect((await api.getGrowthChart()).records.some((record) => record.date === '2026-05-02')).toBe(true);
-    expect((await api.getDashboardSummary()).latest_growth?.date).toBe('2026-05-02');
+    expect((await api.getDashboardSummary()).latest_growth?.weight?.date).toBe('2026-05-02');
     expect((await api.getGrowthReferenceP50('2026-04-29'))?.age_display).toBeTruthy();
 
     const feeding = await api.createFeedingRecord({

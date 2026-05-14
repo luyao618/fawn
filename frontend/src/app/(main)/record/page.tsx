@@ -1,17 +1,20 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Moon, Ruler, Stethoscope, Utensils } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { GrowthHistoryList } from '@/components/dashboard/GrowthHistoryList';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
 import { canWriteTracker, formatDate } from '@/lib/utils';
 import type {
   DashboardSummary,
   FeedingRecordCreate,
+  GrowthRecord,
   GrowthRecordCreate,
   GrowthReferenceP50,
   HealthRecordCreate,
@@ -275,14 +278,23 @@ function initialHealthForm() {
   };
 }
 
-export default function RecordPage() {
+const validKinds: RecordKind[] = ['feeding', 'sleep', 'growth', 'health'];
+
+function RecordPageInner() {
+  const searchParams = useSearchParams();
+  const kindParam = searchParams.get('kind');
+  const initialKind: RecordKind = validKinds.includes(kindParam as RecordKind)
+    ? (kindParam as RecordKind)
+    : 'feeding';
+
   const user = useAuthStore((state) => state.user);
   const canWrite = canWriteTracker(user?.access_type);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [activeKind, setActiveKind] = useState<RecordKind>('feeding');
+  const [activeKind, setActiveKind] = useState<RecordKind>(initialKind);
   const [feeding, setFeeding] = useState(initialFeedingForm);
   const [sleep, setSleep] = useState(initialSleepForm);
   const [growth, setGrowth] = useState(initialGrowthForm);
+  const [growthRecords, setGrowthRecords] = useState<GrowthRecord[]>([]);
   const [growthReference, setGrowthReference] = useState<GrowthReferenceP50 | null>(null);
   const [growthReferenceLoading, setGrowthReferenceLoading] = useState(false);
   const [growthReferenceUnavailable, setGrowthReferenceUnavailable] = useState(false);
@@ -297,6 +309,12 @@ export default function RecordPage() {
       .getDashboardSummary()
       .then((data) => {
         if (active) setSummary(data);
+      })
+      .catch(() => undefined);
+    api
+      .getGrowthRecords()
+      .then((data) => {
+        if (active) setGrowthRecords(data);
       })
       .catch(() => undefined);
     return () => {
@@ -415,6 +433,7 @@ export default function RecordPage() {
           notes: textOrNull(growth.notes),
         };
         await api.createGrowthRecord(payload);
+        api.getGrowthRecords().then(setGrowthRecords).catch(() => undefined);
       }
 
       if (activeKind === 'health') {
@@ -646,6 +665,9 @@ export default function RecordPage() {
 
           {activeKind === 'growth' ? (
             <>
+              <p className="rounded-xl bg-warm-gray px-3 py-2 text-xs text-dark-gray">
+                成长指标无需每日测量，按医生建议或自身节奏记录即可。
+              </p>
               <label className={labelClass}>
                 日期
                 <input
@@ -808,6 +830,21 @@ export default function RecordPage() {
           </Button>
         </form>
       </Card>
+
+      {activeKind === 'growth' ? (
+        <Card className="space-y-2 p-3">
+          <h3 className="text-[15px] font-semibold text-soft-charcoal">成长记录历史</h3>
+          <GrowthHistoryList records={growthRecords} />
+        </Card>
+      ) : null}
     </div>
+  );
+}
+
+export default function RecordPage() {
+  return (
+    <Suspense>
+      <RecordPageInner />
+    </Suspense>
   );
 }

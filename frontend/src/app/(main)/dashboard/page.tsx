@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ClipboardList, Moon, Ruler, Stethoscope, Utensils } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { FeedingStats } from '@/components/dashboard/FeedingStats';
-import { GrowthChart } from '@/components/dashboard/GrowthChart';
 import { HealthTimeline } from '@/components/dashboard/HealthTimeline';
+import { LatestGrowthCards } from '@/components/dashboard/LatestGrowthCards';
 import { SleepStats } from '@/components/dashboard/SleepStats';
 import { Card } from '@/components/ui/Card';
 import { api } from '@/lib/api';
@@ -16,14 +17,13 @@ import type {
   DashboardSummary,
   FeedingRecord,
   FeedingStatsData,
-  GrowthChartData,
   GrowthRecord,
+  GrowthReferenceP50,
   HealthRecord,
   SleepStatsData,
   SleepRecord,
 } from '@/lib/types';
 
-type Indicator = 'weight' | 'height' | 'head';
 type RecentRecordType = '生长' | '喂养' | '睡眠' | '健康';
 type RecentRecord = {
   id: string;
@@ -172,7 +172,6 @@ function DashboardOverview({ summary, latestRecord }: { summary: DashboardSummar
     );
   }
 
-  const latestGrowth = summary.latest_growth;
   const todaySleepValue =
     summary.today_sleep.total_hours == null ? '没数据' : `${summary.today_sleep.total_hours.toFixed(1)}h`;
   const todayBreastDuration = summary.today_feeding.breast_duration_min;
@@ -204,16 +203,6 @@ function DashboardOverview({ summary, latestRecord }: { summary: DashboardSummar
           hint={todayBreastDuration > 0 ? `亲喂 ${todayBreastDuration}分钟` : undefined}
         />
         <StatChip label="今日睡眠" value={todaySleepValue} />
-        <StatChip
-          label="最新体重"
-          value={toKg(latestGrowth?.weight_g ?? null)}
-          hint={latestGrowth?.weight_percentile ? `WHO P${latestGrowth.weight_percentile}` : undefined}
-        />
-        <StatChip
-          label="最新身高"
-          value={latestGrowth?.height_cm ? `${latestGrowth.height_cm}cm` : '暂无'}
-          hint={latestGrowth?.height_percentile ? `WHO P${latestGrowth.height_percentile}` : undefined}
-        />
       </div>
     </Card>
   );
@@ -265,19 +254,18 @@ function RecentRecords({ records }: { records: RecentRecord[] }) {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [growth, setGrowth] = useState<GrowthChartData | null>(null);
   const [feeding, setFeeding] = useState<FeedingStatsData | null>(null);
   const [sleep, setSleep] = useState<SleepStatsData | null>(null);
   const [health, setHealth] = useState<HealthRecord[] | null>(null);
   const [recentRecords, setRecentRecords] = useState<RecentRecord[]>([]);
-  const [indicator, setIndicator] = useState<Indicator>('weight');
+  const [growthP50, setGrowthP50] = useState<GrowthReferenceP50 | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     const [
       summaryData,
-      growthData,
       feedingData,
       sleepData,
       healthData,
@@ -286,7 +274,6 @@ export default function DashboardPage() {
       sleepRecords,
     ] = await Promise.allSettled([
       api.getDashboardSummary(),
-      api.getGrowthChart(),
       api.getFeedingStats(STATS_HISTORY_DAYS),
       api.getSleepStats(STATS_HISTORY_DAYS),
       api.getHealthRecords(),
@@ -296,7 +283,6 @@ export default function DashboardPage() {
     ] as const);
     const failedCount = [
       summaryData,
-      growthData,
       feedingData,
       sleepData,
       healthData,
@@ -306,7 +292,6 @@ export default function DashboardPage() {
     ].filter((result) => result.status === 'rejected').length;
 
     if (summaryData.status === 'fulfilled') setSummary(summaryData.value);
-    if (growthData.status === 'fulfilled') setGrowth(growthData.value);
     if (feedingData.status === 'fulfilled') setFeeding(feedingData.value);
     if (sleepData.status === 'fulfilled') setSleep(sleepData.value);
     if (healthData.status === 'fulfilled') setHealth(healthData.value);
@@ -331,6 +316,21 @@ export default function DashboardPage() {
     void loadDashboard();
   }, [loadDashboard]);
 
+  useEffect(() => {
+    let active = true;
+    const today = new Date().toISOString().slice(0, 10);
+    api.getGrowthReferenceP50(today)
+      .then((data) => {
+        if (active) setGrowthP50(data);
+      })
+      .catch((error) => {
+        console.warn('Failed to fetch growth P50 reference', error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <div className="space-y-4 px-4 pt-4 pb-6">
       {loadError ? (
@@ -346,16 +346,11 @@ export default function DashboardPage() {
       ) : (
         <Skeleton className="h-36" />
       )}
-      {growth ? (
-        <GrowthChart
-          data={growth}
-          birthDate={summary?.baby?.birth_date ?? undefined}
-          activeIndicator={indicator}
-          onIndicatorChange={setIndicator}
-        />
-      ) : (
-        <Skeleton className="h-80" />
-      )}
+      <LatestGrowthCards
+        latest={summary?.latest_growth ?? null}
+        referenceP50={growthP50}
+        onViewAll={() => router.push('/record?kind=growth')}
+      />
 
       <div className="grid grid-cols-1 gap-4">
         {feeding ? <FeedingStats data={feeding} /> : <Skeleton className="h-48" />}

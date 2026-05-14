@@ -1,15 +1,24 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RecordPage from '@/app/(main)/record/page';
 import { TabBar } from '@/components/layout/TabBar';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
 
+let mockSearchParams = new URLSearchParams();
+
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => mockSearchParams,
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => '/record',
+}));
+
 describe('record page', () => {
   beforeEach(async () => {
     process.env.NEXT_PUBLIC_USE_MOCK = 'true';
     window.localStorage.clear();
+    mockSearchParams = new URLSearchParams();
     useAuthStore.getState().logout();
     await useAuthStore.getState().login('mama', 'password');
   });
@@ -170,5 +179,30 @@ describe('record page', () => {
     await waitFor(() => expect(screen.getByText('还没有宝宝档案，暂时不能保存记录。')).toBeInTheDocument());
     expect(screen.getByRole('link', { name: '去家庭页' })).toHaveAttribute('href', '/profile');
     expect(screen.getByRole('button', { name: '保存喂养' })).toBeDisabled();
+  });
+
+  it('shows growth history list when growth tab is active', async () => {
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存喂养' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /生长：/ }));
+
+    await waitFor(() => expect(screen.getByText('成长记录历史')).toBeInTheDocument());
+  });
+
+  it('initializes growth tab when ?kind=growth is in the URL', async () => {
+    mockSearchParams = new URLSearchParams('kind=growth');
+
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存生长' })).toBeInTheDocument());
+  });
+
+  it('falls back to feeding tab for invalid ?kind= param', async () => {
+    mockSearchParams = new URLSearchParams('kind=invalid');
+
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存喂养' })).toBeInTheDocument());
   });
 });
