@@ -21,7 +21,26 @@ from fawn.services import profile as profile_service
 from fawn.services import tracker as tracker_service
 
 TRACKER_CONFIDENCE_THRESHOLD = 0.75
-CONFIRM_WORDS = {"确认", "可以", "对", "是的", "没问题", "记录吧", "记一下", "嗯"}
+CONFIRM_WORDS = {
+    "确认",
+    "确认记录",
+    "确认更新",
+    "确认删除",
+    "确定",
+    "确定记录",
+    "可以",
+    "对",
+    "是的",
+    "没问题",
+    "记录吧",
+    "记一下",
+    "嗯",
+    "好",
+    "好的",
+    "ok",
+    "OK",
+    "Ok",
+}
 CANCEL_WORDS = {"算了", "取消", "先别记", "不要记", "不记了", "先不记"}
 HIGH_RISK_BABY_FIELDS = {
     "gender",
@@ -190,7 +209,7 @@ def _looks_like_recent_record_question(value: str) -> bool:
 
 def _is_confirm_message(value: str) -> bool:
     normalized = _normalize_short_reply(value)
-    return len(normalized) <= 8 and normalized in CONFIRM_WORDS
+    return len(normalized) <= 10 and normalized in CONFIRM_WORDS
 
 
 def _is_cancel_message(value: str) -> bool:
