@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { ClipboardList, Moon, Ruler, Stethoscope, Utensils } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
@@ -18,7 +17,6 @@ import type {
   FeedingRecord,
   FeedingStatsData,
   GrowthRecord,
-  GrowthReferenceP50,
   HealthRecord,
   SleepStatsData,
   SleepRecord,
@@ -254,13 +252,11 @@ function RecentRecords({ records }: { records: RecentRecord[] }) {
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [feeding, setFeeding] = useState<FeedingStatsData | null>(null);
   const [sleep, setSleep] = useState<SleepStatsData | null>(null);
   const [health, setHealth] = useState<HealthRecord[] | null>(null);
   const [recentRecords, setRecentRecords] = useState<RecentRecord[]>([]);
-  const [growthP50, setGrowthP50] = useState<GrowthReferenceP50 | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
@@ -316,21 +312,6 @@ export default function DashboardPage() {
     void loadDashboard();
   }, [loadDashboard]);
 
-  useEffect(() => {
-    let active = true;
-    const today = new Date().toISOString().slice(0, 10);
-    api.getGrowthReferenceP50(today)
-      .then((data) => {
-        if (active) setGrowthP50(data);
-      })
-      .catch((error) => {
-        console.warn('Failed to fetch growth P50 reference', error);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
   return (
     <div className="space-y-4 px-4 pt-4 pb-6">
       {loadError ? (
@@ -346,11 +327,7 @@ export default function DashboardPage() {
       ) : (
         <Skeleton className="h-36" />
       )}
-      <LatestGrowthCards
-        latest={summary?.latest_growth ?? null}
-        referenceP50={growthP50}
-        onViewAll={() => router.push('/record?kind=growth')}
-      />
+      <LatestGrowthCards latest={summary?.latest_growth ?? null} />
 
       <div className="grid grid-cols-1 gap-4">
         {feeding ? <FeedingStats data={feeding} /> : <Skeleton className="h-48" />}
