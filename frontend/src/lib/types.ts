@@ -183,6 +183,18 @@ export interface HealthRecordCreate {
   description?: string | null;
 }
 
+export interface DashboardLatestGrowthMetric {
+  date: string;
+  value: number;
+  percentile: number | null;
+}
+
+export interface DashboardLatestGrowth {
+  weight: DashboardLatestGrowthMetric | null;
+  height: DashboardLatestGrowthMetric | null;
+  head: DashboardLatestGrowthMetric | null;
+}
+
 export interface DashboardSummary {
   baby: {
     name: string | null;
@@ -191,13 +203,7 @@ export interface DashboardSummary {
     age_days: number | null;
     age_display: string | null;
   } | null;
-  latest_growth: {
-    date: string;
-    weight_g: number | null;
-    weight_percentile: number | null;
-    height_cm: number | null;
-    height_percentile: number | null;
-  } | null;
+  latest_growth: DashboardLatestGrowth | null;
   today_feeding: {
     total_ml: number;
     breast_duration_min: number;

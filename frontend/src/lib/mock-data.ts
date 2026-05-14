@@ -341,11 +341,9 @@ export const mockDashboardSummary: DashboardSummary = {
     age_display: '1个月28天',
   },
   latest_growth: {
-    date: '2026-04-29',
-    weight_g: 4200,
-    weight_percentile: 35,
-    height_cm: 55,
-    height_percentile: 45,
+    weight: { date: '2026-04-29', value: 4200, percentile: 35 },
+    height: { date: '2026-04-29', value: 55, percentile: 45 },
+    head: { date: '2026-04-29', value: 38, percentile: 50 },
   },
   today_feeding: {
     total_ml: 190,
