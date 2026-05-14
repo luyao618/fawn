@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import io
 import json
 import uuid
 
 from httpx import AsyncClient
+from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fawn.config import get_settings
 from fawn.models import Conversation, Family, Message, User
 from fawn.services.auth import hash_password
 from fawn.services.family import normalize_family_name
@@ -96,12 +99,13 @@ async def test_registered_family_can_start_chat_without_baby(
     monkeypatch.setattr("fawn.api.chat.get_agent_graph", fake_get_agent_graph)
     monkeypatch.setattr("fawn.api.chat.schedule_post_turn_memory_hook", lambda **kwargs: None)
 
+    username = f"chatparent{uuid.uuid4().hex[:8]}"
     register_response = await client.post(
         "/api/auth/register",
         json={
-            "invite_code": "2026",
-            "family_name": "管家空家庭",
-            "username": "chatparent",
+            "invite_code": get_settings().registration_invite_code,
+            "family_name": f"管家空家庭-{uuid.uuid4()}",
+            "username": username,
             "password": "secret123",
             "display_name": "新妈妈",
             "role": "妈妈",
@@ -109,7 +113,7 @@ async def test_registered_family_can_start_chat_without_baby(
     )
     login_response = await client.post(
         "/api/auth/login",
-        json={"username": "chatparent", "password": "secret123"},
+        json={"username": username, "password": "secret123"},
     )
     headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
 
@@ -140,3 +144,55 @@ async def test_registered_family_can_start_chat_without_baby(
         ).scalars()
     )
     assert [message.role for message in messages] == ["user", "assistant"]
+
+
+async def test_upload_chat_image_stores_model_sized_jpeg(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+) -> None:
+    stored: dict[str, object] = {}
+
+    def fake_put_bytes(key: str, content: bytes, mime_type: str) -> None:
+        stored["key"] = key
+        stored["content"] = content
+        stored["mime_type"] = mime_type
+
+    image = Image.new("RGB", (2400, 1800), color=(80, 120, 160))
+    image_bytes = io.BytesIO()
+    image.save(image_bytes, format="JPEG", quality=95)
+    monkeypatch.setattr("fawn.api.chat.put_bytes", fake_put_bytes)
+    conversation_response = await client.post("/api/chat/conversations", headers=auth_headers)
+    conversation_id = conversation_response.json()["id"]
+
+    response = await client.post(
+        f"/api/chat/conversations/{conversation_id}/images",
+        files={"file": ("baby.jpeg", io.BytesIO(image_bytes.getvalue()), "image/jpeg")},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["mime_type"] == "image/jpeg"
+    assert response.json()["image_url"].endswith(".jpg")
+    assert stored["mime_type"] == "image/jpeg"
+    assert str(stored["key"]).endswith(".jpg")
+    with Image.open(io.BytesIO(stored["content"])) as stored_image:
+        assert stored_image.format == "JPEG"
+        assert max(stored_image.size) <= 1280
+
+
+async def test_upload_chat_image_rejects_invalid_image(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    conversation_response = await client.post("/api/chat/conversations", headers=auth_headers)
+    conversation_id = conversation_response.json()["id"]
+
+    response = await client.post(
+        f"/api/chat/conversations/{conversation_id}/images",
+        files={"file": ("baby.jpg", io.BytesIO(b"not an image"), "image/jpeg")},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid image"

@@ -33,6 +33,11 @@ from fawn.config import get_settings
 from fawn.db.session import get_db
 from fawn.dependencies import get_current_user
 from fawn.models import Conversation, ConversationSummary, Message, User
+from fawn.services.images import (
+    ImageProcessingError,
+    MODEL_IMAGE_EXTENSION,
+    prepare_model_image,
+)
 from fawn.services.long_term_memory import LongTermMemoryService
 from fawn.services.memory_curator import CuratorTurn, MemoryCurator
 from fawn.services.storage import get_bytes, put_bytes
@@ -496,11 +501,13 @@ async def upload_chat_image(
     db: AsyncSession = Depends(get_db),
 ) -> ChatImageResponse:
     await _get_family_conversation(db, user, conversation_id)
-    suffix = Path(file.filename or "image.jpg").suffix or ".jpg"
-    filename = f"{uuid.uuid4()}{suffix}"
-    storage_key = _chat_image_key(conversation_id, filename)
     content = await file.read()
-    mime_type = file.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    try:
+        content, mime_type = prepare_model_image(content)
+    except ImageProcessingError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid image") from exc
+    filename = f"{uuid.uuid4()}{MODEL_IMAGE_EXTENSION}"
+    storage_key = _chat_image_key(conversation_id, filename)
     put_bytes(storage_key, content, mime_type)
     return ChatImageResponse(
         image_url=f"/api/chat/conversations/{conversation_id}/images/{filename}",

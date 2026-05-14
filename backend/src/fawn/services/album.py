@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from fawn.dependencies import can_soft_delete_data
 from fawn.models import Baby, Photo, PhotoTag, User
+from fawn.services.images import prepare_model_image
 from fawn.services.storage import get_presigned_download_url, put_bytes
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ async def _auto_tag_photo(photo_id: uuid.UUID, image_bytes: bytes, mime_type: st
         from fawn.db.session import async_session_factory
         from fawn.llm.factory import create_chat_model
         vision_llm = create_chat_model("vision")
+        image_bytes, mime_type = prepare_model_image(image_bytes)
         b64 = base64.b64encode(image_bytes).decode()
         data_url = f"data:{mime_type};base64,{b64}"
         prompt = [
