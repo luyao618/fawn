@@ -98,7 +98,6 @@ export function ChatClient() {
   const chatStyle = {
     '--chat-composer-bottom': keyboardInset > 0 ? `${keyboardInset}px` : 'calc(100px + var(--safe-area-bottom))',
     '--chat-composer-height': `${composerHeight}px`,
-    paddingBottom: 'calc(var(--chat-composer-height) + var(--chat-composer-bottom))',
   } as CSSProperties;
 
   async function handleAttach(file: File) {

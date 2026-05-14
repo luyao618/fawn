@@ -55,6 +55,10 @@ export function MessageList({ messages, streamingContent, isStreaming, pendingTo
         {pendingToolCalls.length > 0 ? <TypingIndicator /> : null}
         {streamingMessage ? <MessageBubble message={streamingMessage} isStreaming={isStreaming} /> : null}
       </div>
+      <div
+        aria-hidden
+        style={{ height: 'calc(var(--chat-composer-height, 82px) + var(--chat-composer-bottom, 100px) + 16px)' }}
+      />
     </div>
   );
 }
