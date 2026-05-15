@@ -34,7 +34,7 @@ Fawn 是一个面向个人或家庭自部署的育儿管家系统。它不是公
 ```text
 Next.js mobile web app
   ├─ Login / Register
-  ├─ Chat / Dashboard / Record / Album / Profile
+  ├─ Chat / Dashboard / Record / Album / History / Profile
   └─ /api proxy
         │
         ▼
@@ -42,7 +42,7 @@ FastAPI backend
   ├─ Auth, family, user and permission APIs
   ├─ Baby profile, tracker, dashboard and album APIs
   ├─ Chat API with SSE streaming and image upload
-  ├─ LangGraph agent runtime and tool layer
+  ├─ LangGraph agent runtime, tool layer and background agent tasks
   ├─ RAG retrieval over pgvector
   └─ Long-term memory service
         │
@@ -52,6 +52,7 @@ FastAPI backend
         │    ├─ growth, feeding, sleep, health records
         │    ├─ photos and tags
         │    ├─ knowledge documents/chunks/seed metadata
+        │    ├─ agent tasks
         │    └─ WHO growth reference data
         ├─ MinIO object storage
         │    ├─ album photos
@@ -62,10 +63,11 @@ FastAPI backend
 
 主要技术栈：
 
-- **Frontend**：Next.js 15, React 19, TypeScript, Zustand, Vitest, Tailwind CSS, lucide-react。
-- **Backend**：FastAPI, SQLAlchemy asyncio, Alembic, Pydantic Settings, LangGraph, LangChain, PyJWT, MinIO SDK。
+- **Frontend**：Next.js 15, React 19, TypeScript, Zustand, Tailwind CSS, lucide-react, Recharts, Vitest。
+- **Backend**：FastAPI, SQLAlchemy asyncio, Alembic, Pydantic Settings, LangGraph, LangChain (OpenAI / Anthropic), PyJWT, MinIO SDK, pgvector, PyMuPDF / pdfplumber。
 - **Data**：PostgreSQL 16 + pgvector, MinIO, Docker volumes。
 - **Seeds**：知识库 seed、WHO 生长参考数据 seed、可选家庭用户 seed。
+- **质量评估**：`scripts/eval_knowledge.py` 与 `knowledge_eval.yaml` 提供知识库召回与回答质量评估。
 
 ### 功能实现要点
 
@@ -126,7 +128,7 @@ The goal is to make the assistant useful because it understands the current fami
 ```text
 Next.js mobile web app
   ├─ Login / Register
-  ├─ Chat / Dashboard / Record / Album / Profile
+  ├─ Chat / Dashboard / Record / Album / History / Profile
   └─ /api proxy
         │
         ▼
@@ -134,7 +136,7 @@ FastAPI backend
   ├─ Auth, family, user and permission APIs
   ├─ Baby profile, tracker, dashboard and album APIs
   ├─ Chat API with SSE streaming and image upload
-  ├─ LangGraph agent runtime and tool layer
+  ├─ LangGraph agent runtime, tool layer and background agent tasks
   ├─ RAG retrieval over pgvector
   └─ Long-term memory service
         │
@@ -144,6 +146,7 @@ FastAPI backend
         │    ├─ growth, feeding, sleep, health records
         │    ├─ photos and tags
         │    ├─ knowledge documents/chunks/seed metadata
+        │    ├─ agent tasks
         │    └─ WHO growth reference data
         ├─ MinIO object storage
         │    ├─ album photos
@@ -154,10 +157,11 @@ FastAPI backend
 
 Main stack:
 
-- **Frontend**: Next.js 15, React 19, TypeScript, Zustand, Vitest, Tailwind CSS, lucide-react.
-- **Backend**: FastAPI, SQLAlchemy asyncio, Alembic, Pydantic Settings, LangGraph, LangChain, PyJWT, MinIO SDK.
+- **Frontend**: Next.js 15, React 19, TypeScript, Zustand, Tailwind CSS, lucide-react, Recharts, Vitest.
+- **Backend**: FastAPI, SQLAlchemy asyncio, Alembic, Pydantic Settings, LangGraph, LangChain (OpenAI / Anthropic), PyJWT, MinIO SDK, pgvector, PyMuPDF / pdfplumber.
 - **Data**: PostgreSQL 16 + pgvector, MinIO, Docker volumes.
 - **Seeds**: knowledge base seed, WHO growth reference seed, optional family user seed.
+- **Evaluation**: `scripts/eval_knowledge.py` + `knowledge_eval.yaml` exercise knowledge retrieval and answer quality.
 
 ### Implementation Notes
 
