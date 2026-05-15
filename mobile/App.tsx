@@ -1,42 +1,38 @@
-import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+
+import { AuthProvider, useAuth } from './src/auth/AuthContext';
+import { HomeScreen } from './src/screens/HomeScreen';
+import { LoginScreen } from './src/screens/LoginScreen';
+
+function Root() {
+  const { status } = useAuth();
+
+  if (status === 'loading') {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#2c7a4b" />
+      </View>
+    );
+  }
+
+  return status === 'authenticated' ? <HomeScreen /> : <LoginScreen />;
+}
 
 export default function App() {
-  const version =
-    (Constants.expoConfig?.version ?? '0.0.0') +
-    ` (build ${Constants.expoConfig?.android?.versionCode ?? '?'})`;
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Fawn</Text>
-      <Text style={styles.subtitle}>家庭育儿 Agent · Android v1</Text>
-      <Text style={styles.version}>v{version}</Text>
+    <AuthProvider>
+      <Root />
       <StatusBar style="auto" />
-    </View>
+    </AuthProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  loading: {
     flex: 1,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#555',
-    marginBottom: 24,
-  },
-  version: {
-    fontSize: 13,
-    color: '#888',
   },
 });
