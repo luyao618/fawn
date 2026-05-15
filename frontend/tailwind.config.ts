@@ -8,6 +8,7 @@ const config: Config = {
         'fawn-amber': 'var(--color-brand)',
         'fawn-amber-light': 'var(--color-brand-light)',
         'sage-green': 'var(--color-success)',
+        'sage-green-soft': 'var(--color-success-soft)',
         'sage-green-light': 'var(--color-mint)',
         'soft-charcoal': 'var(--color-text-primary)',
         'dark-gray': 'var(--color-text-secondary)',

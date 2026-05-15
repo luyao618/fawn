@@ -25,8 +25,10 @@
   --color-bubble-user: #416656;
   --color-safety: #BA1A1A;
   --color-safety-bg: #FFDAD6;
-  --color-success: #6FBA2C;
-  --color-focus: #F0A030;
+  --color-success: #3F7A14;
+  --color-success-soft: #6FBA2C;
+  --color-focus: #B45309;
+  --color-focus-soft: #F0A030;
   --radius-card: 28px;
   --radius-bubble: 20px;
   --radius-input: 9999px;
@@ -75,6 +77,7 @@ img {
 :focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(180, 83, 9, 0.18);
 }
 
 @keyframes typing-dot {
