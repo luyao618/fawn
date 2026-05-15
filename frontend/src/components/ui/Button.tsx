@@ -10,9 +10,11 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const variants: Record<ButtonVariant, string> = {
-  primary: 'bg-fawn-amber text-white shadow-card active:opacity-90 disabled:bg-oat-border disabled:text-mid-gray disabled:shadow-none',
-  secondary: 'border border-white/70 bg-white/85 text-fawn-amber shadow-card active:bg-fawn-amber-light',
-  danger: 'bg-safety-red text-white active:opacity-85',
+  primary:
+    'btn-press btn-press-primary bg-fawn-amber text-white disabled:bg-oat-border disabled:text-mid-gray disabled:shadow-none',
+  secondary:
+    'btn-press btn-press-secondary border border-white/70 bg-white/85 text-fawn-amber',
+  danger: 'bg-safety-red text-white shadow-card active:opacity-85',
   text: 'bg-transparent text-fawn-amber px-2',
 };
 
@@ -21,7 +23,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     <button
       ref={ref}
       className={cn(
-        'inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-6 py-3 text-base font-semibold transition-colors duration-150',
+        'inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-6 py-3 text-base font-semibold transition-all duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
         variants[variant],
         className,
       )}
