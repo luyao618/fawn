@@ -8,6 +8,7 @@ const config: Config = {
         'fawn-amber': 'var(--color-brand)',
         'fawn-amber-light': 'var(--color-brand-light)',
         'sage-green': 'var(--color-success)',
+        'sage-green-soft': 'var(--color-success-soft)',
         'sage-green-light': 'var(--color-mint)',
         'soft-charcoal': 'var(--color-text-primary)',
         'dark-gray': 'var(--color-text-secondary)',
@@ -17,8 +18,9 @@ const config: Config = {
         'warm-cream': 'var(--color-canvas)',
         'safety-red': 'var(--color-safety)',
         'safety-red-light': 'var(--color-safety-bg)',
-        'warning-amber': '#F0A030',
+        'warning-amber': 'var(--color-focus)',
         'warning-amber-light': 'var(--color-butter)',
+        'focus-ring': 'var(--color-focus)',
         'info-blue': '#567B9C',
         'info-blue-light': 'var(--color-sky-soft)',
         'chart-reference': '#C8D2C8',
@@ -39,6 +41,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
+          'Nunito',
           '-apple-system',
           'BlinkMacSystemFont',
           'PingFang SC',
@@ -50,6 +53,9 @@ const config: Config = {
           'sans-serif',
         ],
         mono: ['SF Mono', 'Menlo', 'Monaco', 'Courier New', 'monospace'],
+      },
+      ringColor: {
+        DEFAULT: 'var(--color-focus)',
       },
       boxShadow: {
         card: '0 18px 45px rgba(13, 28, 46, 0.06)',
