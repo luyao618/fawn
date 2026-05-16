@@ -4,7 +4,11 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useAuth } from '../auth/AuthContext';
 
-export function HomeScreen() {
+interface HomeScreenProps {
+  onOpenSettings: () => void;
+}
+
+export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
   const { user, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
 
@@ -43,6 +47,14 @@ export function HomeScreen() {
           </Text>
         </View>
       )}
+
+      <TouchableOpacity
+        style={[styles.button, styles.buttonSecondary]}
+        onPress={onOpenSettings}
+        accessibilityRole="button"
+      >
+        <Text style={[styles.buttonText, styles.buttonSecondaryText]}>设置 / 切换账号</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.button, signingOut && styles.buttonDisabled]}
@@ -101,8 +113,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 32,
-    marginBottom: 24,
+    marginBottom: 12,
+    minWidth: 220,
+    alignItems: 'center',
   },
+  buttonSecondary: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#2c7a4b',
+  },
+  buttonSecondaryText: { color: '#2c7a4b' },
   buttonDisabled: {
     opacity: 0.6,
   },

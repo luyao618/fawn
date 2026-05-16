@@ -16,3 +16,9 @@ export async function fetchMe(): Promise<StoredUser> {
   const { data } = await api.get<StoredUser>('/auth/me');
   return data;
 }
+
+/** Members of the current user's family (server scopes by the active token). */
+export async function fetchFamilyMembers(): Promise<StoredUser[]> {
+  const { data } = await api.get<StoredUser[]>('/users');
+  return data;
+}
