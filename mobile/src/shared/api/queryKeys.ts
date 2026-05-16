@@ -16,4 +16,10 @@ export const queryKeys = {
     history: (pageSize: number) =>
       [...queryKeys.chat.all, 'history', { pageSize }] as const,
   },
+  growth: {
+    all: ['growth'] as const,
+    records: () => [...queryKeys.growth.all, 'records'] as const,
+    chart: () => [...queryKeys.growth.all, 'chart'] as const,
+    latest: () => [...queryKeys.growth.all, 'latest'] as const,
+  },
 } as const;

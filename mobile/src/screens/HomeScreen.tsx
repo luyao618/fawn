@@ -6,10 +6,11 @@ import { useAuth } from '../auth/AuthContext';
 import { BabyScreen } from './BabyScreen';
 import { ConversationListScreen } from './ConversationListScreen';
 import { ConversationScreen } from './ConversationScreen';
+import { GrowthScreen } from './GrowthScreen';
 import { HistoryConversationScreen } from './HistoryConversationScreen';
 import { HistoryListScreen } from './HistoryListScreen';
 
-type Tab = 'home' | 'chat' | 'history' | 'baby';
+type Tab = 'home' | 'chat' | 'history' | 'growth' | 'baby';
 
 interface HomeScreenProps {
   onOpenSettings: () => void;
@@ -101,6 +102,7 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
             <HistoryListScreen onOpenConversation={(id) => setOpenHistoryId(id)} />
           )
         )}
+        {tab === 'growth' && <GrowthScreen />}
         {tab === 'baby' && <BabyScreen />}
       </View>
 
@@ -124,6 +126,13 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
           active={tab === 'history'}
           onPress={() => {
             setTab('history');
+          }}
+        />
+        <TabButton
+          label="成长"
+          active={tab === 'growth'}
+          onPress={() => {
+            setTab('growth');
           }}
         />
         <TabButton
