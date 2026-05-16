@@ -25,3 +25,7 @@ export function createQueryClient(): QueryClient {
     },
   });
 }
+
+// Module-level singleton so non-React code (auth signOut, axios 401 handler)
+// can reach the same QueryClient that QueryProvider renders with.
+export const queryClient: QueryClient = createQueryClient();
