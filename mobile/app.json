@@ -37,7 +37,8 @@
         {
           "color": "#2c7a4b"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "notification": {
       "icon": "./assets/icon.png",

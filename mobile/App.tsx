@@ -1,6 +1,14 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import {
+  Nunito_400Regular,
+  Nunito_600SemiBold,
+  Nunito_700Bold,
+  Nunito_800ExtraBold,
+  useFonts,
+} from '@expo-google-fonts/nunito';
 
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import {
@@ -9,30 +17,24 @@ import {
   takePendingIntent,
 } from './src/lib/deepLinks';
 import { useNotifications } from './src/lib/pushNotifications';
-import { HomeScreen } from './src/screens/HomeScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
-import { SettingsScreen } from './src/screens/SettingsScreen';
+import { RootNavigator } from './src/navigation/RootNavigator';
 import { QueryProvider } from './src/shared/query';
-
-type Route = 'home' | 'settings';
+import { colors } from './src/shared/theme';
 
 function Root() {
   const { status } = useAuth();
-  const [route, setRoute] = useState<Route>('home');
-  // Holds the most recent push-tap intent. HomeScreen reads + clears it
-  // after wiring through to the matching tab/screen.
-  const [pendingIntent, setPendingIntent] = useState<DeepLinkIntent | null>(null);
+  // Holds the most recent push-tap intent. Subsequent issues will wire this
+  // back through React Navigation (e.g. profile → agent task run). We keep
+  // the subscription here so cold-start intents are not lost while the
+  // skeleton navigator is in place.
+  const [, setPendingIntent] = useState<DeepLinkIntent | null>(null);
 
   useEffect(() => {
-    // Drain any cold-start intent that fired before this component mounted.
     const cold = takePendingIntent();
     if (cold) setPendingIntent(cold);
-    // And subscribe to warm taps. Returning true marks the intent as
-    // consumed so the bus doesn't park it in `pending`.
     return subscribeIntents((intent) => {
       setPendingIntent(intent);
-      // Snap any open Settings sheet shut so HomeScreen can take over.
-      setRoute('home');
       return true;
     });
   }, []);
@@ -40,7 +42,7 @@ function Root() {
   if (status === 'loading') {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#2c7a4b" />
+        <ActivityIndicator size="large" color={colors['fawn-amber']} />
       </View>
     );
   }
@@ -49,44 +51,47 @@ function Root() {
     return <LoginScreen />;
   }
 
-  if (route === 'settings') {
-    return <SettingsScreen onClose={() => setRoute('home')} />;
-  }
-  return (
-    <HomeScreen
-      onOpenSettings={() => setRoute('settings')}
-      pendingIntent={pendingIntent}
-      onIntentHandled={() => setPendingIntent(null)}
-    />
-  );
+  return <RootNavigator />;
 }
 
 function NotificationsBridge({ children }: { children: React.ReactNode }) {
-  // Single global subscription point for Expo notification responses +
-  // cold-start tap recovery. Lives outside <AuthProvider> so it runs even
-  // before the user signs in (the intent will sit in the bus until the
-  // authenticated tree mounts and drains it).
   useNotifications();
   return <>{children}</>;
 }
 
 export default function App() {
+  // Load Nunito once at the root so the design-token typography renders with
+  // the correct face on Android. While the font is loading we return null
+  // and let the Expo splash stay visible.
+  const [fontsLoaded] = useFonts({
+    Nunito_400Regular,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+    Nunito_800ExtraBold,
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
-    <QueryProvider>
-      <NotificationsBridge>
-        <AuthProvider>
-          <Root />
-          <StatusBar style="auto" />
-        </AuthProvider>
-      </NotificationsBridge>
-    </QueryProvider>
+    <SafeAreaProvider>
+      <QueryProvider>
+        <NotificationsBridge>
+          <AuthProvider>
+            <Root />
+            <StatusBar style="auto" />
+          </AuthProvider>
+        </NotificationsBridge>
+      </QueryProvider>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   loading: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors['warm-cream'],
     alignItems: 'center',
     justifyContent: 'center',
   },
