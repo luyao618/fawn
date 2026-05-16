@@ -22,6 +22,15 @@ import {
   updateActiveUser,
   upsertAndActivateAccount,
 } from '../lib/tokenStorage';
+import { clearPersistedQueryCache, queryClient } from '../shared/query';
+
+// Drop both the in-memory QueryClient cache and the MMKV-persisted dehydrated
+// cache. We do this on logout AND on a 401 so the next user can never see the
+// previous user's data restored from the persister (data isolation).
+function wipeQueryCaches() {
+  queryClient.clear();
+  clearPersistedQueryCache();
+}
 
 interface AuthContextValue {
   user: StoredUser | null;
@@ -76,6 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     await clearAllAccounts();
+    wipeQueryCaches();
     setAccounts([]);
     applyActiveAccount(null);
   }, [applyActiveAccount]);
@@ -97,6 +107,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const affectedActive =
           capturedUserId === null || capturedUserId === bumpedForUserRef.current;
         if (affectedActive) {
+          // Drop in-memory + persisted query caches so the next user (or
+          // re-login) can never see the previous user's data.
+          wipeQueryCaches();
           const next = currentActiveId ? await getActiveAccount() : null;
           applyActiveAccount(next);
         }
