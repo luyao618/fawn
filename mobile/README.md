@@ -58,3 +58,19 @@ screen showing the app version.
 
 The last box requires an EAS account and an Android device, so it has to be
 ticked off by a human running the `eas build` command above.
+
+## Chat module v1 (YAO-18)
+
+The chat tab in `HomeScreen` shows a conversation list (powered by the
+TanStack Query persister, so a second visit hits cache and skips the spinner)
+and lets you open a conversation to send text + image messages.
+
+- Conversations: `GET /chat/conversations`
+- Detail: `GET /chat/conversations/{id}`
+- Send: `POST /chat/conversations/{id}/messages` (SSE; we drain and refetch)
+- Upload: `POST /chat/conversations/{id}/images` (multipart)
+- Image rendering: `expo-image` with `cachePolicy="memory-disk"` for the
+  Expo Image cache requirement.
+
+`apiBaseUrl` in `app.json` now includes the `/api` prefix so all backend
+routes resolve correctly.
