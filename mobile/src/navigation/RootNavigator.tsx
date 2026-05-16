@@ -7,6 +7,10 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { TabBar } from '../components/layout/TabBar';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
+import { AgentTasksScreen } from '../screens/AgentTasksScreen';
+import { HistoryListScreen } from '../screens/HistoryListScreen';
+import { HistoryConversationScreen } from '../screens/HistoryConversationScreen';
 import { colors } from '../shared/theme';
 
 /**
@@ -96,15 +100,48 @@ function ProfileStack() {
   const ProfileNav = Stack();
   return (
     <ProfileNav.Navigator screenOptions={{ headerShown: false }}>
-      <ProfileNav.Screen
-        name="ProfileHome"
-        children={() => (
-          <PlaceholderScreen
-            title="家庭"
-            description="家庭 / Profile 与 AgentTasks 二级入口将由后续子 issue（YAO-36）实现。"
+      <ProfileNav.Screen name="ProfileHome">
+        {({ navigation }) => (
+          <ProfileScreen
+            onOpenAgentTasks={() => navigation.navigate('AgentTasks')}
           />
         )}
-      />
+      </ProfileNav.Screen>
+      <ProfileNav.Screen name="AgentTasks">
+        {({ navigation }) => (
+          <AgentTasksScreen onClose={() => navigation.goBack()} />
+        )}
+      </ProfileNav.Screen>
+      {/*
+        History is exposed here as well so the two-screen history surface
+        from the Web app has a navigable home in the absence of a dedicated
+        tab (YAO-36 deliberately keeps history reachable without inflating
+        the bottom bar).
+      */}
+      <ProfileNav.Screen name="HistoryList">
+        {({ navigation }) => (
+          <HistoryListScreen
+            onOpenConversation={(id) =>
+              navigation.navigate('HistoryConversation', { id })
+            }
+          />
+        )}
+      </ProfileNav.Screen>
+      <ProfileNav.Screen
+        name="HistoryConversation"
+        // We accept the conversation id through React Navigation params so the
+        // route is deep-linkable in future iterations.
+      >
+        {({ route, navigation }) => {
+          const params = (route.params ?? {}) as { id?: string };
+          return (
+            <HistoryConversationScreen
+              conversationId={params.id ?? ''}
+              onBack={() => navigation.goBack()}
+            />
+          );
+        }}
+      </ProfileNav.Screen>
     </ProfileNav.Navigator>
   );
 }
