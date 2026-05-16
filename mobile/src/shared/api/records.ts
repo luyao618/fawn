@@ -110,6 +110,12 @@ function timelineTime(entry: RecordEntry): number {
  * entries so the UI can render each measurement as its own card — a growth row
  * without weight_g is just a height entry (and vice versa). Rows with neither
  * are dropped since the create form requires at least one of the two.
+ *
+ * Growth entries collapse to end-of-day timestamps (their API only carries a
+ * date), so multiple growth rows on the same day would tie under a pure time
+ * sort and `Array.prototype.sort` is not guaranteed stable across engines.
+ * We tag each entry with its original index so ties fall back to backend
+ * order, preserving whatever ordering the server emitted within a day.
  */
 async function fetchTimeline(): Promise<RecordEntry[]> {
   const [feeding, growth, photos] = await Promise.all([
@@ -119,14 +125,33 @@ async function fetchTimeline(): Promise<RecordEntry[]> {
   ]);
 
   const entries: RecordEntry[] = [];
-  for (const r of feeding) entries.push({ kind: 'feeding', id: `feeding:${r.id}`, record: r });
-  for (const r of growth) {
-    if (r.weight_g != null) entries.push({ kind: 'weight', id: `weight:${r.id}`, record: r });
-    if (r.height_cm != null) entries.push({ kind: 'height', id: `height:${r.id}`, record: r });
-  }
-  for (const r of photos) entries.push({ kind: 'photo', id: `photo:${r.id}`, record: r });
+  const order = new Map<RecordEntry, number>();
+  const track = (e: RecordEntry, idx: number) => {
+    order.set(e, idx);
+    entries.push(e);
+  };
 
-  entries.sort((a, b) => timelineTime(b) - timelineTime(a));
+  for (const r of feeding) {
+    track({ kind: 'feeding', id: `feeding:${r.id}`, record: r }, 0);
+  }
+  growth.forEach((r, i) => {
+    if (r.weight_g != null) {
+      track({ kind: 'weight', id: `weight:${r.id}`, record: r }, i);
+    }
+    if (r.height_cm != null) {
+      track({ kind: 'height', id: `height:${r.id}`, record: r }, i);
+    }
+  });
+  for (const r of photos) {
+    track({ kind: 'photo', id: `photo:${r.id}`, record: r }, 0);
+  }
+
+  entries.sort((a, b) => {
+    const delta = timelineTime(b) - timelineTime(a);
+    if (delta !== 0) return delta;
+    // Same-day tie (mostly growth): keep original backend order.
+    return (order.get(a) ?? 0) - (order.get(b) ?? 0);
+  });
   return entries;
 }
 
