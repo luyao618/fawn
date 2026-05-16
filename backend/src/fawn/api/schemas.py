@@ -426,3 +426,45 @@ class MemoryFileRead(MemoryFileSummary):
 
 class MemoryFileUpdate(BaseModel):
     content: str = Field(max_length=10000)
+
+
+class AgentTaskDefinitionRead(BaseModel):
+    name: str
+    title: str
+    description: str
+    input_schema: dict[str, Any]
+    estimated_duration_seconds: int
+    enabled: bool
+
+
+class AgentTaskDefinitionsResponse(BaseModel):
+    definitions: list[AgentTaskDefinitionRead]
+
+
+class AgentTaskRunCreate(BaseModel):
+    input: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentTaskRunError(BaseModel):
+    code: str
+    message: str
+    retryable: bool = False
+
+
+class AgentTaskRunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    status: Literal["queued", "running", "succeeded", "failed", "cancelled"]
+    input: dict[str, Any]
+    output: dict[str, Any] | None = None
+    error: AgentTaskRunError | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    updated_at: datetime
+
+
+class AgentTaskRunListResponse(BaseModel):
+    runs: list[AgentTaskRunRead]
