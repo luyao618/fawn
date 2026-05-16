@@ -1,12 +1,17 @@
 import { StatusBar } from 'expo-status-bar';
+import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
+
+type Route = 'home' | 'settings';
 
 function Root() {
   const { status } = useAuth();
+  const [route, setRoute] = useState<Route>('home');
 
   if (status === 'loading') {
     return (
@@ -16,7 +21,14 @@ function Root() {
     );
   }
 
-  return status === 'authenticated' ? <HomeScreen /> : <LoginScreen />;
+  if (status !== 'authenticated') {
+    return <LoginScreen />;
+  }
+
+  if (route === 'settings') {
+    return <SettingsScreen onClose={() => setRoute('home')} />;
+  }
+  return <HomeScreen onOpenSettings={() => setRoute('settings')} />;
 }
 
 export default function App() {

@@ -1,7 +1,7 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import Constants from 'expo-constants';
 
-import { clearToken, clearUser, getToken } from './tokenStorage';
+import { getToken, getActiveUserId, removeAccount } from './tokenStorage';
 
 type Unauthorized = () => void;
 
@@ -36,8 +36,10 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     if (error.response?.status === 401) {
-      await clearToken();
-      await clearUser();
+      const activeId = await getActiveUserId();
+      if (activeId) {
+        await removeAccount(activeId);
+      }
       if (unauthorizedHandler) unauthorizedHandler();
     }
     return Promise.reject(error);
