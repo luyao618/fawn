@@ -56,3 +56,60 @@ export interface PaginatedConversations {
   page: number;
   page_size: number;
 }
+
+// ---------- Growth ----------
+
+export interface GrowthRecord {
+  id: string;
+  measurement_date: string;
+  weight_g: number | null;
+  height_cm: number | null;
+  head_cm: number | null;
+  weight_percentile: number | null;
+  height_percentile: number | null;
+  head_percentile: number | null;
+  notes: string | null;
+}
+
+export interface GrowthChartRecord {
+  date: string;
+  weight_g: number | null;
+  height_cm: number | null;
+  head_cm: number | null;
+}
+
+export interface WHOReferencePoint {
+  age_months: number;
+  value: number;
+}
+
+export interface WHOReferenceLines {
+  p3: WHOReferencePoint[];
+  p15: WHOReferencePoint[];
+  p50: WHOReferencePoint[];
+  p85: WHOReferencePoint[];
+  p97: WHOReferencePoint[];
+}
+
+export interface GrowthWHOReference {
+  weight: WHOReferenceLines;
+  height: WHOReferenceLines;
+  head: WHOReferenceLines;
+}
+
+export interface GrowthChartData {
+  records: GrowthChartRecord[];
+  who_reference: GrowthWHOReference;
+}
+
+export interface DashboardLatestGrowthMetric {
+  date: string;
+  value: number;
+  percentile: number | null;
+}
+
+export interface DashboardLatestGrowth {
+  weight: DashboardLatestGrowthMetric | null;
+  height: DashboardLatestGrowthMetric | null;
+  head: DashboardLatestGrowthMetric | null;
+}
