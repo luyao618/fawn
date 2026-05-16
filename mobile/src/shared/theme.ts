@@ -81,6 +81,9 @@ export const colors = {
   // markdown inline-code / fenced-code background).
   'card-frosted': 'rgba(255, 255, 255, 0.9)',
   'code-surface': 'rgba(255, 255, 255, 0.7)',
+  // Dim layer behind bottom-sheet style modals. Tinted with --color-text-primary
+  // so the cream canvas reads as "pushed down" rather than washed out.
+  'modal-backdrop': 'rgba(13, 28, 46, 0.4)',
 } as const;
 
 export type ColorToken = keyof typeof colors;

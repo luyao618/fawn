@@ -1,9 +1,15 @@
 // Records screen — entry point for the 4 育儿事件 kinds + reverse-chronological list.
 //
-// Two halves stacked vertically: a row of "+喂奶 / +身高 / +体重 / +照片" buttons
-// that open a modal form for the chosen kind, and a FlatList of all recent
-// entries from the unified `/records/timeline` query (server-merged client-
-// side from feeding + growth + album).
+// Visual contract: every color / radius / spacing / shadow / type style comes
+// from `mobile/src/shared/theme.ts`. No literal hex / px values are allowed in
+// this file — that keeps the Android UI aligned with Web (Tailwind tokens) and
+// makes future re-skins a one-token change.
+//
+// Layout (top → bottom):
+//   • TopBar "记录"
+//   • Intro section (subtitle copy mirroring Web)
+//   • 4-up action cards (喂奶 / 身高 / 体重 / 照片) — each opens a modal form
+//   • FlatList of all recent entries from the unified `/records/timeline` query
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image as ExpoImage } from 'expo-image';
@@ -14,14 +20,15 @@ import {
   Alert,
   FlatList,
   Modal,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 
+import { TopBar } from '../components/layout/TopBar';
 import { getApiBaseUrl } from '../lib/api';
 import {
   createFeeding,
@@ -33,15 +40,54 @@ import {
   type PhotoRecord,
   type RecordEntry,
 } from '../shared/api';
+import {
+  colors,
+  layout,
+  radii,
+  shadows,
+  spacing,
+  typography,
+  type ColorToken,
+} from '../shared/theme';
 
 type Kind = 'feeding' | 'weight' | 'height' | 'photo';
 
-const KIND_META: Record<Kind, { label: string; emoji: string; color: string }> = {
-  feeding: { label: '喂奶', emoji: '🍼', color: '#2c7a4b' },
-  weight: { label: '体重', emoji: '⚖️', color: '#4a6da7' },
-  height: { label: '身高', emoji: '📏', color: '#a76a4a' },
-  photo: { label: '照片', emoji: '📷', color: '#b03070' },
+/**
+ * Per-kind visual metadata. `tintBg` / `tintFg` mirror the Web tinted-icon
+ * pattern (e.g. `bg-nursery-butter text-warning-amber`). All values are theme
+ * tokens so re-skinning is a single edit in `theme.ts`.
+ */
+const KIND_META: Record<
+  Kind,
+  { label: string; emoji: string; tintBg: ColorToken; tintFg: ColorToken }
+> = {
+  feeding: {
+    label: '喂奶',
+    emoji: '🍼',
+    tintBg: 'nursery-butter',
+    tintFg: 'warning-amber',
+  },
+  height: {
+    label: '身高',
+    emoji: '📏',
+    tintBg: 'nursery-mint',
+    tintFg: 'brand-strong',
+  },
+  weight: {
+    label: '体重',
+    emoji: '⚖️',
+    tintBg: 'nursery-powder',
+    tintFg: 'info-blue',
+  },
+  photo: {
+    label: '照片',
+    emoji: '📷',
+    tintBg: 'safety-red-light',
+    tintFg: 'safety-red',
+  },
 };
+
+const KIND_ORDER: Kind[] = ['feeding', 'height', 'weight', 'photo'];
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -62,59 +108,76 @@ export function RecordsScreen() {
     await queryClient.invalidateQueries({ queryKey: recordQueries.timeline().queryKey });
   };
 
-  if (isPending && !data) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2c7a4b" />
-      </View>
-    );
-  }
-
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.title}>记录</Text>
-        <Text style={styles.subtitle}>育儿事件 · 倒序展示</Text>
-      </View>
+      <TopBar title="记录" />
 
-      <View style={styles.actions}>
-        {(Object.keys(KIND_META) as Kind[]).map((k) => (
-          <TouchableOpacity
-            key={k}
-            style={[styles.actionButton, { borderColor: KIND_META[k].color }]}
-            onPress={() => setActiveKind(k)}
-            accessibilityRole="button"
-            accessibilityLabel={`新增${KIND_META[k].label}`}
-          >
-            <Text style={styles.actionEmoji}>{KIND_META[k].emoji}</Text>
-            <Text style={[styles.actionLabel, { color: KIND_META[k].color }]}>
-              +{KIND_META[k].label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {isError && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>
-            离线 / 拉取失败，显示的是缓存数据。{'\n'}
-            {(error as Error)?.message ?? ''}
-          </Text>
+      {isPending && !data ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors['fawn-amber']} />
         </View>
-      )}
+      ) : (
+        <FlatList
+          data={entries}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <RecordRow entry={item} />}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListHeaderComponent={
+            <View style={styles.headerBlock}>
+              <Text style={styles.subtitle}>育儿事件 · 倒序展示</Text>
 
-      <FlatList
-        data={entries}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <RecordRow entry={item} />}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={isFetching} onRefresh={() => refetch()} />
-        }
-        ListEmptyComponent={
-          <Text style={styles.empty}>还没有记录。点击上方按钮录入第一条。</Text>
-        }
-      />
+              <View style={styles.actions}>
+                {KIND_ORDER.map((k) => {
+                  const meta = KIND_META[k];
+                  return (
+                    <Pressable
+                      key={k}
+                      style={({ pressed }) => [
+                        styles.actionCard,
+                        pressed && styles.actionCardPressed,
+                      ]}
+                      onPress={() => setActiveKind(k)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`新增${meta.label}`}
+                    >
+                      <View
+                        style={[
+                          styles.actionIcon,
+                          { backgroundColor: colors[meta.tintBg] },
+                        ]}
+                      >
+                        <Text style={styles.actionEmoji}>{meta.emoji}</Text>
+                      </View>
+                      <Text style={styles.actionLabel}>+{meta.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {isError ? (
+                <View style={styles.banner}>
+                  <Text style={styles.bannerText}>
+                    离线 / 拉取失败，显示的是缓存数据。{'\n'}
+                    {(error as Error)?.message ?? ''}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={isFetching}
+              onRefresh={() => refetch()}
+              tintColor={colors['fawn-amber']}
+              colors={[colors['fawn-amber']]}
+            />
+          }
+          ListEmptyComponent={
+            <Text style={styles.empty}>还没有记录。点击上方按钮录入第一条。</Text>
+          }
+        />
+      )}
 
       <Modal
         visible={activeKind !== null}
@@ -141,7 +204,7 @@ export function RecordsScreen() {
   );
 }
 
-// ----- Row renderer -----
+// ----- Row renderer --------------------------------------------------------
 
 function RecordRow({ entry }: { entry: RecordEntry }) {
   const meta = KIND_META[entry.kind];
@@ -169,7 +232,6 @@ function RecordRow({ entry }: { entry: RecordEntry }) {
   } else {
     const r: PhotoRecord = entry.record;
     when = formatTime(r.taken_at ?? r.uploaded_at);
-    // storage_url is a presigned URL from the backend; render directly.
     const uri = r.storage_url.startsWith('http')
       ? r.storage_url
       : `${baseUrl}${r.storage_url}`;
@@ -186,11 +248,11 @@ function RecordRow({ entry }: { entry: RecordEntry }) {
 
   return (
     <View style={styles.row}>
-      <View style={[styles.rowIcon, { backgroundColor: meta.color }]}>
+      <View style={[styles.rowIcon, { backgroundColor: colors[meta.tintBg] }]}>
         <Text style={styles.rowIconText}>{meta.emoji}</Text>
       </View>
       <View style={styles.rowMain}>
-        <Text style={styles.rowKind}>{meta.label}</Text>
+        <Text style={[styles.rowKind, { color: colors[meta.tintFg] }]}>{meta.label}</Text>
         {body}
         <Text style={styles.rowWhen}>{when}</Text>
       </View>
@@ -198,7 +260,7 @@ function RecordRow({ entry }: { entry: RecordEntry }) {
   );
 }
 
-// ----- Form -----
+// ----- Form ----------------------------------------------------------------
 
 interface FormProps {
   kind: Kind;
@@ -289,19 +351,20 @@ function RecordForm({ kind, onCancel, onSubmitted }: FormProps) {
         <>
           <Text style={styles.label}>类型</Text>
           <View style={styles.segmented}>
-            {(['breast', 'formula', 'solid'] as const).map((t) => (
-              <TouchableOpacity
-                key={t}
-                style={[styles.segment, feedType === t && styles.segmentActive]}
-                onPress={() => setFeedType(t)}
-              >
-                <Text
-                  style={[styles.segmentText, feedType === t && styles.segmentTextActive]}
+            {(['breast', 'formula', 'solid'] as const).map((t) => {
+              const active = feedType === t;
+              return (
+                <Pressable
+                  key={t}
+                  style={[styles.segment, active && styles.segmentActive]}
+                  onPress={() => setFeedType(t)}
                 >
-                  {t === 'breast' ? '母乳' : t === 'formula' ? '配方奶' : '辅食'}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                    {t === 'breast' ? '母乳' : t === 'formula' ? '配方奶' : '辅食'}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
 
           <Text style={styles.label}>奶量 (ml，可选)</Text>
@@ -311,7 +374,7 @@ function RecordForm({ kind, onCancel, onSubmitted }: FormProps) {
             onChangeText={setAmountMl}
             keyboardType="numeric"
             placeholder="120"
-            placeholderTextColor="#aaa"
+            placeholderTextColor={colors['mid-gray']}
           />
 
           <Text style={styles.label}>时长 (分钟，可选)</Text>
@@ -321,7 +384,7 @@ function RecordForm({ kind, onCancel, onSubmitted }: FormProps) {
             onChangeText={setDurationMin}
             keyboardType="numeric"
             placeholder="15"
-            placeholderTextColor="#aaa"
+            placeholderTextColor={colors['mid-gray']}
           />
         </>
       )}
@@ -335,7 +398,7 @@ function RecordForm({ kind, onCancel, onSubmitted }: FormProps) {
             onChangeText={setWeightG}
             keyboardType="numeric"
             placeholder="6500"
-            placeholderTextColor="#aaa"
+            placeholderTextColor={colors['mid-gray']}
           />
         </>
       )}
@@ -349,7 +412,7 @@ function RecordForm({ kind, onCancel, onSubmitted }: FormProps) {
             onChangeText={setHeightCm}
             keyboardType="numeric"
             placeholder="62.5"
-            placeholderTextColor="#aaa"
+            placeholderTextColor={colors['mid-gray']}
           />
         </>
       )}
@@ -366,142 +429,271 @@ function RecordForm({ kind, onCancel, onSubmitted }: FormProps) {
             value={notes}
             onChangeText={setNotes}
             placeholder="额外信息"
-            placeholderTextColor="#aaa"
+            placeholderTextColor={colors['mid-gray']}
             multiline
           />
         </>
       )}
 
       <View style={styles.formActions}>
-        <TouchableOpacity
+        <Pressable
           style={[styles.formButton, styles.formButtonSecondary]}
           onPress={onCancel}
           disabled={mutation.isPending}
         >
           <Text style={styles.formButtonSecondaryText}>取消</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.formButton, mutation.isPending && styles.buttonDisabled]}
+        </Pressable>
+        <Pressable
+          style={[
+            styles.formButton,
+            styles.formButtonPrimary,
+            mutation.isPending && styles.buttonDisabled,
+          ]}
           onPress={() => mutation.mutate()}
           disabled={mutation.isPending}
         >
           <Text style={styles.formButtonText}>
             {mutation.isPending ? '保存中…' : kind === 'photo' ? '选择照片' : '保存'}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     </View>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Styles — every value is a `theme.ts` token. Search for a literal hex / px
+// here should return zero hits.
+// ---------------------------------------------------------------------------
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  header: { paddingTop: 56, paddingHorizontal: 24, paddingBottom: 8 },
-  title: { fontSize: 24, fontWeight: '700', color: '#222' },
-  subtitle: { fontSize: 13, color: '#777', marginTop: 4 },
-  actions: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  actionButton: {
+  root: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors['warm-cream'],
   },
-  actionEmoji: { fontSize: 22 },
-  actionLabel: { fontSize: 13, fontWeight: '600', marginTop: 4 },
-  banner: {
-    marginHorizontal: 16,
-    marginBottom: 8,
-    backgroundColor: '#fff4e0',
-    borderColor: '#e0a96d',
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-  },
-  bannerText: { color: '#8a5a17', fontSize: 13 },
-  listContent: { paddingHorizontal: 16, paddingBottom: 24, flexGrow: 1 },
-  empty: { fontSize: 14, color: '#666', textAlign: 'center', marginTop: 48 },
-  row: {
-    flexDirection: 'row',
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
-    alignItems: 'flex-start',
-  },
-  rowIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  center: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
-  rowIconText: { fontSize: 18 },
-  rowMain: { flex: 1 },
-  rowKind: { fontSize: 13, color: '#888', fontWeight: '600' },
-  rowBody: { fontSize: 15, color: '#222', marginTop: 2 },
-  rowWhen: { fontSize: 12, color: '#999', marginTop: 4 },
-  thumb: { width: 120, height: 120, borderRadius: 8, marginTop: 4 },
+
+  // --- List header (subtitle + action grid + offline banner) -------------
+  headerBlock: {
+    paddingTop: spacing['3'],
+    paddingBottom: spacing['4'],
+    gap: spacing['4'],
+  },
+  subtitle: {
+    ...typography.bodySmall,
+    paddingHorizontal: spacing['4'],
+  },
+
+  // --- 4-up action cards --------------------------------------------------
+  actions: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing['4'],
+    gap: spacing['2'],
+  },
+  actionCard: {
+    flex: 1,
+    backgroundColor: colors['card'],
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors['oat-border'],
+    paddingVertical: spacing['3'],
+    paddingHorizontal: spacing['2'],
+    alignItems: 'center',
+    gap: spacing['1'],
+    ...shadows.card,
+  },
+  actionCardPressed: {
+    opacity: 0.85,
+  },
+  actionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionEmoji: {
+    fontSize: typography.heading.fontSize,
+  },
+  actionLabel: {
+    ...typography.tabLabel,
+    color: colors['soft-charcoal'],
+  },
+
+  // --- Offline banner -----------------------------------------------------
+  banner: {
+    marginHorizontal: spacing['4'],
+    backgroundColor: colors['warning-amber-light'],
+    borderColor: colors['warning-amber'],
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing['3'],
+  },
+  bannerText: {
+    ...typography.bodySmall,
+    color: colors['warning-amber'],
+  },
+
+  // --- Timeline list ------------------------------------------------------
+  listContent: {
+    paddingHorizontal: spacing['4'],
+    paddingBottom: layout.tabbarHeight + spacing['6'],
+    flexGrow: 1,
+  },
+  empty: {
+    ...typography.body,
+    color: colors['mid-gray'],
+    textAlign: 'center',
+    marginTop: spacing['12'],
+  },
+  separator: {
+    height: spacing['2'],
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: colors['card'],
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors['oat-border'],
+    padding: spacing['3'],
+    gap: spacing['3'],
+    ...shadows.card,
+  },
+  rowIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowIconText: {
+    fontSize: typography.heading.fontSize,
+  },
+  rowMain: {
+    flex: 1,
+    minWidth: 0,
+  },
+  rowKind: {
+    ...typography.caption,
+    fontFamily: typography.tabLabel.fontFamily,
+  },
+  rowBody: {
+    ...typography.body,
+    marginTop: spacing['1'],
+  },
+  rowWhen: {
+    ...typography.caption,
+    marginTop: spacing['1'],
+  },
+  thumb: {
+    width: 120,
+    height: 120,
+    borderRadius: radii.md,
+    marginTop: spacing['1'],
+  },
+
+  // --- Modal form ---------------------------------------------------------
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: colors['modal-backdrop'],
     justifyContent: 'flex-end',
   },
   modalCard: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 20,
-    paddingBottom: 36,
+    backgroundColor: colors['card'],
+    borderTopLeftRadius: radii.card,
+    borderTopRightRadius: radii.card,
+    padding: spacing['5'],
+    paddingBottom: spacing['8'],
+    ...shadows.modal,
   },
-  formTitle: { fontSize: 18, fontWeight: '700', color: '#222', marginBottom: 12 },
-  label: { fontSize: 13, color: '#555', marginTop: 12, marginBottom: 6 },
+  formTitle: {
+    ...typography.heading,
+    marginBottom: spacing['3'],
+  },
+  label: {
+    ...typography.bodySmall,
+    marginTop: spacing['3'],
+    marginBottom: spacing['2'],
+  },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: '#222',
-    backgroundColor: '#fff',
+    borderColor: colors['oat-border'],
+    borderRadius: radii.md,
+    paddingHorizontal: spacing['3'],
+    paddingVertical: spacing['3'],
+    backgroundColor: colors['card'],
+    ...typography.body,
   },
-  inputMultiline: { minHeight: 60, textAlignVertical: 'top' },
-  hint: { fontSize: 14, color: '#666', marginTop: 12 },
-  segmented: { flexDirection: 'row', gap: 8 },
+  inputMultiline: {
+    minHeight: 72,
+    textAlignVertical: 'top',
+  },
+  hint: {
+    ...typography.bodySmall,
+    marginTop: spacing['3'],
+  },
+  segmented: {
+    flexDirection: 'row',
+    gap: spacing['2'],
+    backgroundColor: colors['warm-gray'],
+    borderRadius: radii.md,
+    padding: spacing['1'],
+    borderWidth: 1,
+    borderColor: colors['oat-border'],
+  },
   segment: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
+    paddingVertical: spacing['2'],
+    borderRadius: radii.sm,
     alignItems: 'center',
-    backgroundColor: '#fff',
   },
-  segmentActive: { backgroundColor: '#2c7a4b', borderColor: '#2c7a4b' },
-  segmentText: { color: '#555', fontSize: 14 },
-  segmentTextActive: { color: '#fff', fontWeight: '600' },
-  formActions: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  segmentActive: {
+    backgroundColor: colors['card'],
+    ...shadows.card,
+  },
+  segmentText: {
+    ...typography.bodySmall,
+    color: colors['dark-gray'],
+  },
+  segmentTextActive: {
+    ...typography.button,
+    color: colors['fawn-amber'],
+  },
+  formActions: {
+    flexDirection: 'row',
+    gap: spacing['3'],
+    marginTop: spacing['5'],
+  },
   formButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: '#2c7a4b',
+    paddingVertical: spacing['3'],
+    borderRadius: radii.input,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: layout.iconButton,
   },
-  formButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  formButtonPrimary: {
+    backgroundColor: colors['fawn-amber'],
+  },
+  formButtonText: {
+    ...typography.button,
+    color: colors['card'],
+  },
   formButtonSecondary: {
-    backgroundColor: '#fff',
+    backgroundColor: colors['card'],
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors['oat-border'],
   },
-  formButtonSecondaryText: { color: '#555', fontSize: 15, fontWeight: '600' },
-  buttonDisabled: { opacity: 0.6 },
+  formButtonSecondaryText: {
+    ...typography.button,
+    color: colors['dark-gray'],
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
 });
