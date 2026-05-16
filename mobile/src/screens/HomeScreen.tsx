@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useAuth } from '../auth/AuthContext';
+import { AgentTasksScreen } from './AgentTasksScreen';
 import { BabyScreen } from './BabyScreen';
 import { ConversationListScreen } from './ConversationListScreen';
 import { ConversationScreen } from './ConversationScreen';
@@ -11,7 +12,7 @@ import { HistoryConversationScreen } from './HistoryConversationScreen';
 import { HistoryListScreen } from './HistoryListScreen';
 import { RecordsScreen } from './RecordsScreen';
 
-type Tab = 'home' | 'chat' | 'records' | 'history' | 'growth' | 'baby';
+type Tab = 'home' | 'chat' | 'records' | 'history' | 'growth' | 'baby' | 'agent';
 
 interface HomeScreenProps {
   onOpenSettings: () => void;
@@ -106,6 +107,7 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
         )}
         {tab === 'growth' && <GrowthScreen />}
         {tab === 'baby' && <BabyScreen />}
+        {tab === 'agent' && <AgentTasksScreen />}
       </View>
 
       <View style={styles.tabBar}>
@@ -149,6 +151,13 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
           active={tab === 'baby'}
           onPress={() => {
             setTab('baby');
+          }}
+        />
+        <TabButton
+          label="任务"
+          active={tab === 'agent'}
+          onPress={() => {
+            setTab('agent');
           }}
         />
       </View>

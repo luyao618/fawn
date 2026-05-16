@@ -26,4 +26,9 @@ export const queryKeys = {
     all: ['records'] as const,
     timeline: () => [...queryKeys.records.all, 'timeline'] as const,
   },
+  agentTasks: {
+    all: ['agentTasks'] as const,
+    definitions: () => [...queryKeys.agentTasks.all, 'definitions'] as const,
+    run: (id: string) => [...queryKeys.agentTasks.all, 'run', id] as const,
+  },
 } as const;
