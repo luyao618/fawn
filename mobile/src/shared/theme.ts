@@ -62,6 +62,14 @@ export const colors = {
   'role-dad': '#567B9C',
   'role-grandma': '#B07CC6',
   'role-grandpa': '#6BAF8D',
+
+  // Frosted / translucent surfaces — used by TabBar / TopBar for the
+  // glassmorphism look. Centralized here so pages never inline rgba().
+  'transparent': 'transparent',
+  'tabbar-surface': 'rgba(255, 255, 255, 0.95)',
+  'topbar-surface': 'rgba(255, 251, 235, 0.88)',
+  'back-button-surface': 'rgba(255, 255, 255, 0.8)',
+  'frosted-border': 'rgba(255, 255, 255, 0.7)',
 } as const;
 
 export type ColorToken = keyof typeof colors;
@@ -79,6 +87,10 @@ export const radii = {
   sm: 8,
   md: 12,
   lg: 16,
+  /** Top tab bar / pill cluster radius (mirrors Web `rounded-[30px]`). */
+  tabbar: 30,
+  /** Fully-rounded — for circular icon buttons (e.g. TopBar back chevron). */
+  full: 9999,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -245,7 +257,21 @@ export const layout = {
   topbarHeight: 80,
   tabbarHeight: 92,
   maxMobileWidth: 428,
+  /** TabBar pill bar height (mirrors Web `h-[78px]`). */
+  tabbarBar: 78,
+  /** Per-tab minimum tap area inside the TabBar. */
+  tabItemMinHeight: 58,
+  /** TopBar inner row minimum height (mirrors Web `min-h-[68px]`). */
+  topbarBar: 68,
+  /** Circular tap target (TopBar back button, future icon buttons). */
+  iconButton: 44,
 } as const;
+
+/**
+ * Half of `layout.iconButton` — used to make a 44x44 tap target fully
+ * circular without hard-coding `22` in component styles.
+ */
+export const iconButtonRadius = layout.iconButton / 2;
 
 export const theme = {
   colors,

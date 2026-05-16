@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
-import { colors, radii, shadows, spacing, typography } from '../../shared/theme';
+import { colors, layout, radii, shadows, spacing, typography } from '../../shared/theme';
 
 /**
  * Mobile TabBar — aligns with `frontend/src/components/layout/TabBar.tsx`.
@@ -104,30 +104,30 @@ const styles = StyleSheet.create({
   wrapper: {
     paddingHorizontal: spacing['3'],
     paddingTop: spacing['5'],
-    backgroundColor: 'transparent',
+    backgroundColor: colors.transparent,
   },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 78,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    height: layout.tabbarBar,
+    borderTopLeftRadius: radii.tabbar,
+    borderTopRightRadius: radii.tabbar,
+    borderRadius: radii.tabbar,
+    backgroundColor: colors['tabbar-surface'],
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.7)',
+    borderColor: colors['frosted-border'],
     paddingHorizontal: spacing['2'],
     paddingTop: spacing['2'],
     ...shadows.tabbar,
   },
   tab: {
     flex: 1,
-    minHeight: 58,
+    minHeight: layout.tabItemMinHeight,
     minWidth: 0,
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: spacing['1'],
     borderRadius: radii.lg,
     paddingHorizontal: spacing['1'],
   },

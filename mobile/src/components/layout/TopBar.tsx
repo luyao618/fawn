@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, radii, shadows, spacing, typography } from '../../shared/theme';
+import { colors, iconButtonRadius, layout, radii, shadows, spacing, typography } from '../../shared/theme';
 
 /**
  * Mobile TopBar — aligns with `frontend/src/components/layout/TopBar.tsx`.
@@ -72,13 +72,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing['3'],
-    minHeight: 68,
+    minHeight: layout.topbarBar,
     borderBottomLeftRadius: radii.card,
     borderBottomRightRadius: radii.card,
     borderRadius: radii.card,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.7)',
-    backgroundColor: 'rgba(255, 251, 235, 0.88)',
+    borderColor: colors['frosted-border'],
+    backgroundColor: colors['topbar-surface'],
     paddingHorizontal: spacing['3'],
     paddingVertical: spacing['3'],
     ...shadows.topbar,
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   right: {
-    minHeight: 44,
+    minHeight: layout.iconButton,
     flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
@@ -101,12 +101,12 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: layout.iconButton,
+    height: layout.iconButton,
+    borderRadius: iconButtonRadius,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: colors['back-button-surface'],
     ...shadows.card,
   },
 });
