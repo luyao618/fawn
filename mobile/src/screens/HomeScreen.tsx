@@ -6,8 +6,9 @@ import { useAuth } from '../auth/AuthContext';
 import { BabyScreen } from './BabyScreen';
 import { ConversationListScreen } from './ConversationListScreen';
 import { ConversationScreen } from './ConversationScreen';
+import { RecordsScreen } from './RecordsScreen';
 
-type Tab = 'home' | 'chat' | 'baby';
+type Tab = 'home' | 'chat' | 'records' | 'baby';
 
 interface HomeScreenProps {
   onOpenSettings: () => void;
@@ -88,6 +89,7 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
             <ConversationListScreen onOpenConversation={(id) => setOpenConversationId(id)} />
           )
         )}
+        {tab === 'records' && <RecordsScreen />}
         {tab === 'baby' && <BabyScreen />}
       </View>
 
@@ -104,6 +106,13 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
           active={tab === 'chat'}
           onPress={() => {
             setTab('chat');
+          }}
+        />
+        <TabButton
+          label="记录"
+          active={tab === 'records'}
+          onPress={() => {
+            setTab('records');
           }}
         />
         <TabButton

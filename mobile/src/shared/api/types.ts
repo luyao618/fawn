@@ -56,3 +56,55 @@ export interface PaginatedConversations {
   page: number;
   page_size: number;
 }
+
+// ---------- Records (feeding / growth / album) ----------
+
+export interface FeedingRecord {
+  id: string;
+  feed_time: string;
+  feed_type: 'breast' | 'formula' | 'solid';
+  amount_ml: number | null;
+  duration_min: number | null;
+  notes: string | null;
+}
+
+export interface GrowthRecord {
+  id: string;
+  measurement_date: string;
+  weight_g: number | null;
+  height_cm: number | null;
+  head_cm: number | null;
+  weight_percentile: number | null;
+  height_percentile: number | null;
+  head_percentile: number | null;
+  notes: string | null;
+}
+
+export interface PhotoTag {
+  id: string;
+  tag_type: 'scene' | 'expression' | 'milestone';
+  tag_value: string;
+  confidence: number;
+  is_confirmed: boolean;
+}
+
+export interface PhotoRecord {
+  id: string;
+  storage_url: string;
+  original_filename: string;
+  taken_at: string | null;
+  uploaded_at: string;
+  tags: PhotoTag[];
+}
+
+/**
+ * One row in the unified records timeline. We split a growth row into separate
+ * weight/height entries because the UI shows each measurement as its own card,
+ * and timeline ordering wants the same `record + kind + id` shape across all
+ * four event types.
+ */
+export type RecordEntry =
+  | { kind: 'feeding'; id: string; record: FeedingRecord }
+  | { kind: 'weight'; id: string; record: GrowthRecord }
+  | { kind: 'height'; id: string; record: GrowthRecord }
+  | { kind: 'photo'; id: string; record: PhotoRecord };

@@ -14,4 +14,8 @@ export const queryKeys = {
     conversations: () => [...queryKeys.chat.all, 'conversations'] as const,
     conversation: (id: string) => [...queryKeys.chat.all, 'conversation', id] as const,
   },
+  records: {
+    all: ['records'] as const,
+    timeline: () => [...queryKeys.records.all, 'timeline'] as const,
+  },
 } as const;
