@@ -6,8 +6,10 @@ import { useAuth } from '../auth/AuthContext';
 import { BabyScreen } from './BabyScreen';
 import { ConversationListScreen } from './ConversationListScreen';
 import { ConversationScreen } from './ConversationScreen';
+import { HistoryConversationScreen } from './HistoryConversationScreen';
+import { HistoryListScreen } from './HistoryListScreen';
 
-type Tab = 'home' | 'chat' | 'baby';
+type Tab = 'home' | 'chat' | 'history' | 'baby';
 
 interface HomeScreenProps {
   onOpenSettings: () => void;
@@ -18,6 +20,7 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
   const [signingOut, setSigningOut] = useState(false);
   const [tab, setTab] = useState<Tab>('home');
   const [openConversationId, setOpenConversationId] = useState<string | null>(null);
+  const [openHistoryId, setOpenHistoryId] = useState<string | null>(null);
 
   const version =
     (Constants.expoConfig?.version ?? '0.0.0') +
@@ -88,6 +91,16 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
             <ConversationListScreen onOpenConversation={(id) => setOpenConversationId(id)} />
           )
         )}
+        {tab === 'history' && (
+          openHistoryId ? (
+            <HistoryConversationScreen
+              conversationId={openHistoryId}
+              onBack={() => setOpenHistoryId(null)}
+            />
+          ) : (
+            <HistoryListScreen onOpenConversation={(id) => setOpenHistoryId(id)} />
+          )
+        )}
         {tab === 'baby' && <BabyScreen />}
       </View>
 
@@ -104,6 +117,13 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
           active={tab === 'chat'}
           onPress={() => {
             setTab('chat');
+          }}
+        />
+        <TabButton
+          label="历史"
+          active={tab === 'history'}
+          onPress={() => {
+            setTab('history');
           }}
         />
         <TabButton
