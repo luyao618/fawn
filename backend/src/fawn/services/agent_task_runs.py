@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from fawn.db.session import async_session_factory as default_session_factory
 from fawn.models import AgentTaskRun, Baby, FeedingRecord, HealthRecord, SleepRecord, User
+from fawn.services import push as push_service
 
 logger = logging.getLogger(__name__)
 
@@ -432,7 +433,49 @@ async def execute_run(
     run.finished_at = utc_now()
     await db.commit()
     await db.refresh(run)
+    await _dispatch_terminal_push(db, run, definition)
     return run
+
+
+async def _dispatch_terminal_push(
+    db: AsyncSession, run: AgentTaskRun, definition: TaskDefinition
+) -> None:
+    """Notify the family that an agent task reached a terminal state.
+
+    Failures here must never bubble out of the runner — the run already
+    finished from the user's perspective.
+    """
+    try:
+        if run.status == "succeeded":
+            if definition.name == "weekly_report":
+                title = "本周小结已生成"
+                body = "点击查看 Fawn 为你汇总的本周喂养 / 睡眠 / 里程碑。"
+            else:
+                title = f"任务完成：{definition.title}"
+                body = "Agent 任务已完成，点击查看结果。"
+            data = {
+                "kind": "agent_task_completed",
+                "task_name": definition.name,
+                "run_id": str(run.id),
+                "status": run.status,
+            }
+        elif run.status == "failed":
+            title = f"任务失败：{definition.title}"
+            error_message = (run.error or {}).get("message") or "请稍后重试。"
+            body = error_message
+            data = {
+                "kind": "agent_task_failed",
+                "task_name": definition.name,
+                "run_id": str(run.id),
+                "status": run.status,
+            }
+        else:
+            return
+        await push_service.send_to_family(
+            db, run.family_id, title=title, body=body, data=data
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("push dispatch failed for run %s", run.id)
 
 
 # ---------------------------------------------------------------------------

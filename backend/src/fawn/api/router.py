@@ -10,6 +10,7 @@ from fawn.api import (
     family,
     memory,
     profile,
+    push,
     tracker,
 )
 
@@ -31,3 +32,4 @@ api_router.include_router(profile.router)
 api_router.include_router(baby.router)
 api_router.include_router(memory.router)
 api_router.include_router(agent_tasks.router)
+api_router.include_router(push.router)
