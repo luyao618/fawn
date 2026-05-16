@@ -104,6 +104,7 @@ function ProfileStack() {
         {({ navigation }) => (
           <ProfileScreen
             onOpenAgentTasks={() => navigation.navigate('AgentTasks')}
+            onOpenHistory={() => navigation.navigate('HistoryList')}
           />
         )}
       </ProfileNav.Screen>
