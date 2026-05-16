@@ -16,6 +16,8 @@
     "expo": "~54.0.33",
     "expo-build-properties": "~1.0.9",
     "expo-constants": "~18.0.10",
+    "expo-image": "~3.0.10",
+    "expo-image-picker": "~17.0.8",
     "expo-secure-store": "^55.0.14",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",

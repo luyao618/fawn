@@ -4,8 +4,10 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useAuth } from '../auth/AuthContext';
 import { BabyScreen } from './BabyScreen';
+import { ConversationListScreen } from './ConversationListScreen';
+import { ConversationScreen } from './ConversationScreen';
 
-type Tab = 'home' | 'baby';
+type Tab = 'home' | 'chat' | 'baby';
 
 interface HomeScreenProps {
   onOpenSettings: () => void;
@@ -15,6 +17,7 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
   const { user, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   const [tab, setTab] = useState<Tab>('home');
+  const [openConversationId, setOpenConversationId] = useState<string | null>(null);
 
   const version =
     (Constants.expoConfig?.version ?? '0.0.0') +
@@ -41,7 +44,7 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
   return (
     <View style={styles.root}>
       <View style={styles.body}>
-        {tab === 'home' ? (
+        {tab === 'home' && (
           <View style={styles.container}>
             <Text style={styles.title}>Fawn</Text>
             <Text style={styles.subtitle}>家庭育儿 Agent · Android v1</Text>
@@ -74,14 +77,42 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
 
             <Text style={styles.version}>v{version}</Text>
           </View>
-        ) : (
-          <BabyScreen />
         )}
+        {tab === 'chat' && (
+          openConversationId ? (
+            <ConversationScreen
+              conversationId={openConversationId}
+              onBack={() => setOpenConversationId(null)}
+            />
+          ) : (
+            <ConversationListScreen onOpenConversation={(id) => setOpenConversationId(id)} />
+          )
+        )}
+        {tab === 'baby' && <BabyScreen />}
       </View>
 
       <View style={styles.tabBar}>
-        <TabButton label="首页" active={tab === 'home'} onPress={() => setTab('home')} />
-        <TabButton label="宝宝" active={tab === 'baby'} onPress={() => setTab('baby')} />
+        <TabButton
+          label="首页"
+          active={tab === 'home'}
+          onPress={() => {
+            setTab('home');
+          }}
+        />
+        <TabButton
+          label="聊天"
+          active={tab === 'chat'}
+          onPress={() => {
+            setTab('chat');
+          }}
+        />
+        <TabButton
+          label="宝宝"
+          active={tab === 'baby'}
+          onPress={() => {
+            setTab('baby');
+          }}
+        />
       </View>
     </View>
   );

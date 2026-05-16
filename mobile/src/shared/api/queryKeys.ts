@@ -9,4 +9,9 @@ export const queryKeys = {
     all: ['baby'] as const,
     detail: () => [...queryKeys.baby.all, 'detail'] as const,
   },
+  chat: {
+    all: ['chat'] as const,
+    conversations: () => [...queryKeys.chat.all, 'conversations'] as const,
+    conversation: (id: string) => [...queryKeys.chat.all, 'conversation', id] as const,
+  },
 } as const;
