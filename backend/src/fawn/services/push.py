@@ -188,9 +188,26 @@ async def register_token(
     return record
 
 
-async def unregister_token(db: AsyncSession, *, token: str) -> bool:
+async def unregister_token(
+    db: AsyncSession,
+    *,
+    token: str,
+    family_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
+) -> bool:
+    """Soft-revoke a token.
+
+    When ``family_id`` / ``user_id`` are provided, the token must belong to
+    that scope or the call is a no-op. This prevents any authenticated user
+    from revoking another family's push token simply by guessing/obtaining
+    the raw token string.
+    """
     record = await db.scalar(select(PushToken).where(PushToken.token == token.strip()))
     if record is None or record.revoked_at is not None:
+        return False
+    if family_id is not None and record.family_id != family_id:
+        return False
+    if user_id is not None and record.user_id != user_id:
         return False
     record.revoked_at = utc_now()
     await db.commit()
@@ -212,13 +229,25 @@ async def _active_family_tokens(
 async def _handle_receipts(
     db: AsyncSession, receipts: list[PushReceipt]
 ) -> None:
-    """Revoke tokens that Expo reported as permanently invalid."""
-    permanent_failures = {"DeviceNotRegistered", "InvalidCredentials"}
+    """Revoke tokens that Expo reported as permanently device-invalid.
+
+    Only ``DeviceNotRegistered`` (token-specific) triggers a soft revoke.
+    Credential-level failures such as ``InvalidCredentials`` indicate an
+    app/push credential incident and would wipe otherwise valid tokens on
+    fan-out, so we log them instead of mutating token state.
+    """
     revoked: list[PushToken] = []
     for receipt in receipts:
         if receipt.ok:
             continue
-        if receipt.error_code not in permanent_failures:
+        if receipt.error_code == "InvalidCredentials":
+            logger.warning(
+                "expo push credential failure for token %s: %s",
+                receipt.token,
+                receipt.message,
+            )
+            continue
+        if receipt.error_code != "DeviceNotRegistered":
             continue
         record = await db.scalar(
             select(PushToken).where(PushToken.token == receipt.token)

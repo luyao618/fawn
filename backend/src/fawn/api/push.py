@@ -36,7 +36,12 @@ async def register_push_token(
 @router.delete("/tokens", status_code=status.HTTP_204_NO_CONTENT)
 async def unregister_push_token(
     body: PushTokenUnregister,
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    await push_service.unregister_token(db, token=body.token)
+    await push_service.unregister_token(
+        db,
+        token=body.token,
+        family_id=user.family_id,
+        user_id=user.id,
+    )

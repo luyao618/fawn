@@ -248,3 +248,97 @@ async def test_send_to_family_skips_revoked(
     assert len(sender.sent) == 1
     targets = {m.to for m in sender.sent[0]}
     assert targets == {"ExponentPushToken[live]"}
+
+
+async def test_invalid_credentials_does_not_revoke_token(
+    db: AsyncSession, test_user: User
+) -> None:
+    sender = _RecordingSender(
+        failures={"ExponentPushToken[creds]": "InvalidCredentials"}
+    )
+    push_svc.set_sender(sender)
+    try:
+        await push_svc.register_token(
+            db,
+            family_id=test_user.family_id,
+            user_id=test_user.id,
+            token="ExponentPushToken[creds]",
+            platform="android",
+        )
+        await push_svc.send_to_family(
+            db, test_user.family_id, title="t", body="b"
+        )
+    finally:
+        push_svc.set_sender(None)
+
+    record = await db.scalar(
+        select(PushToken).where(PushToken.token == "ExponentPushToken[creds]")
+    )
+    assert record is not None and record.revoked_at is None
+
+
+async def test_unregister_token_scoped_to_family(
+    db: AsyncSession, test_user: User
+) -> None:
+    other_family = uuid.uuid4()
+    other_user = uuid.uuid4()
+    await push_svc.register_token(
+        db,
+        family_id=other_family,
+        user_id=other_user,
+        token="ExponentPushToken[other]",
+        platform="android",
+    )
+
+    # Wrong family scope: must not revoke.
+    revoked = await push_svc.unregister_token(
+        db,
+        token="ExponentPushToken[other]",
+        family_id=test_user.family_id,
+        user_id=test_user.id,
+    )
+    assert revoked is False
+
+    record = await db.scalar(
+        select(PushToken).where(PushToken.token == "ExponentPushToken[other]")
+    )
+    assert record is not None and record.revoked_at is None
+
+    # Correct scope: revokes.
+    revoked = await push_svc.unregister_token(
+        db,
+        token="ExponentPushToken[other]",
+        family_id=other_family,
+        user_id=other_user,
+    )
+    assert revoked is True
+
+
+async def test_unregister_endpoint_cannot_revoke_other_family_token(
+    client: AsyncClient,
+    auth_headers: dict,
+    db: AsyncSession,
+    test_user: User,
+) -> None:
+    other_family = uuid.uuid4()
+    other_user = uuid.uuid4()
+    await push_svc.register_token(
+        db,
+        family_id=other_family,
+        user_id=other_user,
+        token="ExponentPushToken[stranger]",
+        platform="android",
+    )
+
+    response = await client.request(
+        "DELETE",
+        "/api/push/tokens",
+        json={"token": "ExponentPushToken[stranger]"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 204
+
+    record = await db.scalar(
+        select(PushToken).where(PushToken.token == "ExponentPushToken[stranger]")
+    )
+    assert record is not None and record.revoked_at is None
