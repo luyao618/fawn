@@ -7,6 +7,7 @@ from fawn.models.conversation import Conversation, ConversationSummary, Message
 from fawn.models.family import Family
 from fawn.models.knowledge import KnowledgeChunk, KnowledgeDocument, SeedMetadata
 from fawn.models.profile import ProfileItem
+from fawn.models.push_token import PushToken
 from fawn.models.tracker import (
     FeedingRecord,
     GrowthRecord,
@@ -33,6 +34,7 @@ __all__ = [
     "Photo",
     "PhotoTag",
     "ProfileItem",
+    "PushToken",
     "SleepRecord",
     "SeedMetadata",
     "TimestampMixin",
