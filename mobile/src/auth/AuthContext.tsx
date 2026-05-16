@@ -13,6 +13,7 @@ import { fetchMe, login as loginRequest } from '../lib/auth';
 import {
   registerForPushNotificationsAsync,
   unregisterPushNotificationsAsync,
+  unregisterPushNotificationsWithAuthAsync,
 } from '../lib/pushNotifications';
 import {
   StoredAccount,
@@ -164,15 +165,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [applyActiveAccount]);
 
+  /**
+   * Revoke the currently-registered push token (if any) under the
+   * supplied previous-user auth context, before the active account is
+   * allowed to flip. The backend's `DELETE /push/tokens` is scoped to
+   * the authenticated owner — if we let it run under the new user's
+   * Bearer it silently no-ops and the old user keeps receiving pushes
+   * for this device.
+   */
+  const revokePreviousPushTokenBeforeSwitch = useCallback(
+    async (previousAuthToken: string | null) => {
+      const registered = registeredTokenRef.current;
+      if (!registered || !previousAuthToken) return;
+      await unregisterPushNotificationsWithAuthAsync(
+        previousAuthToken,
+        registered.token,
+      );
+      registeredTokenRef.current = null;
+    },
+    [],
+  );
+
   const signIn = useCallback(
     async (username: string, password: string) => {
       const res = await loginRequest(username, password);
+      // If a different user is currently active, revoke their device
+      // push token under THEIR auth context first. Doing this after
+      // upsertAndActivateAccount() would send the DELETE under the new
+      // user's Bearer and the backend owner-scope check would no-op it.
+      const previous = await getActiveAccount();
+      if (previous && previous.user.id !== res.user.id) {
+        await revokePreviousPushTokenBeforeSwitch(previous.token);
+      }
       await upsertAndActivateAccount({ user: res.user, token: res.access_token });
       const next = await getAccounts();
       setAccounts(next);
       applyActiveAccount({ user: res.user, token: res.access_token });
     },
-    [applyActiveAccount],
+    [applyActiveAccount, revokePreviousPushTokenBeforeSwitch],
   );
 
   const addAccount = useCallback(
@@ -186,6 +216,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const switchAccount = useCallback(
     async (userId: string) => {
+      // Revoke the previous user's device push token under their own
+      // auth context BEFORE switchActiveAccount() flips the active
+      // pointer. Skip when switching to the already-active user (a no-op
+      // switch shouldn't drop the registration).
+      const previous = await getActiveAccount();
+      if (previous && previous.user.id !== userId) {
+        await revokePreviousPushTokenBeforeSwitch(previous.token);
+      }
       const account = await switchActiveAccount(userId);
       if (!account) return;
       applyActiveAccount(account);
@@ -200,7 +238,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // unauthorized handler will recover. For other errors leave cache.
       }
     },
-    [applyActiveAccount],
+    [applyActiveAccount, revokePreviousPushTokenBeforeSwitch],
   );
 
   const forgetAccount = useCallback(
@@ -214,10 +252,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Register an Expo push token with the backend each time the active
-   * user changes (login, switch, scope bump). Re-registration is an upsert
-   * server-side, so it's safe to re-run; we only DELETE the previously
-   * registered token when it belonged to a *different* user — within the
-   * same user, a switch may legitimately repeat the same token.
+   * user changes (login, switch, scope bump). Re-registration is an
+   * upsert server-side, so it's safe to re-run. Revocation of the
+   * *previous* user's token is NOT done here — that has to happen
+   * before the active account flips so the DELETE runs under the
+   * previous owner's auth (see `revokePreviousPushTokenBeforeSwitch`).
    */
   useEffect(() => {
     if (status !== 'authenticated' || !user) {
@@ -226,13 +265,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const targetUserId = user.id;
     let cancelled = false;
     (async () => {
-      const previous = registeredTokenRef.current;
-      if (previous && previous.userId !== targetUserId) {
-        // Drop the previous user's token first so the backend doesn't keep
-        // fanning out events for the wrong (user, family) scope.
-        await unregisterPushNotificationsAsync(previous.token);
-        registeredTokenRef.current = null;
-      }
       const result = await registerForPushNotificationsAsync();
       if (cancelled) return;
       if (result.token) {

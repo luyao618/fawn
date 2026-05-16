@@ -27,7 +27,7 @@ import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
-import { registerPushToken, unregisterPushToken } from '../shared/api/push';
+import { registerPushToken, unregisterPushToken, unregisterPushTokenWithAuth } from '../shared/api/push';
 import { intentFromPushData, publishIntent } from './deepLinks';
 
 // Foreground behavior: show the banner + play sound even when the app is
@@ -154,6 +154,24 @@ export async function unregisterPushNotificationsAsync(token: string): Promise<v
     await unregisterPushToken(token);
   } catch {
     // Ignore — sign-out / scope-switch must not block on push cleanup.
+  }
+}
+
+/**
+ * Best-effort unregister under an explicit Bearer auth context. Use this
+ * when deleting the *previous* user's push token during an account
+ * switch: the backend scopes the DELETE to the authenticated owner, so
+ * the request must run before the active account flips (or with the old
+ * account's auth token, as we do here).
+ */
+export async function unregisterPushNotificationsWithAuthAsync(
+  authToken: string,
+  pushToken: string,
+): Promise<void> {
+  try {
+    await unregisterPushTokenWithAuth(authToken, pushToken);
+  } catch {
+    // Ignore — account switch / sign-in must not block on push cleanup.
   }
 }
 
