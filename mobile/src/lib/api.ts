@@ -1,9 +1,18 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import Constants from 'expo-constants';
 
-import { getToken, getActiveUserId, removeAccount } from './tokenStorage';
+import { getActiveAccount, getActiveUserId, removeAccount } from './tokenStorage';
 
-type Unauthorized = () => void;
+// Extend axios request config so we can remember which stored userId actually
+// signed a given request. The 401 handler relies on this to avoid a race where
+// the user switches accounts before an in-flight request's 401 comes back.
+declare module 'axios' {
+  export interface InternalAxiosRequestConfig {
+    _authUserId?: string | null;
+  }
+}
+
+type Unauthorized = (capturedUserId: string | null) => void;
 
 const DEFAULT_BASE_URL = 'http://10.0.2.2:8000';
 
@@ -25,9 +34,13 @@ export const api: AxiosInstance = axios.create({
 });
 
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
-  const token = await getToken();
-  if (token) {
-    config.headers.set('Authorization', `Bearer ${token}`);
+  // Snapshot the active account at request-build time so a later 401 can be
+  // attributed to the exact account that signed this request, even if the
+  // user has since switched to a different account.
+  const active = await getActiveAccount();
+  config._authUserId = active?.user.id ?? null;
+  if (active?.token) {
+    config.headers.set('Authorization', `Bearer ${active.token}`);
   }
   return config;
 });
@@ -36,11 +49,19 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     if (error.response?.status === 401) {
+      const capturedUserId = error.config?._authUserId ?? null;
       const activeId = await getActiveUserId();
-      if (activeId) {
+      if (capturedUserId) {
+        // Always drop the account whose token actually got a 401, regardless
+        // of whether it's still the active one. removeAccount() will only
+        // touch activeUserId when that captured id IS the current active.
+        await removeAccount(capturedUserId);
+      } else if (activeId) {
+        // No captured id (request built before this fix or outside the
+        // interceptor) — fall back to old behavior on the current active.
         await removeAccount(activeId);
       }
-      if (unauthorizedHandler) unauthorizedHandler();
+      if (unauthorizedHandler) unauthorizedHandler(capturedUserId);
     }
     return Promise.reject(error);
   },

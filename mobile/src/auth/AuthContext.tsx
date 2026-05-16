@@ -16,6 +16,7 @@ import {
   clearAllAccounts,
   getAccounts,
   getActiveAccount,
+  getActiveUserId,
   removeAccount as removeStoredAccount,
   switchActiveAccount,
   updateActiveUser,
@@ -80,13 +81,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [applyActiveAccount]);
 
   useEffect(() => {
-    setUnauthorizedHandler(() => {
-      // Active account was just cleared by the response interceptor. Reload
-      // the account list and fall back to whatever remains (or unauthenticated).
+    setUnauthorizedHandler((capturedUserId) => {
+      // The response interceptor removed whichever stored account actually
+      // got the 401 (identified by the userId captured at request-build time).
+      // If that account was the active one, removeAccount() already fell the
+      // active pointer back to another stored account or null. Reload state
+      // from storage either way; but only apply a new active account when
+      // the 401 affected the currently-active user — otherwise we'd clobber
+      // a perfectly good post-switch session.
       void (async () => {
-        const next = await getActiveAccount();
+        const currentActiveId = await getActiveUserId();
         await reloadAccounts();
-        applyActiveAccount(next);
+        // capturedUserId === null is the legacy fallback path: treat as
+        // "current active was unauthenticated".
+        const affectedActive =
+          capturedUserId === null || capturedUserId === bumpedForUserRef.current;
+        if (affectedActive) {
+          const next = currentActiveId ? await getActiveAccount() : null;
+          applyActiveAccount(next);
+        }
       })();
     });
     return () => setUnauthorizedHandler(null);
