@@ -22,4 +22,8 @@ export const queryKeys = {
     chart: () => [...queryKeys.growth.all, 'chart'] as const,
     latest: () => [...queryKeys.growth.all, 'latest'] as const,
   },
+  records: {
+    all: ['records'] as const,
+    timeline: () => [...queryKeys.records.all, 'timeline'] as const,
+  },
 } as const;

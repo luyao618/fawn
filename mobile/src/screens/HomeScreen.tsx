@@ -9,8 +9,9 @@ import { ConversationScreen } from './ConversationScreen';
 import { GrowthScreen } from './GrowthScreen';
 import { HistoryConversationScreen } from './HistoryConversationScreen';
 import { HistoryListScreen } from './HistoryListScreen';
+import { RecordsScreen } from './RecordsScreen';
 
-type Tab = 'home' | 'chat' | 'history' | 'growth' | 'baby';
+type Tab = 'home' | 'chat' | 'records' | 'history' | 'growth' | 'baby';
 
 interface HomeScreenProps {
   onOpenSettings: () => void;
@@ -92,6 +93,7 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
             <ConversationListScreen onOpenConversation={(id) => setOpenConversationId(id)} />
           )
         )}
+        {tab === 'records' && <RecordsScreen />}
         {tab === 'history' && (
           openHistoryId ? (
             <HistoryConversationScreen
@@ -119,6 +121,13 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
           active={tab === 'chat'}
           onPress={() => {
             setTab('chat');
+          }}
+        />
+        <TabButton
+          label="记录"
+          active={tab === 'records'}
+          onPress={() => {
+            setTab('records');
           }}
         />
         <TabButton
