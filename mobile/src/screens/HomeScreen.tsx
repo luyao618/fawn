@@ -1,8 +1,9 @@
 import Constants from 'expo-constants';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useAuth } from '../auth/AuthContext';
+import { DeepLinkIntent } from '../lib/deepLinks';
 import { AgentTasksScreen } from './AgentTasksScreen';
 import { BabyScreen } from './BabyScreen';
 import { ConversationListScreen } from './ConversationListScreen';
@@ -16,14 +17,45 @@ type Tab = 'home' | 'chat' | 'records' | 'history' | 'growth' | 'baby' | 'agent'
 
 interface HomeScreenProps {
   onOpenSettings: () => void;
+  /**
+   * Most recent push-tap intent forwarded from App. We translate
+   * `agent_task_run` intents into a tab switch + initial run id consumed
+   * by <AgentTasksScreen>.
+   */
+  pendingIntent?: DeepLinkIntent | null;
+  /** Called once the intent has been routed so App can clear its slot. */
+  onIntentHandled?: () => void;
 }
 
-export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
+export function HomeScreen({
+  onOpenSettings,
+  pendingIntent,
+  onIntentHandled,
+}: HomeScreenProps) {
   const { user, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   const [tab, setTab] = useState<Tab>('home');
   const [openConversationId, setOpenConversationId] = useState<string | null>(null);
   const [openHistoryId, setOpenHistoryId] = useState<string | null>(null);
+  // Run id seeded from a push tap. Cleared by AgentTasksScreen after it
+  // consumes the value via `onInitialRunConsumed`, so a second tap on the
+  // 任务 tab doesn't keep snapping back to the old run.
+  const [initialAgentRunId, setInitialAgentRunId] = useState<string | null>(null);
+
+  // Route push-tap intents into local navigation state.
+  useEffect(() => {
+    if (!pendingIntent) return;
+    if (pendingIntent.kind === 'agent_task_run') {
+      setInitialAgentRunId(pendingIntent.runId);
+      setTab('agent');
+    }
+    // Unknown intents are dropped; nothing to do.
+    onIntentHandled?.();
+    // We intentionally depend only on pendingIntent — onIntentHandled is a
+    // stable setState wrapper in App and re-running on its identity would
+    // double-fire.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingIntent]);
 
   const version =
     (Constants.expoConfig?.version ?? '0.0.0') +
@@ -107,7 +139,12 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
         )}
         {tab === 'growth' && <GrowthScreen />}
         {tab === 'baby' && <BabyScreen />}
-        {tab === 'agent' && <AgentTasksScreen />}
+        {tab === 'agent' && (
+          <AgentTasksScreen
+            initialRunId={initialAgentRunId}
+            onInitialRunConsumed={() => setInitialAgentRunId(null)}
+          />
+        )}
       </View>
 
       <View style={styles.tabBar}>

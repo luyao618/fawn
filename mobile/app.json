@@ -31,8 +31,19 @@
             "minSdkVersion": 26
           }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#2c7a4b"
+        }
       ]
     ],
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#2c7a4b",
+      "androidMode": "default"
+    },
     "extra": {
       "eas": {
         "projectId": ""
