@@ -4,3 +4,4 @@ export * from './types';
 export * from './baby';
 export * from './chat';
 export * from './records';
+export * from './growth';

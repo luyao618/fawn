@@ -13,6 +13,14 @@ export const queryKeys = {
     all: ['chat'] as const,
     conversations: () => [...queryKeys.chat.all, 'conversations'] as const,
     conversation: (id: string) => [...queryKeys.chat.all, 'conversation', id] as const,
+    history: (pageSize: number) =>
+      [...queryKeys.chat.all, 'history', { pageSize }] as const,
+  },
+  growth: {
+    all: ['growth'] as const,
+    records: () => [...queryKeys.growth.all, 'records'] as const,
+    chart: () => [...queryKeys.growth.all, 'chart'] as const,
+    latest: () => [...queryKeys.growth.all, 'latest'] as const,
   },
   records: {
     all: ['records'] as const,

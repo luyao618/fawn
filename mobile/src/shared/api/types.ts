@@ -68,6 +68,8 @@ export interface FeedingRecord {
   notes: string | null;
 }
 
+// ---------- Growth ----------
+
 export interface GrowthRecord {
   id: string;
   measurement_date: string;
@@ -108,3 +110,46 @@ export type RecordEntry =
   | { kind: 'weight'; id: string; record: GrowthRecord }
   | { kind: 'height'; id: string; record: GrowthRecord }
   | { kind: 'photo'; id: string; record: PhotoRecord };
+
+export interface GrowthChartRecord {
+  date: string;
+  weight_g: number | null;
+  height_cm: number | null;
+  head_cm: number | null;
+}
+
+export interface WHOReferencePoint {
+  age_months: number;
+  value: number;
+}
+
+export interface WHOReferenceLines {
+  p3: WHOReferencePoint[];
+  p15: WHOReferencePoint[];
+  p50: WHOReferencePoint[];
+  p85: WHOReferencePoint[];
+  p97: WHOReferencePoint[];
+}
+
+export interface GrowthWHOReference {
+  weight: WHOReferenceLines;
+  height: WHOReferenceLines;
+  head: WHOReferenceLines;
+}
+
+export interface GrowthChartData {
+  records: GrowthChartRecord[];
+  who_reference: GrowthWHOReference;
+}
+
+export interface DashboardLatestGrowthMetric {
+  date: string;
+  value: number;
+  percentile: number | null;
+}
+
+export interface DashboardLatestGrowth {
+  weight: DashboardLatestGrowthMetric | null;
+  height: DashboardLatestGrowthMetric | null;
+  head: DashboardLatestGrowthMetric | null;
+}

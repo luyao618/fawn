@@ -14,6 +14,16 @@ async function fetchConversations(): Promise<ConversationSummary[]> {
   return data.items;
 }
 
+export async function fetchConversationsPage(
+  page: number,
+  pageSize: number,
+): Promise<PaginatedConversations> {
+  const { data } = await api.get<PaginatedConversations>('/chat/conversations', {
+    params: { page, page_size: pageSize },
+  });
+  return data;
+}
+
 async function fetchConversation(id: string): Promise<ConversationDetail> {
   const { data } = await api.get<ConversationDetail>(`/chat/conversations/${id}`);
   return data;
@@ -83,6 +93,16 @@ export const chatQueries = {
   conversation: (id: string) => ({
     queryKey: queryKeys.chat.conversation(id),
     queryFn: () => fetchConversation(id),
+  }),
+  history: (pageSize: number) => ({
+    queryKey: queryKeys.chat.history(pageSize),
+    queryFn: ({ pageParam = 1 }: { pageParam?: number }) =>
+      fetchConversationsPage(pageParam, pageSize),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage: PaginatedConversations) => {
+      const loaded = lastPage.page * lastPage.page_size;
+      return loaded < lastPage.total ? lastPage.page + 1 : undefined;
+    },
   }),
 };
 
