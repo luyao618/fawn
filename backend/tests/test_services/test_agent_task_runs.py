@@ -291,6 +291,7 @@ async def test_runner_submit_failure_marks_run_failed(
     assert run.error is not None
     assert run.error["code"] == "task.submit_failed"
     assert run.error["retryable"] is True
+    assert run.started_at is not None
     assert run.finished_at is not None
 
 

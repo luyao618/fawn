@@ -325,7 +325,12 @@ async def create_run(
         # failed so the slot frees and the user can retry.
         logger.exception("agent task runner submit failed for run %s", run.id)
         run.status = "failed"
-        run.finished_at = utc_now()
+        # Terminal runs must have both started_at and finished_at per the
+        # state-machine contract; use the same timestamp since the run never
+        # actually began executing.
+        failed_at = utc_now()
+        run.started_at = failed_at
+        run.finished_at = failed_at
         run.error = {
             "code": "task.submit_failed",
             "message": str(exc) or "failed to enqueue task",
