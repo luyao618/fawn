@@ -135,11 +135,15 @@ async function fetchTimeline(): Promise<RecordEntry[]> {
     track({ kind: 'feeding', id: `feeding:${r.id}`, record: r }, 0);
   }
   growth.forEach((r, i) => {
+    // Split entries from the same row need distinct fallback indices, otherwise
+    // the comparator returns 0 for the weight/height pair and their relative
+    // order depends on Array.prototype.sort stability. Reserve two slots per
+    // row (weight first, height second) to give every entry a total order.
     if (r.weight_g != null) {
-      track({ kind: 'weight', id: `weight:${r.id}`, record: r }, i);
+      track({ kind: 'weight', id: `weight:${r.id}`, record: r }, i * 2);
     }
     if (r.height_cm != null) {
-      track({ kind: 'height', id: `height:${r.id}`, record: r }, i);
+      track({ kind: 'height', id: `height:${r.id}`, record: r }, i * 2 + 1);
     }
   });
   for (const r of photos) {
