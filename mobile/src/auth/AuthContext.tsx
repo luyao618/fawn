@@ -11,6 +11,10 @@ import React, {
 import { setUnauthorizedHandler } from '../lib/api';
 import { fetchMe, login as loginRequest } from '../lib/auth';
 import {
+  registerForPushNotificationsAsync,
+  unregisterPushNotificationsAsync,
+} from '../lib/pushNotifications';
+import {
   StoredAccount,
   StoredUser,
   clearAllAccounts,
@@ -62,6 +66,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthContextValue['status']>('loading');
   const [scopeVersion, setScopeVersion] = useState(0);
   const bumpedForUserRef = useRef<string | null>(null);
+  // Track the Expo push token currently registered with the backend so we
+  // can DELETE it on sign-out / before re-registering for a new user. Keyed
+  // by userId because each user owns their own backend (user, token) row.
+  const registeredTokenRef = useRef<{ userId: string; token: string } | null>(null);
 
   const reloadAccounts = useCallback(async () => {
     setAccounts(await getAccounts());
@@ -84,6 +92,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    // Unregister whatever push token we currently hold so the backend
+    // stops fanning out to this device for the just-signed-out user. The
+    // request runs against the soon-to-be-cleared token; do it before
+    // clearAllAccounts() so the Bearer header is still valid.
+    const registered = registeredTokenRef.current;
+    if (registered) {
+      await unregisterPushNotificationsAsync(registered.token);
+      registeredTokenRef.current = null;
+    }
     await clearAllAccounts();
     wipeQueryCaches();
     setAccounts([]);
@@ -194,6 +211,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     [applyActiveAccount],
   );
+
+  /**
+   * Register an Expo push token with the backend each time the active
+   * user changes (login, switch, scope bump). Re-registration is an upsert
+   * server-side, so it's safe to re-run; we only DELETE the previously
+   * registered token when it belonged to a *different* user — within the
+   * same user, a switch may legitimately repeat the same token.
+   */
+  useEffect(() => {
+    if (status !== 'authenticated' || !user) {
+      return;
+    }
+    const targetUserId = user.id;
+    let cancelled = false;
+    (async () => {
+      const previous = registeredTokenRef.current;
+      if (previous && previous.userId !== targetUserId) {
+        // Drop the previous user's token first so the backend doesn't keep
+        // fanning out events for the wrong (user, family) scope.
+        await unregisterPushNotificationsAsync(previous.token);
+        registeredTokenRef.current = null;
+      }
+      const result = await registerForPushNotificationsAsync();
+      if (cancelled) return;
+      if (result.token) {
+        registeredTokenRef.current = { userId: targetUserId, token: result.token };
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status, user, scopeVersion]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

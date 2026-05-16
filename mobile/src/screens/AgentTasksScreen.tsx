@@ -15,7 +15,7 @@
 // in a full markdown lib for v1 would add a dep we don't yet need.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -40,8 +40,37 @@ type Route =
   | { kind: 'list' }
   | { kind: 'run'; runId: string; definition: AgentTaskDefinition | null };
 
-export function AgentTasksScreen() {
-  const [route, setRoute] = useState<Route>({ kind: 'list' });
+export function AgentTasksScreen({
+  initialRunId,
+  onInitialRunConsumed,
+}: {
+  /**
+   * Run id to open immediately on mount. Used by the push deep-link path
+   * so tapping a "task completed" notification lands the user on the run
+   * detail view without an intermediate tap.
+   */
+  initialRunId?: string | null;
+  onInitialRunConsumed?: () => void;
+} = {}) {
+  const [route, setRoute] = useState<Route>(
+    initialRunId
+      ? { kind: 'run', runId: initialRunId, definition: null }
+      : { kind: 'list' },
+  );
+
+  // When a new initialRunId arrives after mount (e.g. a second push tap),
+  // swap to it and notify the parent so the slot can be cleared.
+  useEffect(() => {
+    if (!initialRunId) return;
+    setRoute((current) => {
+      if (current.kind === 'run' && current.runId === initialRunId) {
+        return current;
+      }
+      return { kind: 'run', runId: initialRunId, definition: null };
+    });
+    onInitialRunConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialRunId]);
 
   if (route.kind === 'run') {
     return (
