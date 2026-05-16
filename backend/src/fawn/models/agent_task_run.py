@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,6 +20,17 @@ class AgentTaskRun(UUIDMixin, TimestampMixin, Base):
         ),
         Index("idx_agent_task_runs_family_name_status", "family_id", "name", "status"),
         Index("idx_agent_task_runs_family_created", "family_id", "created_at"),
+        # DB-level guarantee that only one active run (queued/running) exists per
+        # (family, task name). Concurrent POSTs race-insert -> the loser gets a
+        # unique-violation that the service maps back to 409 task_run_in_progress.
+        Index(
+            "uq_agent_task_runs_active_family_name",
+            "family_id",
+            "name",
+            unique=True,
+            postgresql_where=text("status IN ('queued', 'running')"),
+            sqlite_where=text("status IN ('queued', 'running')"),
+        ),
     )
 
     family_id: Mapped[uuid.UUID] = mapped_column(

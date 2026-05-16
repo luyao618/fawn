@@ -147,3 +147,152 @@ async def test_input_validation_rejects_unknown_field(
             )
     finally:
         svc.set_runner(None)
+
+
+async def test_concurrent_create_runs_only_one_wins_409(
+    db: AsyncSession, test_user: User, test_baby: Baby
+) -> None:
+    """Regression: partial unique index must reject a second active run insert.
+
+    Reproduces the race the OC-R review flagged: without DB-level atomicity, two
+    concurrent callers can both pass the `_get_active_run` is-None check and
+    both insert a `queued` row. We simulate the loser by inserting a second
+    active run directly and asserting the integrity constraint fires.
+    """
+    db.add(
+        FeedingRecord(
+            baby_id=test_baby.id,
+            recorded_by=test_user.id,
+            feed_time=datetime.now(timezone.utc) - timedelta(hours=1),
+            feed_type="formula",
+            amount_ml=80,
+        )
+    )
+    await db.commit()
+
+    class _Noop:
+        async def submit(self, *_a, **_k) -> None:
+            return None
+
+    svc.set_runner(_Noop())
+    try:
+        first = await svc.create_run(db, test_user, name="weekly_report")
+        assert first.status == "queued"
+
+        # Simulate the racing second writer that already passed the soft check
+        # in its own transaction and is now flushing its insert.
+        from sqlalchemy.exc import IntegrityError
+
+        racer = AgentTaskRun(
+            family_id=test_user.family_id,
+            triggered_by_user_id=test_user.id,
+            name="weekly_report",
+            status="queued",
+            input={},
+        )
+        db.add(racer)
+        with pytest.raises(IntegrityError):
+            await db.commit()
+        await db.rollback()
+        # Re-load expired ORM attributes after the rollback above.
+        await db.refresh(test_user)
+
+        # Also verify the high-level service surfaces 409 (not a 500) when the
+        # active-run check is bypassed by a concurrent insert.
+        with pytest.raises(svc.TaskInProgress) as exc_info:
+            await svc.create_run(db, test_user, name="weekly_report")
+        assert exc_info.value.extra.get("existing_run_id") == str(first.id)
+    finally:
+        svc.set_runner(None)
+
+
+async def test_concurrent_create_runs_respect_rate_limit_429(
+    db: AsyncSession, test_user: User
+) -> None:
+    """Regression: rate-limit check + insert must not let callers slip past the quota.
+
+    With the daily limit at N, after N terminal runs the very next caller must
+    get TaskRateLimited — including the caller whose transaction sees the
+    count == N-1 right as another writer is committing the N-th row. We
+    simulate that by seeding the quota and then making back-to-back attempts;
+    the advisory-lock / serial-check path must reject every attempt past N.
+    """
+    for _ in range(svc.WEEKLY_REPORT_DAILY_LIMIT):
+        db.add(
+            AgentTaskRun(
+                family_id=test_user.family_id,
+                triggered_by_user_id=test_user.id,
+                name="weekly_report",
+                status="succeeded",
+                input={},
+                output={"kind": "weekly_report", "summary_markdown": "x",
+                        "period": {"start": "x", "end": "x"}},
+            )
+        )
+    await db.commit()
+
+    class _Noop:
+        async def submit(self, *_a, **_k) -> None:
+            return None
+
+    svc.set_runner(_Noop())
+    try:
+        # Three concurrent callers, all should be rejected since quota is full.
+        results = await asyncio.gather(
+            *[
+                _safe_create(db, test_user, "weekly_report")
+                for _ in range(3)
+            ]
+        )
+    finally:
+        svc.set_runner(None)
+
+    assert all(r == "rate_limited" for r in results), results
+
+    # Sanity: nobody created an extra active run while racing.
+    from sqlalchemy import func as _func
+
+    active = await db.scalar(
+        select(_func.count(AgentTaskRun.id)).where(
+            AgentTaskRun.family_id == test_user.family_id,
+            AgentTaskRun.name == "weekly_report",
+            AgentTaskRun.status.in_(svc.ACTIVE_STATUSES),
+        )
+    )
+    assert active == 0
+
+
+async def _safe_create(db: AsyncSession, user: User, name: str) -> str:
+    try:
+        await svc.create_run(db, user, name=name)
+    except svc.TaskRateLimited:
+        return "rate_limited"
+    except svc.TaskInProgress:
+        return "in_progress"
+    return "ok"
+
+
+async def test_runner_submit_failure_marks_run_failed(
+    db: AsyncSession, test_user: User
+) -> None:
+    """If runner.submit explodes, the run must not be left pinned as queued."""
+
+    class _BrokenRunner:
+        async def submit(self, *_a, **_k) -> None:
+            raise RuntimeError("worker pool down")
+
+    svc.set_runner(_BrokenRunner())
+    try:
+        run = await svc.create_run(db, test_user, name="weekly_report")
+    finally:
+        svc.set_runner(None)
+
+    assert run.status == "failed"
+    assert run.error is not None
+    assert run.error["code"] == "task.submit_failed"
+    assert run.error["retryable"] is True
+    assert run.finished_at is not None
+
+
+import asyncio  # noqa: E402 — used by concurrent tests above
+from sqlalchemy import select  # noqa: E402

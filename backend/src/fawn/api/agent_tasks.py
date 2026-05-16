@@ -13,7 +13,7 @@ from fawn.api.schemas import (
     AgentTaskRunRead,
 )
 from fawn.db.session import get_db
-from fawn.dependencies import get_current_user
+from fawn.dependencies import get_current_user, require_tracker_writer
 from fawn.models import User
 from fawn.services import agent_task_runs as svc
 
@@ -53,7 +53,7 @@ async def list_definitions(
 async def create_run(
     name: str,
     body: AgentTaskRunCreate | None = None,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_tracker_writer),
     db: AsyncSession = Depends(get_db),
 ) -> AgentTaskRunRead:
     input_payload = body.input if body is not None else {}

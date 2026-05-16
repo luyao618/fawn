@@ -6,6 +6,7 @@ working memory (`AgentTask` / `agent_tasks`).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
@@ -14,7 +15,8 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from fawn.db.session import async_session_factory as default_session_factory
@@ -205,6 +207,28 @@ def get_runner() -> TaskRunner:
 # ---------------------------------------------------------------------------
 
 
+async def _acquire_family_task_lock(
+    db: AsyncSession, family_id: uuid.UUID, name: str
+) -> None:
+    """Take a DB-level critical section keyed by (family, task name).
+
+    Serializes the rate-limit count + insert pair across concurrent transactions.
+    Uses Postgres advisory locks when available; on other dialects (sqlite for
+    tests) this is a no-op — sqlite serializes writes anyway.
+    """
+    dialect = db.bind.dialect.name if db.bind is not None else ""
+    if dialect != "postgresql":
+        return
+    # 64-bit signed key derived from (family_id, name); collisions across
+    # different (family, name) pairs are acceptable — at worst they serialize
+    # unrelated calls, they do not cause incorrect behavior.
+    digest = hashlib.blake2b(
+        f"agent_task_run:{family_id}:{name}".encode(), digest_size=8
+    ).digest()
+    key = int.from_bytes(digest, "big", signed=True)
+    await db.execute(text("SELECT pg_advisory_xact_lock(:k)").bindparams(k=key))
+
+
 async def _count_today_runs(
     db: AsyncSession, family_id: uuid.UUID, name: str, *, now: datetime
 ) -> int:
@@ -246,8 +270,18 @@ async def create_run(
     _validate_input(definition.input_schema, input_data)
 
     current = now or utc_now()
+    # Capture identifiers up front: a rollback below would expire the ORM
+    # attributes and we cannot re-load them while the session is in an
+    # uncommitted state.
+    family_id = user.family_id
+    user_id = user.id
 
-    existing = await _get_active_run(db, user.family_id, name)
+    # Serialize the (rate-limit count → existence check → insert) sequence per
+    # (family, task name) so concurrent POSTs cannot race past the throttle or
+    # both create a "first" active run.
+    await _acquire_family_task_lock(db, family_id, name)
+
+    existing = await _get_active_run(db, family_id, name)
     if existing is not None:
         raise TaskInProgress(
             "A run for this task is already in progress.",
@@ -255,7 +289,7 @@ async def create_run(
         )
 
     if definition.daily_limit_per_family is not None:
-        used = await _count_today_runs(db, user.family_id, name, now=current)
+        used = await _count_today_runs(db, family_id, name, now=current)
         if used >= definition.daily_limit_per_family:
             raise TaskRateLimited(
                 "Daily run limit reached for this task.",
@@ -263,17 +297,42 @@ async def create_run(
             )
 
     run = AgentTaskRun(
-        family_id=user.family_id,
-        triggered_by_user_id=user.id,
+        family_id=family_id,
+        triggered_by_user_id=user_id,
         name=name,
         status="queued",
         input=input_data,
     )
     db.add(run)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        # Lost the race to the partial unique index on active runs. Surface the
+        # current owner so the client can poll it.
+        await db.rollback()
+        owner = await _get_active_run(db, family_id, name)
+        raise TaskInProgress(
+            "A run for this task is already in progress.",
+            extra={"existing_run_id": str(owner.id) if owner is not None else None},
+        ) from exc
     await db.refresh(run)
 
-    await get_runner().submit(run.id, definition)
+    try:
+        await get_runner().submit(run.id, definition)
+    except Exception as exc:  # noqa: BLE001
+        # If we cannot enqueue the worker, do not leave the row pinned as
+        # `queued` forever — that would 409 every subsequent trigger. Mark it
+        # failed so the slot frees and the user can retry.
+        logger.exception("agent task runner submit failed for run %s", run.id)
+        run.status = "failed"
+        run.finished_at = utc_now()
+        run.error = {
+            "code": "task.submit_failed",
+            "message": str(exc) or "failed to enqueue task",
+            "retryable": True,
+        }
+        await db.commit()
+        await db.refresh(run)
     return run
 
 
