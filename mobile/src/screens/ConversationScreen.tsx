@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -47,9 +47,26 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
   const messages = data?.messages ?? [];
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const t = await getToken();
+      if (!cancelled) setAuthToken(t);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const imageHeaders = useMemo(
+    () => (authToken ? { Authorization: `Bearer ${authToken}` } : undefined),
+    [authToken],
+  );
 
   useEffect(() => {
     if (messages.length === 0) return;
@@ -86,7 +103,7 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
     if (!content && !pendingImage) return;
     setSending(true);
     try {
-      const token = await getToken();
+      const token = authToken ?? (await getToken());
       await sendChatMessage(
         conversationId,
         content || (pendingImage ? '[图片]' : ''),
@@ -119,7 +136,7 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
         <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
           {imgUri && (
             <ExpoImage
-              source={{ uri: imgUri }}
+              source={{ uri: imgUri, headers: imageHeaders }}
               style={styles.messageImage}
               contentFit="cover"
               cachePolicy="memory-disk"
