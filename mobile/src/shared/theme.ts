@@ -70,6 +70,17 @@ export const colors = {
   'topbar-surface': 'rgba(255, 251, 235, 0.88)',
   'back-button-surface': 'rgba(255, 255, 255, 0.8)',
   'frosted-border': 'rgba(255, 255, 255, 0.7)',
+
+  // On-color text + chip surfaces for the user bubble (brand `fawn-amber`
+  // background). Centralized so chat components never inline hex / rgba.
+  'on-brand': '#FFFFFF',
+  'on-brand-soft': 'rgba(255, 255, 255, 0.95)',
+  'on-brand-muted': 'rgba(255, 255, 255, 0.9)',
+  'on-brand-chip': 'rgba(255, 255, 255, 0.2)',
+  // Translucent white surfaces used by chat (empty card, attach preview,
+  // markdown inline-code / fenced-code background).
+  'card-frosted': 'rgba(255, 255, 255, 0.9)',
+  'code-surface': 'rgba(255, 255, 255, 0.7)',
 } as const;
 
 export type ColorToken = keyof typeof colors;

@@ -7,6 +7,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { TabBar } from '../components/layout/TabBar';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
+import { ConversationListScreen } from '../screens/ConversationListScreen';
+import { ConversationScreen } from '../screens/ConversationScreen';
 import { colors } from '../shared/theme';
 
 /**
@@ -28,15 +30,26 @@ function ChatStack() {
   const ChatNav = Stack();
   return (
     <ChatNav.Navigator screenOptions={{ headerShown: false }}>
-      <ChatNav.Screen
-        name="ChatHome"
-        children={() => (
-          <PlaceholderScreen
-            title="管家"
-            description="聊天页将由后续子 issue（YAO-32）实现。"
+      <ChatNav.Screen name="ChatList">
+        {({ navigation }) => (
+          <ConversationListScreen
+            onOpenConversation={(id) =>
+              navigation.navigate('ChatConversation', { id })
+            }
           />
         )}
-      />
+      </ChatNav.Screen>
+      <ChatNav.Screen name="ChatConversation">
+        {({ navigation, route }) => {
+          const { id } = route.params as { id: string };
+          return (
+            <ConversationScreen
+              conversationId={id}
+              onBack={() => navigation.goBack()}
+            />
+          );
+        }}
+      </ChatNav.Screen>
     </ChatNav.Navigator>
   );
 }
