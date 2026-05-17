@@ -163,8 +163,10 @@ You can re-run the check manually:
 
 ```bash
 # Expected fingerprint (from your keystore):
+# Pass the password via env, not argv, so it does not leak via `ps`.
+FAWN_ANDROID_KEYSTORE_PASSWORD="$FAWN_ANDROID_KEYSTORE_PASSWORD" \
 keytool -list -v -keystore "$FAWN_ANDROID_KEYSTORE_PATH" \
-  -alias "$FAWN_ANDROID_KEY_ALIAS" -storepass "$FAWN_ANDROID_KEYSTORE_PASSWORD" \
+  -alias "$FAWN_ANDROID_KEY_ALIAS" -storepass:env FAWN_ANDROID_KEYSTORE_PASSWORD \
   | grep SHA256
 
 # Actual fingerprint (from the APK):
