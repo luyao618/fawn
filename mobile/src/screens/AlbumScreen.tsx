@@ -232,8 +232,8 @@ const styles = StyleSheet.create({
     gap: spacing['4'],
   },
   modeCard: {
-    borderRadius: radii.lg + 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderRadius: radii.tile,
+    backgroundColor: colors['card-translucent'],
     borderWidth: 1,
     borderColor: colors['frosted-border'],
     padding: spacing['2'],
@@ -255,9 +255,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   modeIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: layout.badge,
+    height: layout.badge,
+    borderRadius: layout.badge / 2,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors['nursery-mint'],
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
   countPill: {
     paddingHorizontal: spacing['3'],
     paddingVertical: spacing['1'],
-    borderRadius: 9999,
+    borderRadius: radii.chip,
     backgroundColor: colors['warm-gray'],
   },
   countText: {

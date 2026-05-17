@@ -130,9 +130,9 @@ export function UploadButton({ onPicked, isUploading }: UploadButtonProps) {
         ]}
       >
         {isUploading ? (
-          <ActivityIndicator color="#FFFFFF" size="small" />
+          <ActivityIndicator color={colors['white']} size="small" />
         ) : (
-          <Ionicons name="cloud-upload-outline" size={20} color="#FFFFFF" />
+          <Ionicons name="cloud-upload-outline" size={20} color={colors['white']} />
         )}
         <Text style={[typography.button, styles.label]}>
           {isUploading ? '上传中…' : '上传'}
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing['2'],
     paddingHorizontal: spacing['5'],
-    height: 48,
+    height: layout.fabHeight,
     borderRadius: radii.input,
     backgroundColor: colors['fawn-amber'],
     ...shadows.float,
@@ -165,6 +165,6 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   label: {
-    color: '#FFFFFF',
+    color: colors['white'],
   },
 });

@@ -7,7 +7,8 @@
 //
 // Android gestures supported with stock RN primitives (no extra deps):
 //   - Horizontal swipe to flip between sibling photos (FlatList paging).
-//   - Double-tap to toggle 1× / 2× zoom on the active photo.
+//   - Two-finger pinch to zoom (1×–4×); release below 1× snaps back to 1×.
+//   - Double-tap to toggle 1× / 2× zoom (kept as a quick shortcut).
 //   - One-finger drag to pan when zoomed in.
 //
 // We deliberately avoid pulling in `react-native-gesture-handler` /
@@ -41,7 +42,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, spacing } from '../../shared/theme';
+import { colors, layout, radii, spacing, typography } from '../../shared/theme';
 import type { PhotoRecord } from '../../shared/api';
 import { resolvePhotoUri } from './resolvePhotoUri';
 
@@ -55,6 +56,16 @@ interface PhotoViewerProps {
 
 const DOUBLE_TAP_MS = 280;
 const ZOOM_SCALE = 2;
+const MIN_SCALE = 1;
+const MAX_SCALE = 4;
+
+/** Euclidean distance between the first two active touches. */
+function pinchDistance(touches: ReadonlyArray<{ pageX: number; pageY: number }>): number {
+  if (touches.length < 2) return 0;
+  const dx = touches[0].pageX - touches[1].pageX;
+  const dy = touches[0].pageY - touches[1].pageY;
+  return Math.hypot(dx, dy);
+}
 
 export function PhotoViewer({
   photos,
@@ -174,7 +185,7 @@ export function PhotoViewer({
           ]}
         >
           <View style={styles.header}>
-            <Text style={styles.filename} numberOfLines={2}>
+            <Text style={[typography.overlayHeading, styles.filename]} numberOfLines={2}>
               {current.original_filename}
             </Text>
             <Pressable
@@ -186,11 +197,11 @@ export function PhotoViewer({
                 pressed && styles.iconButtonPressed,
               ]}
             >
-              <Ionicons name="close" size={22} color="#FFFFFF" />
+              <Ionicons name="close" size={22} color={colors['white']} />
             </Pressable>
           </View>
           {photos.length > 1 ? (
-            <Text style={styles.counter}>
+            <Text style={[typography.overlayMeta, styles.counter]}>
               {currentIndex + 1} / {photos.length}
             </Text>
           ) : null}
@@ -221,7 +232,7 @@ export function PhotoViewer({
                     pressed && styles.iconButtonPressed,
                   ]}
                 >
-                  <Ionicons name="download-outline" size={18} color="#FFFFFF" />
+                  <Ionicons name="download-outline" size={18} color={colors['white']} />
                 </Pressable>
               ) : null}
               {onDelete ? (
@@ -237,7 +248,7 @@ export function PhotoViewer({
                     pressed && styles.iconButtonPressed,
                   ]}
                 >
-                  <Ionicons name="trash-outline" size={18} color="#FFD2CC" />
+                  <Ionicons name="trash-outline" size={18} color={colors['safety-icon-soft']} />
                 </Pressable>
               ) : null}
             </View>
@@ -245,14 +256,14 @@ export function PhotoViewer({
               <View style={styles.tagColumn}>
                 {visibleTags.map((tag) => (
                   <View key={tag.id} style={styles.tagChip}>
-                    <Text style={styles.tagText} numberOfLines={1}>
+                    <Text style={typography.overlayChip} numberOfLines={1}>
                       {tag.tag_value}
                     </Text>
                   </View>
                 ))}
                 {extraTagCount > 0 ? (
                   <View style={styles.tagChip}>
-                    <Text style={styles.tagText}>+{extraTagCount}</Text>
+                    <Text style={typography.overlayChip}>+{extraTagCount}</Text>
                   </View>
                 ) : null}
               </View>
@@ -341,26 +352,66 @@ function ZoomablePhoto({ photo, active, width, height }: ZoomablePhotoProps) {
   }, [resetZoom, zoomIn]);
 
   const panStart = useRef({ x: 0, y: 0 });
+  const pinchStart = useRef<{ distance: number; scale: number } | null>(null);
   const responder = useMemo(
     () =>
       PanResponder.create({
-        // Only intercept gestures when we're zoomed in. When zoom == 1 we let
-        // the parent FlatList own horizontal swipes (page flip).
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_e, g: PanResponderGestureState) =>
-          scaleValue.current > 1 &&
-          (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4),
-        onMoveShouldSetPanResponderCapture: (_e, g) =>
-          scaleValue.current > 1 &&
-          (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4),
-        onPanResponderGrant: () => {
+        // Two-finger pinch should always be ours (page-flip never uses 2 touches).
+        // Single-finger drag is ours only when zoomed in — otherwise the parent
+        // FlatList owns horizontal swipes for page flip.
+        onStartShouldSetPanResponder: (e) => e.nativeEvent.touches.length >= 2,
+        onStartShouldSetPanResponderCapture: (e) => e.nativeEvent.touches.length >= 2,
+        onMoveShouldSetPanResponder: (e, g: PanResponderGestureState) => {
+          if (e.nativeEvent.touches.length >= 2) return true;
+          return (
+            scaleValue.current > 1 &&
+            (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4)
+          );
+        },
+        onMoveShouldSetPanResponderCapture: (e, g) => {
+          if (e.nativeEvent.touches.length >= 2) return true;
+          return (
+            scaleValue.current > 1 &&
+            (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4)
+          );
+        },
+        onPanResponderGrant: (e) => {
           panStart.current = {
             x: translateXValue.current,
             y: translateYValue.current,
           };
+          if (e.nativeEvent.touches.length >= 2) {
+            pinchStart.current = {
+              distance: pinchDistance(e.nativeEvent.touches),
+              scale: scaleValue.current,
+            };
+          } else {
+            pinchStart.current = null;
+          }
         },
-        onPanResponderMove: (_e, g) => {
-          // Clamp pan so the photo doesn't drift off-screen completely.
+        onPanResponderMove: (e, g) => {
+          const touches = e.nativeEvent.touches;
+          if (touches.length >= 2) {
+            // Pinch: scale by the ratio of current/initial touch distance.
+            if (!pinchStart.current) {
+              pinchStart.current = {
+                distance: pinchDistance(touches),
+                scale: scaleValue.current,
+              };
+              return;
+            }
+            const d0 = pinchStart.current.distance || 1;
+            const d1 = pinchDistance(touches);
+            const next = clamp(
+              pinchStart.current.scale * (d1 / d0),
+              MIN_SCALE,
+              MAX_SCALE,
+            );
+            scale.setValue(next);
+            return;
+          }
+          // Single-finger pan (only relevant while zoomed in).
+          if (scaleValue.current <= 1) return;
           const maxX = (width * (scaleValue.current - 1)) / 2;
           const maxY = (height * (scaleValue.current - 1)) / 2;
           const nx = clamp(panStart.current.x + g.dx, -maxX, maxX);
@@ -369,7 +420,13 @@ function ZoomablePhoto({ photo, active, width, height }: ZoomablePhotoProps) {
           translateY.setValue(ny);
         },
         onPanResponderRelease: () => {
-          // Spring back into bounds (in case clamp let the drag run a hair over).
+          pinchStart.current = null;
+          // If we zoomed back out below 1×, snap to 1× and reset pan.
+          if (scaleValue.current < 1.01) {
+            resetZoom();
+            return;
+          }
+          // Spring back into bounds (clamp may have let pan drift slightly).
           const maxX = (width * (scaleValue.current - 1)) / 2;
           const maxY = (height * (scaleValue.current - 1)) / 2;
           const nx = clamp(translateXValue.current, -maxX, maxX);
@@ -379,8 +436,11 @@ function ZoomablePhoto({ photo, active, width, height }: ZoomablePhotoProps) {
             Animated.spring(translateY, { toValue: ny, useNativeDriver: true, friction: 8 }),
           ]).start();
         },
+        onPanResponderTerminate: () => {
+          pinchStart.current = null;
+        },
       }),
-    [height, translateX, translateY, width],
+    [height, resetZoom, scale, translateX, translateY, width],
   );
 
   const onTouchEnd = (e: GestureResponderEvent) => {
@@ -428,7 +488,7 @@ function clamp(value: number, min: number, max: number): number {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#080A08',
+    backgroundColor: colors['viewer-canvas'],
   },
   page: {
     alignItems: 'center',
@@ -441,7 +501,7 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: spacing['4'],
     paddingBottom: spacing['6'],
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: colors['overlay-scrim'],
   },
   header: {
     flexDirection: 'row',
@@ -450,37 +510,30 @@ const styles = StyleSheet.create({
   },
   filename: {
     flex: 1,
-    color: '#FFFFFF',
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '600',
   },
   counter: {
     marginTop: spacing['2'],
-    color: 'rgba(255, 255, 255, 0.75)',
-    fontSize: 12,
-    lineHeight: 16,
   },
   errorPill: {
     marginTop: spacing['3'],
     alignSelf: 'flex-start',
     paddingHorizontal: spacing['3'],
     paddingVertical: spacing['2'],
-    borderRadius: 9999,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    borderRadius: radii.chip,
+    backgroundColor: colors['overlay-scrim-strong'],
     color: colors['safety-red-light'],
     fontSize: 12,
     lineHeight: 16,
   },
   closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: layout.viewerCloseButton,
+    height: layout.viewerCloseButton,
+    borderRadius: layout.viewerCloseButton / 2,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: colors['white-overlay-strong'],
+    backgroundColor: colors['white-overlay'],
   },
   footerWrap: {
     position: 'absolute',
@@ -489,7 +542,7 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: spacing['4'],
     paddingTop: spacing['10'],
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: colors['overlay-scrim'],
   },
   footer: {
     flexDirection: 'row',
@@ -502,17 +555,17 @@ const styles = StyleSheet.create({
     gap: spacing['2'],
   },
   iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: layout.viewerActionButton,
+    height: layout.viewerActionButton,
+    borderRadius: layout.viewerActionButton / 2,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderColor: colors['white-overlay'],
+    backgroundColor: colors['overlay-scrim-faint'],
   },
   iconButtonDanger: {
-    borderColor: 'rgba(216, 170, 162, 0.5)',
+    borderColor: colors['safety-border-soft'],
   },
   iconButtonPressed: {
     opacity: 0.6,
@@ -528,15 +581,9 @@ const styles = StyleSheet.create({
   tagChip: {
     paddingHorizontal: spacing['2'],
     paddingVertical: 2,
-    borderRadius: 9999,
+    borderRadius: radii.chip,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-  },
-  tagText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: '500',
+    borderColor: colors['white-overlay'],
+    backgroundColor: colors['overlay-scrim-soft'],
   },
 });

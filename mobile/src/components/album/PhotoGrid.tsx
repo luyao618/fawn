@@ -123,10 +123,10 @@ export function PhotoGrid({ photos, view, onPhotoPress }: PhotoGridProps) {
                     accessibilityLabel={photo.original_filename}
                   />
                   <View style={styles.tileOverlay}>
-                    <Text style={styles.tileDate} numberOfLines={1}>
+                    <Text style={[typography.overlayCaption, styles.tileDate]} numberOfLines={1}>
                       {formatShortDate(photo.taken_at ?? photo.uploaded_at)}
                     </Text>
-                    <Text style={styles.tileLabel} numberOfLines={1}>
+                    <Text style={typography.overlayLabel} numberOfLines={1}>
                       {label}
                     </Text>
                   </View>
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   tile: {
-    borderRadius: radii.lg + 8, // mirrors Web `rounded-[24px]`
+    borderRadius: radii.tile,
     overflow: 'hidden',
     backgroundColor: colors['warm-gray'],
     ...shadows.card,
@@ -208,21 +208,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     padding: spacing['3'],
     paddingTop: spacing['10'],
-    // Subtle dark gradient is approximated with a translucent black overlay —
+    // Subtle dark gradient is approximated with a translucent overlay token —
     // RN lacks first-party gradients and we don't want to pull in a new dep.
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: colors['overlay-scrim'],
   },
   tileDate: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    lineHeight: 14,
     opacity: 0.85,
-  },
-  tileLabel: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '600',
   },
   empty: {
     borderRadius: radii.card,
