@@ -1,7 +1,7 @@
 import React from 'react';
 import { Linking, StyleSheet, Text, TextStyle, View } from 'react-native';
 
-import { colors, fontFamily, radii, spacing, typography } from '../../shared/theme';
+import { colors, fontFamily, layout, radii, spacing, typography } from '../../shared/theme';
 
 /**
  * Lightweight Markdown renderer for chat bubbles.
@@ -314,9 +314,7 @@ const styles = StyleSheet.create({
     gap: spacing['2'],
   },
   heading: {
-    fontFamily: fontFamily.sansSemibold,
-    fontSize: 17,
-    lineHeight: 22,
+    ...typography.markdownHeading,
   } satisfies TextStyle,
   list: {
     gap: spacing['1'],
@@ -327,7 +325,7 @@ const styles = StyleSheet.create({
     gap: spacing['2'],
   },
   listMarker: {
-    minWidth: 18,
+    minWidth: layout.markdownListMarker,
   },
   listText: {
     flex: 1,
@@ -348,10 +346,7 @@ const styles = StyleSheet.create({
     padding: spacing['2'],
   },
   codeText: {
-    fontFamily: fontFamily.mono,
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors['soft-charcoal'],
+    ...typography.code,
   },
   table: {
     borderRadius: radii.md,
@@ -361,13 +356,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   tableCell: {
+    ...typography.tableCell,
     flex: 1,
     paddingVertical: spacing['1'],
     paddingHorizontal: spacing['2'],
     borderBottomWidth: 1,
     borderColor: colors['oat-border'],
-    fontFamily: fontFamily.sans,
-    fontSize: 13,
   },
   tableHeader: {
     fontFamily: fontFamily.sansSemibold,

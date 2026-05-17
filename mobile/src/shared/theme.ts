@@ -93,6 +93,8 @@ export type ColorToken = keyof typeof colors;
 export const radii = {
   card: 28,
   bubble: 20,
+  /** User chat bubble radius (mirrors Web `rounded-[22px]` on `MessageBubble`). */
+  bubbleUser: 22,
   input: 9999,
   chip: 9999,
   sm: 8,
@@ -257,6 +259,25 @@ export const typography = {
     fontSize: 15,
     lineHeight: 20,
   } as TextStyle,
+  /** Sub-heading used inside Markdown blocks (h1/h2/h3). */
+  markdownHeading: {
+    fontFamily: fontFamily.sansSemibold,
+    fontSize: 17,
+    lineHeight: 22,
+  } as TextStyle,
+  /** Fenced / inline code text. */
+  code: {
+    fontFamily: fontFamily.mono,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors['soft-charcoal'],
+  } as TextStyle,
+  /** Compact text used inside markdown table cells. */
+  tableCell: {
+    fontFamily: fontFamily.sans,
+    fontSize: 13,
+    lineHeight: 18,
+  } as TextStyle,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -276,6 +297,8 @@ export const layout = {
   topbarBar: 68,
   /** Circular tap target (TopBar back button, future icon buttons). */
   iconButton: 44,
+  /** Minimum width of the marker column in a markdown list (e.g. "12."). */
+  markdownListMarker: 18,
 } as const;
 
 /**

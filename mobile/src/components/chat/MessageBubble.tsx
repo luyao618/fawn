@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   userBubble: {
     maxWidth: '78%',
     backgroundColor: colors['bubble-user'],
-    borderRadius: 22,
+    borderRadius: radii.bubbleUser,
     borderBottomRightRadius: radii.md,
     paddingHorizontal: spacing['4'],
     paddingVertical: spacing['3'],
