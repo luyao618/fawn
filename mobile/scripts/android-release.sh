@@ -93,9 +93,9 @@ EXPECTED_SHA=$(
     | normalize_sha
 )
 if [ -z "$EXPECTED_SHA" ]; then
-  echo "[android] WARNING: could not read SHA-256 for alias $FAWN_ANDROID_KEY_ALIAS from keystore" >&2
-  echo "[android] skipping signature verification" >&2
-  exit 0
+  echo "[android] ERROR: could not read SHA-256 for alias $FAWN_ANDROID_KEY_ALIAS from keystore" >&2
+  echo "[android] refusing to ship an unverified release APK; install a working 'keytool' (JDK) and retry" >&2
+  exit 1
 fi
 
 APKSIGNER=""
@@ -133,9 +133,10 @@ if [ -z "$ACTUAL_SHA" ]; then
 fi
 
 if [ -z "$ACTUAL_SHA" ]; then
-  echo "[android] WARNING: could not extract signing cert SHA-256 from APK" >&2
-  echo "[android] install Android build-tools to get 'apksigner' for verification" >&2
-  exit 0
+  echo "[android] ERROR: could not extract signing cert SHA-256 from APK" >&2
+  echo "[android] install Android build-tools to get 'apksigner' (or ensure 'unzip' + JDK 'keytool' are available)" >&2
+  echo "[android] refusing to ship a release APK whose signing certificate could not be verified" >&2
+  exit 1
 fi
 
 if [ "$ACTUAL_SHA" = "$EXPECTED_SHA" ]; then
