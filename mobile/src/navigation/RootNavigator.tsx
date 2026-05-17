@@ -6,6 +6,7 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { TabBar } from '../components/layout/TabBar';
+import { DashboardScreen } from '../screens/DashboardScreen';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { AgentTasksScreen } from '../screens/AgentTasksScreen';
@@ -49,15 +50,7 @@ function DashboardStack() {
   const DashboardNav = Stack();
   return (
     <DashboardNav.Navigator screenOptions={{ headerShown: false }}>
-      <DashboardNav.Screen
-        name="DashboardHome"
-        children={() => (
-          <PlaceholderScreen
-            title="成长"
-            description="Dashboard 将由后续子 issue（YAO-33）合并三屏实现。"
-          />
-        )}
-      />
+      <DashboardNav.Screen name="DashboardHome" component={DashboardScreen} />
     </DashboardNav.Navigator>
   );
 }

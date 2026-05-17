@@ -153,3 +153,73 @@ export interface DashboardLatestGrowth {
   height: DashboardLatestGrowthMetric | null;
   head: DashboardLatestGrowthMetric | null;
 }
+
+// ---------- Dashboard summary / stats / health ----------
+
+export interface SleepRecord {
+  id: string;
+  sleep_start: string;
+  sleep_end: string | null;
+  night_wakings: number;
+  sleep_type: 'nap' | 'night';
+  notes: string | null;
+}
+
+export interface HealthRecord {
+  id: string;
+  record_date: string;
+  record_type: 'vaccination' | 'illness' | 'checkup';
+  title: string;
+  description: string | null;
+}
+
+export interface DashboardSummary {
+  baby:
+    | {
+        name: string | null;
+        gender: BabyGender | null;
+        birth_date: string | null;
+        age_days: number | null;
+        age_display: string | null;
+      }
+    | null;
+  latest_growth: DashboardLatestGrowth | null;
+  today_feeding: {
+    total_ml: number;
+    breast_duration_min: number;
+    count: number;
+    last_feed_time: string | null;
+  };
+  today_sleep: {
+    total_hours: number | null;
+    night_wakings: number | null;
+  };
+}
+
+export interface FeedingStatsDaily {
+  date: string;
+  total_ml: number;
+  breast_duration_min: number;
+  count: number;
+}
+
+export interface FeedingStatsData {
+  days: number;
+  daily: FeedingStatsDaily[];
+  average_daily_ml: number;
+  average_daily_breast_duration_min: number;
+  average_daily_count: number;
+}
+
+export interface SleepStatsDaily {
+  date: string;
+  total_hours: number | null;
+  night_wakings: number | null;
+}
+
+export interface SleepStatsData {
+  days: number;
+  daily: SleepStatsDaily[];
+  average_daily_hours: number | null;
+  average_night_wakings: number | null;
+}
