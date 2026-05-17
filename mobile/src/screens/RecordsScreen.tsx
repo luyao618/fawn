@@ -41,8 +41,10 @@ import {
   type RecordEntry,
 } from '../shared/api';
 import {
+  borderWidth,
   colors,
   layout,
+  opacity,
   radii,
   shadows,
   spacing,
@@ -498,7 +500,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors['card'],
     borderRadius: radii.lg,
-    borderWidth: 1,
+    borderWidth: borderWidth.hairline,
     borderColor: colors['oat-border'],
     paddingVertical: spacing['3'],
     paddingHorizontal: spacing['2'],
@@ -507,11 +509,11 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   actionCardPressed: {
-    opacity: 0.85,
+    opacity: opacity.pressed,
   },
   actionIcon: {
-    width: 36,
-    height: 36,
+    width: layout.tintedIconSm,
+    height: layout.tintedIconSm,
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -529,7 +531,7 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing['4'],
     backgroundColor: colors['warning-amber-light'],
     borderColor: colors['warning-amber'],
-    borderWidth: 1,
+    borderWidth: borderWidth.hairline,
     borderRadius: radii.md,
     padding: spacing['3'],
   },
@@ -558,15 +560,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     backgroundColor: colors['card'],
     borderRadius: radii.lg,
-    borderWidth: 1,
+    borderWidth: borderWidth.hairline,
     borderColor: colors['oat-border'],
     padding: spacing['3'],
     gap: spacing['3'],
     ...shadows.card,
   },
   rowIcon: {
-    width: 40,
-    height: 40,
+    width: layout.tintedIconMd,
+    height: layout.tintedIconMd,
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -591,8 +593,8 @@ const styles = StyleSheet.create({
     marginTop: spacing['1'],
   },
   thumb: {
-    width: 120,
-    height: 120,
+    width: layout.thumb,
+    height: layout.thumb,
     borderRadius: radii.md,
     marginTop: spacing['1'],
   },
@@ -621,7 +623,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing['2'],
   },
   input: {
-    borderWidth: 1,
+    borderWidth: borderWidth.hairline,
     borderColor: colors['oat-border'],
     borderRadius: radii.md,
     paddingHorizontal: spacing['3'],
@@ -630,7 +632,7 @@ const styles = StyleSheet.create({
     ...typography.body,
   },
   inputMultiline: {
-    minHeight: 72,
+    minHeight: layout.inputMultilineMinHeight,
     textAlignVertical: 'top',
   },
   hint: {
@@ -643,7 +645,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors['warm-gray'],
     borderRadius: radii.md,
     padding: spacing['1'],
-    borderWidth: 1,
+    borderWidth: borderWidth.hairline,
     borderColor: colors['oat-border'],
   },
   segment: {
@@ -686,7 +688,7 @@ const styles = StyleSheet.create({
   },
   formButtonSecondary: {
     backgroundColor: colors['card'],
-    borderWidth: 1,
+    borderWidth: borderWidth.hairline,
     borderColor: colors['oat-border'],
   },
   formButtonSecondaryText: {
@@ -694,6 +696,6 @@ const styles = StyleSheet.create({
     color: colors['dark-gray'],
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: opacity.disabled,
   },
 });

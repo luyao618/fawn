@@ -339,6 +339,31 @@ export const layout = {
   iconButton: 44,
   /** Minimum width of the marker column in a markdown list (e.g. "12."). */
   markdownListMarker: 18,
+  /** Tinted icon square inside the 4-up action cards on the records page. */
+  tintedIconSm: 36,
+  /** Leading row icon square in timeline entries. */
+  tintedIconMd: 40,
+  /** Photo thumbnail edge length in timeline rows. */
+  thumb: 120,
+  /** Minimum height for multi-line text inputs (e.g. notes field). */
+  inputMultilineMinHeight: 72,
+} as const;
+
+/**
+ * Hairline border width — kept as a token so pages never inline `borderWidth: 1`.
+ * Mirrors the Web `border` utility (1px solid).
+ */
+export const borderWidth = {
+  hairline: 1,
+} as const;
+
+/**
+ * Interaction opacity tokens. Pages should reference these instead of inlining
+ * decimals like `0.85` / `0.6`, so the press / disabled feel stays consistent.
+ */
+export const opacity = {
+  pressed: 0.85,
+  disabled: 0.6,
 } as const;
 
 /**
