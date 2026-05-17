@@ -70,6 +70,17 @@ export const colors = {
   'topbar-surface': 'rgba(255, 251, 235, 0.88)',
   'back-button-surface': 'rgba(255, 255, 255, 0.8)',
   'frosted-border': 'rgba(255, 255, 255, 0.7)',
+
+  // On-color text + chip surfaces for the user bubble (brand `fawn-amber`
+  // background). Centralized so chat components never inline hex / rgba.
+  'on-brand': '#FFFFFF',
+  'on-brand-soft': 'rgba(255, 255, 255, 0.95)',
+  'on-brand-muted': 'rgba(255, 255, 255, 0.9)',
+  'on-brand-chip': 'rgba(255, 255, 255, 0.2)',
+  // Translucent white surfaces used by chat (empty card, attach preview,
+  // markdown inline-code / fenced-code background).
+  'card-frosted': 'rgba(255, 255, 255, 0.9)',
+  'code-surface': 'rgba(255, 255, 255, 0.7)',
 } as const;
 
 export type ColorToken = keyof typeof colors;
@@ -82,6 +93,8 @@ export type ColorToken = keyof typeof colors;
 export const radii = {
   card: 28,
   bubble: 20,
+  /** User chat bubble radius (mirrors Web `rounded-[22px]` on `MessageBubble`). */
+  bubbleUser: 22,
   input: 9999,
   chip: 9999,
   sm: 8,
@@ -246,6 +259,62 @@ export const typography = {
     fontSize: 15,
     lineHeight: 20,
   } as TextStyle,
+  /** Sub-heading used inside Markdown blocks (h1/h2/h3). */
+  markdownHeading: {
+    fontFamily: fontFamily.sansSemibold,
+    fontSize: 17,
+    lineHeight: 22,
+  } as TextStyle,
+  /** Fenced / inline code text. */
+  code: {
+    fontFamily: fontFamily.mono,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors['soft-charcoal'],
+  } as TextStyle,
+  /** Compact text used inside markdown table cells. */
+  tableCell: {
+    fontFamily: fontFamily.sans,
+    fontSize: 13,
+    lineHeight: 18,
+  } as TextStyle,
+  /**
+   * Body text used inside text inputs (Login fields, ChatInput).
+   * Comfortable for typing while matching the 15px scale already used
+   * across the app body.
+   */
+  inputBody: {
+    fontFamily: fontFamily.sans,
+    fontSize: 15,
+    lineHeight: 20,
+    color: colors['soft-charcoal'],
+  } as TextStyle,
+  /**
+   * Small meta text — sender names above user-side message bubbles.
+   */
+  metaSm: {
+    fontFamily: fontFamily.sansSemibold,
+    fontSize: 12,
+    lineHeight: 16,
+  } as TextStyle,
+  /**
+   * Extra-small meta text — role chip labels and similar tiny captions.
+   */
+  metaXs: {
+    fontFamily: fontFamily.sansSemibold,
+    fontSize: 11,
+    lineHeight: 14,
+  } as TextStyle,
+  /**
+   * Chat conversation header title. Smaller than `heading` because the
+   * Web chat top bar uses a 16px title to keep the header compact.
+   */
+  chatTitle: {
+    fontFamily: fontFamily.sansSemibold,
+    fontSize: 16,
+    lineHeight: 22,
+    color: colors['soft-charcoal'],
+  } as TextStyle,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -265,6 +334,8 @@ export const layout = {
   topbarBar: 68,
   /** Circular tap target (TopBar back button, future icon buttons). */
   iconButton: 44,
+  /** Minimum width of the marker column in a markdown list (e.g. "12."). */
+  markdownListMarker: 18,
 } as const;
 
 /**

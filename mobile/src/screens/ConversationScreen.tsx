@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -10,10 +9,9 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   chatImageUrl,
@@ -23,8 +21,28 @@ import {
   uploadChatImage,
   type ChatMessage,
 } from '../shared/api';
+import { useAuth } from '../auth/AuthContext';
 import { getApiBaseUrl } from '../lib/api';
 import { getToken } from '../lib/tokenStorage';
+import {
+  colors,
+  radii,
+  shadows,
+  spacing,
+  typography,
+} from '../shared/theme';
+import { TopBar } from '../components/layout/TopBar';
+import { ChatInput } from '../components/chat/ChatInput';
+import { MessageBubble } from '../components/chat/MessageBubble';
+
+/**
+ * Conversation (聊天) screen — visual parity with Web `app/(main)/chat/page.tsx`.
+ *
+ * All visuals come from `shared/theme.ts` (colors / radii / shadows / type).
+ * Bubble visuals, markdown rendering, safety-alert styling and the rounded
+ * composer pill live in `src/components/chat/*` so this screen is mostly
+ * orchestration.
+ */
 
 interface Props {
   conversationId: string;
@@ -32,13 +50,22 @@ interface Props {
 }
 
 interface PendingImage {
-  imageUrl: string; // server-returned reference (e.g. /api/chat/.../images/xxx.jpg)
+  imageUrl: string; // server-returned ref (e.g. /api/chat/.../images/xxx.jpg)
   localUri: string; // local file uri for instant preview
+}
+
+function senderMeta(user: { display_name?: string | null; role?: string | null } | null) {
+  return {
+    name: user?.display_name ?? '家庭成员',
+    role: user?.role ?? '',
+  };
 }
 
 export function ConversationScreen({ conversationId, onBack }: Props) {
   const queryClient = useQueryClient();
   const baseUrl = getApiBaseUrl();
+  const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const { data, isPending, isError, error, refetch, isFetching } = useQuery(
     chatQueries.conversation(conversationId),
   );
@@ -113,7 +140,6 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
       );
       setText('');
       setPendingImage(null);
-      // Re-fetch conversation so user + assistant rows land in cache.
       await queryClient.invalidateQueries({
         queryKey: chatQueries.conversation(conversationId).queryKey,
       });
@@ -127,229 +153,137 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
     }
   };
 
+  const meta = senderMeta(user);
+
   const renderMessage = ({ item }: { item: ChatMessage }) => {
-    const isUser = item.role === 'user';
-    const imgRef = item.metadata?.image_url;
-    const imgUri = imgRef ? resolveChatImageUrl(baseUrl, imgRef) : null;
+    const ref = item.metadata?.image_url;
+    const uri = ref ? resolveChatImageUrl(baseUrl, ref) : null;
+    const isOwnMessage =
+      item.role === 'user' && (!item.sender_user_id || item.sender_user_id === user?.id);
     return (
-      <View style={[styles.bubbleRow, isUser ? styles.bubbleRight : styles.bubbleLeft]}>
-        <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
-          {imgUri && (
-            <ExpoImage
-              source={{ uri: imgUri, headers: imageHeaders }}
-              style={styles.messageImage}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={150}
-              accessibilityLabel="聊天图片"
-            />
-          )}
-          {item.content ? (
-            <Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant]}>
-              {item.content}
-            </Text>
-          ) : null}
-        </View>
-      </View>
+      <MessageBubble
+        message={item}
+        imageUri={uri}
+        imageHeaders={uri ? imageHeaders : undefined}
+        senderName={isOwnMessage ? meta.name : undefined}
+        senderRole={isOwnMessage ? meta.role : undefined}
+      />
     );
   };
 
   if (isPending && !data) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2c7a4b" />
+        <ActivityIndicator size="large" color={colors['fawn-amber']} />
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton} accessibilityRole="button">
-          <Text style={styles.backText}>← 会话列表</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {data?.conversation.summary ?? '聊天'}
-        </Text>
-      </View>
-
-      {isError && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>
-            离线 / 拉取失败，显示的是缓存数据。{'\n'}
-            {(error as Error)?.message ?? ''}
-          </Text>
-        </View>
-      )}
-
-      <FlatList
-        ref={listRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessage}
-        contentContainerStyle={styles.listContent}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-        refreshing={isFetching}
-        onRefresh={() => refetch()}
-        ListEmptyComponent={
-          <Text style={styles.empty}>还没有消息，在下方输入开始对话。</Text>
-        }
+    <View style={styles.canvas}>
+      <TopBar
+        title={data?.conversation.summary ?? '管家'}
+        onBack={onBack}
       />
 
-      {pendingImage && (
-        <View style={styles.attachRow}>
-          <ExpoImage
-            source={{ uri: pendingImage.localUri }}
-            style={styles.attachThumb}
-            contentFit="cover"
-            cachePolicy="memory"
-          />
-          <Text style={styles.attachLabel}>已附加图片</Text>
-          <TouchableOpacity onPress={() => setPendingImage(null)}>
-            <Text style={styles.attachRemove}>移除</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      >
+        {isError ? (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              离线 / 拉取失败，显示的是缓存数据。{'\n'}
+              {(error as Error)?.message ?? ''}
+            </Text>
+          </View>
+        ) : null}
 
-      <View style={styles.inputBar}>
-        <TouchableOpacity
-          style={[styles.iconButton, uploading && styles.buttonDisabled]}
-          onPress={handlePickImage}
-          disabled={uploading || sending}
-          accessibilityRole="button"
-          accessibilityLabel="附加图片"
-        >
-          <Text style={styles.iconButtonText}>{uploading ? '…' : '+图'}</Text>
-        </TouchableOpacity>
-        <TextInput
-          style={styles.input}
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMessage}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: spacing['4'] },
+          ]}
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          refreshing={isFetching}
+          onRefresh={() => refetch()}
+          ListEmptyComponent={
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>今天想先记录什么？</Text>
+              <Text style={styles.emptyBody}>
+                可以直接发送体重、喂养、睡眠或健康问题，我会整理成家庭可读的记录。
+              </Text>
+            </View>
+          }
+        />
+
+        <ChatInput
           value={text}
           onChangeText={setText}
-          placeholder="发消息…"
-          placeholderTextColor="#999"
-          multiline
-          editable={!sending}
+          onSend={handleSend}
+          onAttachImage={handlePickImage}
+          attachedImageUri={pendingImage?.localUri ?? null}
+          onRemoveImage={() => setPendingImage(null)}
+          sending={sending}
+          uploading={uploading}
         />
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            (sending || (!text.trim() && !pendingImage)) && styles.buttonDisabled,
-          ]}
-          onPress={handleSend}
-          disabled={sending || (!text.trim() && !pendingImage)}
-          accessibilityRole="button"
-        >
-          <Text style={styles.sendText}>{sending ? '…' : '发送'}</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
-// chatImageUrl is re-exported here to keep the public surface obvious to other
-// future screens that may need to render images for a known filename.
 export { chatImageUrl };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  header: {
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
-    backgroundColor: '#fafafa',
-  },
-  backButton: { paddingVertical: 4 },
-  backText: { color: '#2c7a4b', fontSize: 14 },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: '#222', marginTop: 4 },
-  banner: {
-    margin: 16,
-    backgroundColor: '#fff4e0',
-    borderColor: '#e0a96d',
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-  },
-  bannerText: { color: '#8a5a17', fontSize: 13 },
-  listContent: { paddingHorizontal: 16, paddingVertical: 12, flexGrow: 1 },
-  empty: { fontSize: 14, color: '#666', textAlign: 'center', marginTop: 32 },
-  bubbleRow: { flexDirection: 'row', marginVertical: 4 },
-  bubbleLeft: { justifyContent: 'flex-start' },
-  bubbleRight: { justifyContent: 'flex-end' },
-  bubble: {
-    maxWidth: '78%',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  bubbleUser: { backgroundColor: '#2c7a4b' },
-  bubbleAssistant: { backgroundColor: '#f1f3f2' },
-  bubbleText: { fontSize: 15, lineHeight: 20 },
-  bubbleTextUser: { color: '#fff' },
-  bubbleTextAssistant: { color: '#222' },
-  messageImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 8,
-    marginBottom: 6,
-  },
-  attachRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#eee',
-  },
-  attachThumb: { width: 40, height: 40, borderRadius: 6, marginRight: 8 },
-  attachLabel: { flex: 1, color: '#444', fontSize: 13 },
-  attachRemove: { color: '#b03030', fontSize: 13, fontWeight: '600' },
-  inputBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#eee',
-    backgroundColor: '#fff',
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: '#f1f3f2',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  iconButtonText: { color: '#2c7a4b', fontSize: 14, fontWeight: '600' },
-  input: {
+  canvas: {
     flex: 1,
-    minHeight: 40,
-    maxHeight: 120,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 15,
-    color: '#222',
-    backgroundColor: '#fff',
+    backgroundColor: colors['warm-cream'],
   },
-  sendButton: {
-    marginLeft: 8,
-    paddingHorizontal: 16,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: '#2c7a4b',
+  flex: { flex: 1 },
+  center: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors['warm-cream'],
   },
-  sendText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  buttonDisabled: { opacity: 0.5 },
+  banner: {
+    marginHorizontal: spacing['4'],
+    marginTop: spacing['3'],
+    backgroundColor: colors['warning-amber-light'],
+    borderWidth: 1,
+    borderColor: colors['warning-amber'],
+    borderRadius: radii.lg,
+    padding: spacing['3'],
+  },
+  bannerText: {
+    ...typography.bodySmall,
+    color: colors['warning-amber'],
+  },
+  listContent: {
+    paddingHorizontal: spacing['4'],
+    paddingTop: spacing['3'],
+    flexGrow: 1,
+  },
+  emptyCard: {
+    marginTop: spacing['3'],
+    backgroundColor: colors['card-frosted'],
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors['frosted-border'],
+    padding: spacing['4'],
+    gap: spacing['1'],
+    ...shadows.card,
+  },
+  emptyTitle: {
+    ...typography.chatTitle,
+  },
+  emptyBody: {
+    ...typography.bodySmall,
+    color: colors['dark-gray'],
+  },
 });
