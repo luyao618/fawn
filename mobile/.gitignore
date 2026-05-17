@@ -31,7 +31,11 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
+.env.local
 .env*.local
+# Android local signing config — written by scripts/android-release.sh
+android/keystore.properties
 
 # typescript
 *.tsbuildinfo

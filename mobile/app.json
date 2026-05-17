@@ -38,7 +38,8 @@
           "color": "#2c7a4b"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "./plugins/withAndroidReleaseSigning"
     ],
     "notification": {
       "icon": "./assets/icon.png",
