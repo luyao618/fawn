@@ -83,11 +83,13 @@ extract_sha256() {
   awk -F': ' 'tolower($1) ~ /sha-?256/ {print $2; exit}'
 }
 
+# Pass the store password via env, not argv, so it does not show up in `ps`.
 EXPECTED_SHA=$(
+  FAWN_ANDROID_KEYSTORE_PASSWORD="$FAWN_ANDROID_KEYSTORE_PASSWORD" \
   keytool -list -v \
     -keystore "$KEYSTORE_ABS" \
     -alias "$FAWN_ANDROID_KEY_ALIAS" \
-    -storepass "$FAWN_ANDROID_KEYSTORE_PASSWORD" \
+    -storepass:env FAWN_ANDROID_KEYSTORE_PASSWORD \
     2>/dev/null \
     | extract_sha256 \
     | normalize_sha
