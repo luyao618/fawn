@@ -13,6 +13,7 @@ import { ProfileScreen } from '../screens/ProfileScreen';
 import { AgentTasksScreen } from '../screens/AgentTasksScreen';
 import { HistoryListScreen } from '../screens/HistoryListScreen';
 import { HistoryConversationScreen } from '../screens/HistoryConversationScreen';
+import { RecordsScreen } from '../screens/RecordsScreen';
 import { colors } from '../shared/theme';
 
 /**
@@ -79,15 +80,7 @@ function RecordStack() {
   const RecordNav = Stack();
   return (
     <RecordNav.Navigator screenOptions={{ headerShown: false }}>
-      <RecordNav.Screen
-        name="RecordHome"
-        children={() => (
-          <PlaceholderScreen
-            title="记录"
-            description="记录页将由后续子 issue（YAO-34）实现。"
-          />
-        )}
-      />
+      <RecordNav.Screen name="RecordHome" component={RecordsScreen} />
     </RecordNav.Navigator>
   );
 }
