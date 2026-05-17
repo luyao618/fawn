@@ -31,6 +31,22 @@ You need:
 - Android Studio with an emulator, or a real Android 8.0+ device with USB debugging
 - For native builds: an [Expo account](https://expo.dev) and `npm i -g eas-cli`
 
+## Building locally (no EAS)
+
+For day-to-day Android UI work we now have a fully local build chain that
+skips EAS / cloud queues. See [`../docs/android-native-build.md`](../docs/android-native-build.md)
+for the one-time JDK/SDK/NDK setup and signing details.
+
+Quick commands (run from `mobile/`):
+
+```bash
+npm run android:debug      # build debug APK via ./gradlew assembleDebug
+npm run android:install    # build + adb install on connected device
+npm run android:release    # signed release APK (needs mobile/.env, see docs)
+```
+
+`android/` is generated on demand via `expo prebuild` and is git-ignored.
+
 ## Building the internal-distribution APK (EAS)
 
 The first internal-distribution APK is built remotely via EAS so we don't need a

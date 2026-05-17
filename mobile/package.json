@@ -6,7 +6,11 @@
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "android:prebuild": "expo prebuild --platform android --no-install",
+    "android:debug": "bash scripts/android-debug.sh",
+    "android:release": "bash scripts/android-release.sh",
+    "android:install": "bash scripts/android-install.sh"
   },
   "dependencies": {
     "@expo-google-fonts/nunito": "^0.4.2",
