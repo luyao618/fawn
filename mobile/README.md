@@ -49,8 +49,15 @@ Quick commands (run from `mobile/`):
 ```bash
 npm run android:debug      # build debug APK via ./gradlew assembleDebug
 npm run android:install    # build + adb install on connected device
-npm run android:release    # signed release APK (needs mobile/.env, see docs)
+# npm run android:release  # troubleshooting only — do NOT ship this artifact.
+#                          # Release builds go through Expo EAS (see below).
 ```
+
+Release APKs/AABs that you ship, sideload to testers, or upload to the Play
+Store must come from **Expo EAS** — see the [Signing policy in
+`../docs/android-native-build.md`](../docs/android-native-build.md#signing-policy-read-this-first).
+The local `npm run android:release` path is retained only as an offline /
+troubleshooting escape hatch.
 
 `android/` is generated on demand via `expo prebuild` and is git-ignored.
 
