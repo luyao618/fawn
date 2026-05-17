@@ -14,7 +14,7 @@ declare module 'axios' {
 
 type Unauthorized = (capturedUserId: string | null) => void;
 
-const DEFAULT_BASE_URL = 'http://10.0.2.2:8000';
+const DEFAULT_BASE_URL = 'https://lumingchuan.vip/api';
 
 function resolveBaseUrl(): string {
   const fromExtra = (Constants.expoConfig?.extra as Record<string, unknown> | undefined)?.apiBaseUrl;

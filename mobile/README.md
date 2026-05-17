@@ -1,5 +1,12 @@
 # Fawn Mobile (Android)
 
+> **Backend URLs (read first):**
+> - **Default = Production**: `https://lumingchuan.vip/api` (in `app.json` and `src/lib/api.ts`). This is what every build ships with.
+> - **Local emulator only**: `http://10.0.2.2:8000/api`. Does **not** work on a physical device.
+>
+> See [`AGENTS.md`](./AGENTS.md) for the full policy. Never default back to
+> the emulator URL.
+
 React Native + Expo app for the Fawn family parenting agent system.
 
 - **Stack**: Expo (managed workflow) + TypeScript + React Native
