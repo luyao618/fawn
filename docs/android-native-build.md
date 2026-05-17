@@ -127,43 +127,51 @@ FAWN_ANDROID_KEY_PASSWORD=...
 `android/keystore.properties` from these env vars at build time — that file is
 git-ignored as well (`mobile/.gitignore`).
 
-### Wire the keystore into Gradle
+### How the keystore is wired into Gradle (repeatable, no manual patch)
 
-`expo prebuild` produces an `android/app/build.gradle` that already supports
-the standard `signingConfigs.release` block. If your generated `build.gradle`
-does not have one (it depends on the Expo SDK version), add the following
-once and re-run prebuild on every native folder reset:
+The wiring is done by a repo-tracked Expo config plugin:
+`mobile/plugins/withAndroidReleaseSigning.js`, registered in
+`mobile/app.json` under `expo.plugins`. Every `expo prebuild` patches the
+generated `android/app/build.gradle` to:
 
-```gradle
-// android/app/build.gradle
-def keystorePropertiesFile = rootProject.file("keystore.properties")
-def keystoreProperties = new Properties()
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-}
+1. Load `android/keystore.properties` (written by `scripts/android-release.sh`
+   from the `FAWN_ANDROID_*` env vars; git-ignored).
+2. Define `android.signingConfigs.release` backed by those properties.
+3. Repoint `android.buildTypes.release.signingConfig` from the default debug
+   keystore to `signingConfigs.release`.
 
-android {
-    signingConfigs {
-        release {
-            if (keystorePropertiesFile.exists()) {
-                storeFile file(keystoreProperties['storeFile'])
-                storePassword keystoreProperties['storePassword']
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
-            }
-        }
-    }
-    buildTypes {
-        release {
-            signingConfig signingConfigs.release
-        }
-    }
-}
+You do not need to edit `android/app/build.gradle` by hand — any hand-edit
+would be lost the next time `android/` is regenerated. If you ever need to
+disable the wiring temporarily, remove the plugin entry from `app.json` and
+re-run `npm run android:prebuild`.
+
+Secrets are never passed on the Gradle command line; they live in
+`android/keystore.properties` (mode 600, git-ignored) so they do not appear in
+`ps` output.
+
+### Verifying the release APK is signed with the right keystore
+
+`npm run android:release` runs `assembleRelease` and then compares the
+SHA-256 of the APK's signing certificate to the SHA-256 of
+`FAWN_ANDROID_KEY_ALIAS` in your keystore (via `apksigner verify
+--print-certs` with a `keytool -printcert` fallback). The script exits
+non-zero if they do not match, so a build that silently fell back to the
+default debug keystore will fail loudly instead of producing a
+mis-signed APK.
+
+You can re-run the check manually:
+
+```bash
+# Expected fingerprint (from your keystore):
+keytool -list -v -keystore "$FAWN_ANDROID_KEYSTORE_PATH" \
+  -alias "$FAWN_ANDROID_KEY_ALIAS" -storepass "$FAWN_ANDROID_KEYSTORE_PASSWORD" \
+  | grep SHA256
+
+# Actual fingerprint (from the APK):
+"$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs \
+  mobile/android/app/build/outputs/apk/release/app-release.apk \
+  | grep SHA-256
 ```
-
-A persistent solution is to encapsulate this in a small Expo config plugin so
-it survives prebuild regeneration; that is tracked as a follow-up and is out
-of scope for this issue.
 
 ## Scripts (the entry points)
 
