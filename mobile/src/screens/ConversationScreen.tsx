@@ -280,8 +280,7 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   emptyTitle: {
-    ...typography.heading,
-    fontSize: 16,
+    ...typography.chatTitle,
   },
   emptyBody: {
     ...typography.bodySmall,

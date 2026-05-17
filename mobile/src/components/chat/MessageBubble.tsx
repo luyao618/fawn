@@ -4,7 +4,6 @@ import { Image as ExpoImage } from 'expo-image';
 
 import {
   colors,
-  fontFamily,
   radii,
   shadows,
   spacing,
@@ -156,8 +155,7 @@ const styles = StyleSheet.create({
     gap: spacing['1'],
   },
   senderName: {
-    fontFamily: fontFamily.sansSemibold,
-    fontSize: 12,
+    ...typography.metaSm,
     color: colors['on-brand-soft'],
     maxWidth: 140,
   },
@@ -168,8 +166,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
   },
   roleChipText: {
-    fontFamily: fontFamily.sansSemibold,
-    fontSize: 11,
+    ...typography.metaXs,
     color: colors['on-brand-muted'],
   },
   image: {

@@ -12,7 +12,6 @@ import { Ionicons } from '@expo/vector-icons';
 
 import {
   colors,
-  fontFamily,
   iconButtonRadius,
   layout,
   radii,
@@ -202,10 +201,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.input,
     paddingHorizontal: spacing['4'],
     paddingVertical: spacing['2'],
-    fontFamily: fontFamily.sans,
-    fontSize: 15,
-    lineHeight: 20,
-    color: colors['soft-charcoal'],
+    ...typography.inputBody,
   },
   sendButton: {
     width: layout.iconButton,

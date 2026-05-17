@@ -278,6 +278,43 @@ export const typography = {
     fontSize: 13,
     lineHeight: 18,
   } as TextStyle,
+  /**
+   * Body text used inside text inputs (Login fields, ChatInput).
+   * Comfortable for typing while matching the 15px scale already used
+   * across the app body.
+   */
+  inputBody: {
+    fontFamily: fontFamily.sans,
+    fontSize: 15,
+    lineHeight: 20,
+    color: colors['soft-charcoal'],
+  } as TextStyle,
+  /**
+   * Small meta text — sender names above user-side message bubbles.
+   */
+  metaSm: {
+    fontFamily: fontFamily.sansSemibold,
+    fontSize: 12,
+    lineHeight: 16,
+  } as TextStyle,
+  /**
+   * Extra-small meta text — role chip labels and similar tiny captions.
+   */
+  metaXs: {
+    fontFamily: fontFamily.sansSemibold,
+    fontSize: 11,
+    lineHeight: 14,
+  } as TextStyle,
+  /**
+   * Chat conversation header title. Smaller than `heading` because the
+   * Web chat top bar uses a 16px title to keep the header compact.
+   */
+  chatTitle: {
+    fontFamily: fontFamily.sansSemibold,
+    fontSize: 16,
+    lineHeight: 22,
+    color: colors['soft-charcoal'],
+  } as TextStyle,
 } as const;
 
 // ---------------------------------------------------------------------------

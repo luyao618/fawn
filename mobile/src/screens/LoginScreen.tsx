@@ -16,7 +16,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   colors,
-  fontFamily,
   layout,
   radii,
   shadows,
@@ -190,9 +189,7 @@ const styles = StyleSheet.create({
     borderColor: colors['oat-border'],
     borderRadius: radii.input,
     paddingHorizontal: spacing['4'],
-    fontFamily: fontFamily.sans,
-    fontSize: 15,
-    color: colors['soft-charcoal'],
+    ...typography.inputBody,
   },
   inputFocused: {
     borderColor: colors['fawn-amber'],
