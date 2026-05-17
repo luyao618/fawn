@@ -452,7 +452,12 @@ function ZoomablePhoto({ photo, active, width, height }: ZoomablePhotoProps) {
     <View
       style={[styles.page, { width, height }]}
       {...responder.panHandlers}
-      onStartShouldSetResponder={() => true}
+      // IMPORTANT: when scale === 1 (the default), leave single-finger touches
+      // to the parent horizontal FlatList so it can flip between photos.
+      // Only claim the start responder once we're zoomed in — at that point
+      // single-finger drag is panning, and tap-to-zoom-out is meaningful.
+      // Two-finger pinch is handled separately via PanResponder.onMove*.
+      onStartShouldSetResponder={() => scaleValue.current > 1}
       onResponderRelease={onTouchEnd}
     >
       <Animated.View
