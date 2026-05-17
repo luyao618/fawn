@@ -15,6 +15,7 @@ import { AgentTasksScreen } from '../screens/AgentTasksScreen';
 import { HistoryListScreen } from '../screens/HistoryListScreen';
 import { HistoryConversationScreen } from '../screens/HistoryConversationScreen';
 import { RecordsScreen } from '../screens/RecordsScreen';
+import { AlbumScreen } from '../screens/AlbumScreen';
 import { colors } from '../shared/theme';
 
 /**
@@ -82,15 +83,7 @@ function AlbumStack() {
   const AlbumNav = Stack();
   return (
     <AlbumNav.Navigator screenOptions={{ headerShown: false }}>
-      <AlbumNav.Screen
-        name="AlbumHome"
-        children={() => (
-          <PlaceholderScreen
-            title="相册"
-            description="相册（网格 + 大图 + 上传）将由后续子 issue（YAO-35）实现。"
-          />
-        )}
-      />
+      <AlbumNav.Screen name="AlbumHome" component={AlbumScreen} />
     </AlbumNav.Navigator>
   );
 }

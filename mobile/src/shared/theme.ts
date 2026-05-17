@@ -84,6 +84,30 @@ export const colors = {
   // Dim layer behind bottom-sheet style modals. Tinted with --color-text-primary
   // so the cream canvas reads as "pushed down" rather than washed out.
   'modal-backdrop': 'rgba(13, 28, 46, 0.4)',
+
+  // Fixed white / black (rare cases — viewer chrome on dark background, tile
+  // labels on photo overlay). Centralized so components stop inlining
+  // '#FFFFFF' literals.
+  'white': '#FFFFFF',
+  'white-soft': 'rgba(255, 255, 255, 0.85)',
+  'white-muted': 'rgba(255, 255, 255, 0.75)',
+  'white-faint': 'rgba(255, 255, 255, 0.7)',
+  'white-overlay-strong': 'rgba(255, 255, 255, 0.18)',
+  'white-overlay': 'rgba(255, 255, 255, 0.12)',
+  'card-translucent': 'rgba(255, 255, 255, 0.92)',
+
+  // Viewer chrome — deep neutral canvas for the full-screen photo viewer and
+  // translucent black overlays for the photo grid tile label gradient and
+  // viewer header/footer scrims.
+  'viewer-canvas': '#080A08',
+  'overlay-scrim': 'rgba(0, 0, 0, 0.45)',
+  'overlay-scrim-strong': 'rgba(0, 0, 0, 0.55)',
+  'overlay-scrim-soft': 'rgba(0, 0, 0, 0.3)',
+  'overlay-scrim-faint': 'rgba(0, 0, 0, 0.25)',
+
+  // Danger glyph + border for the viewer delete button (icon on dark bg).
+  'safety-icon-soft': '#FFD2CC',
+  'safety-border-soft': 'rgba(216, 170, 162, 0.5)',
 } as const;
 
 export type ColorToken = keyof typeof colors;
@@ -103,6 +127,8 @@ export const radii = {
   sm: 8,
   md: 12,
   lg: 16,
+  /** Photo tile / mode card radius (mirrors Web `rounded-[24px]`). */
+  tile: 24,
   /** Top tab bar / pill cluster radius (mirrors Web `rounded-[30px]`). */
   tabbar: 30,
   /** Fully-rounded — for circular icon buttons (e.g. TopBar back chevron). */
@@ -318,6 +344,41 @@ export const typography = {
     lineHeight: 22,
     color: colors['soft-charcoal'],
   } as TextStyle,
+  /** Filename / heading on dark photo viewer scrim. */
+  overlayHeading: {
+    fontFamily: fontFamily.sansSemibold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors['white'],
+  } as TextStyle,
+  /** Photo tile bold label (on translucent dark gradient). */
+  overlayLabel: {
+    fontFamily: fontFamily.sansSemibold,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors['white'],
+  } as TextStyle,
+  /** Photo tile date / counter (on translucent dark gradient). */
+  overlayMeta: {
+    fontFamily: fontFamily.sans,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors['white-muted'],
+  } as TextStyle,
+  /** Small caption on dark photo (tile date strip). */
+  overlayCaption: {
+    fontFamily: fontFamily.sans,
+    fontSize: 11,
+    lineHeight: 14,
+    color: colors['white-soft'],
+  } as TextStyle,
+  /** Tag chip text on viewer footer. */
+  overlayChip: {
+    fontFamily: fontFamily.sans,
+    fontSize: 10,
+    lineHeight: 14,
+    color: colors['white-faint'],
+  } as TextStyle,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -347,6 +408,14 @@ export const layout = {
   thumb: 120,
   /** Minimum height for multi-line text inputs (e.g. notes field). */
   inputMultilineMinHeight: 72,
+  /** Viewer close button — circular tap target on dark scrim. */
+  viewerCloseButton: 40,
+  /** Viewer action button (download/delete) — circular icon button. */
+  viewerActionButton: 36,
+  /** Modal icon (mode card leading icon) — circular accent badge. */
+  badge: 32,
+  /** Floating upload button height. */
+  fabHeight: 48,
 } as const;
 
 /**
