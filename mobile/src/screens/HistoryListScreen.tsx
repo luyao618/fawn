@@ -1,3 +1,8 @@
+// History list — mobile counterpart of `frontend/src/app/(main)/history/page.tsx`.
+//
+// Visual language strictly comes from `mobile/src/shared/theme.ts`. Business
+// logic (infinite query backed by `chatQueries.history`) is unchanged.
+
 import { useInfiniteQuery } from '@tanstack/react-query';
 import React, { useMemo } from 'react';
 import {
@@ -11,6 +16,14 @@ import {
 } from 'react-native';
 
 import { chatQueries, type ConversationSummary } from '../shared/api';
+import { TopBar } from '../components/layout/TopBar';
+import {
+  colors,
+  radii,
+  shadows,
+  spacing,
+  typography,
+} from '../shared/theme';
 
 const PAGE_SIZE = 20;
 
@@ -49,19 +62,18 @@ export function HistoryListScreen({ onOpenConversation }: Props) {
 
   if (isPending && !data) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2c7a4b" />
+      <View style={styles.root}>
+        <TopBar title="历史" />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors['fawn-amber']} />
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.title}>历史</Text>
-        <Text style={styles.subtitle}>过往会话 · 只读</Text>
-      </View>
-
+      <TopBar title="历史" />
       {isError && (
         <View style={styles.banner}>
           <Text style={styles.bannerText}>
@@ -79,19 +91,21 @@ export function HistoryListScreen({ onOpenConversation }: Props) {
           <RefreshControl
             refreshing={isFetching && !isFetchingNextPage}
             onRefresh={() => refetch()}
+            tintColor={colors['fawn-amber']}
           />
         }
         onEndReachedThreshold={0.4}
         onEndReached={() => {
           if (hasNextPage && !isFetchingNextPage) fetchNextPage();
         }}
-        ListEmptyComponent={
-          <Text style={styles.empty}>还没有历史会话。</Text>
+        ListHeaderComponent={
+          <Text style={styles.subtitle}>过往会话 · 只读</Text>
         }
+        ListEmptyComponent={<Text style={styles.empty}>还没有历史会话。</Text>}
         ListFooterComponent={
           isFetchingNextPage ? (
             <View style={styles.footer}>
-              <ActivityIndicator color="#2c7a4b" />
+              <ActivityIndicator color={colors['fawn-amber']} />
             </View>
           ) : !hasNextPage && items.length > 0 ? (
             <Text style={styles.footerEnd}>已到底部</Text>
@@ -102,6 +116,7 @@ export function HistoryListScreen({ onOpenConversation }: Props) {
             style={styles.row}
             onPress={() => onOpenConversation(item.id)}
             accessibilityRole="button"
+            activeOpacity={0.85}
           >
             <View style={styles.rowMain}>
               <Text style={styles.rowTitle} numberOfLines={1}>
@@ -114,49 +129,78 @@ export function HistoryListScreen({ onOpenConversation }: Props) {
             {item.is_active && <View style={styles.activeDot} />}
           </TouchableOpacity>
         )}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: 64,
-    paddingBottom: 16,
+  root: { flex: 1, backgroundColor: colors['warm-cream'] },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  subtitle: {
+    ...typography.bodySmall,
+    color: colors['dark-gray'],
+    marginBottom: spacing['3'],
   },
-  title: { fontSize: 24, fontWeight: '700', color: '#222' },
-  subtitle: { fontSize: 13, color: '#888', marginTop: 4 },
   banner: {
-    marginHorizontal: 24,
-    marginBottom: 8,
-    backgroundColor: '#fff4e0',
-    borderColor: '#e0a96d',
+    marginHorizontal: spacing['4'],
+    marginTop: spacing['3'],
+    backgroundColor: colors['warning-amber-light'],
+    borderColor: colors['warning-amber'],
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: radii.md,
+    padding: spacing['3'],
   },
-  bannerText: { color: '#8a5a17', fontSize: 13 },
-  listContent: { paddingHorizontal: 24, paddingBottom: 24 },
-  empty: { fontSize: 14, color: '#666', marginTop: 24, textAlign: 'center' },
+  bannerText: {
+    ...typography.bodySmall,
+    color: colors['warning-amber'],
+  },
+  listContent: {
+    paddingHorizontal: spacing['4'],
+    paddingTop: spacing['3'],
+    paddingBottom: spacing['8'],
+  },
+  empty: {
+    ...typography.body,
+    color: colors['dark-gray'],
+    marginTop: spacing['6'],
+    textAlign: 'center',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
+    paddingVertical: spacing['3'],
+    paddingHorizontal: spacing['4'],
+    backgroundColor: colors['card'],
+    borderRadius: radii.lg,
+    ...shadows.card,
   },
-  rowMain: { flex: 1, paddingRight: 12 },
-  rowTitle: { fontSize: 15, color: '#222', fontWeight: '500' },
-  rowMeta: { fontSize: 12, color: '#888', marginTop: 4 },
+  separator: {
+    height: spacing['2'],
+  },
+  rowMain: { flex: 1, paddingRight: spacing['3'] },
+  rowTitle: {
+    ...typography.body,
+    color: colors['soft-charcoal'],
+    fontFamily: typography.heading.fontFamily,
+  },
+  rowMeta: {
+    ...typography.caption,
+    color: colors['mid-gray'],
+    marginTop: spacing['1'],
+  },
   activeDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-    backgroundColor: '#2c7a4b',
+    borderRadius: radii.full,
+    backgroundColor: colors['sage-green-soft'],
   },
-  footer: { paddingVertical: 16, alignItems: 'center' },
-  footerEnd: { paddingVertical: 16, textAlign: 'center', color: '#aaa', fontSize: 12 },
+  footer: { paddingVertical: spacing['4'], alignItems: 'center' },
+  footerEnd: {
+    paddingVertical: spacing['4'],
+    textAlign: 'center',
+    color: colors['mid-gray'],
+    ...typography.caption,
+  },
 });

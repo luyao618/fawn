@@ -1,18 +1,10 @@
 // Agent task module — list runnable tasks, trigger a run, follow it through
-// running / succeeded / failed states (YAO-21).
+// running / succeeded / failed states (YAO-21; visual pass under YAO-36).
 //
-// Three views in one screen, driven by local state:
-//   1. List view  — definitions from `GET /agent-tasks/definitions`. Each card
-//      is a "tap to trigger" entry.
-//   2. Run view   — single run polled via `GET /agent-tasks/runs/{id}`.
-//      - queued / running: spinner + progress text.
-//      - succeeded: render output.summary_markdown (lightweight pseudo-MD).
-//      - failed: error.message + retry button gated by error.retryable.
-//      - cancelled: terminal note, no retry.
-//
-// Markdown rendering is intentionally minimal: the backend currently only
-// emits headings, bullet lists, and paragraphs for `weekly_report`. Pulling
-// in a full markdown lib for v1 would add a dep we don't yet need.
+// Visual language strictly from `mobile/src/shared/theme.ts`. Business logic
+// (polling, retry, deep-link seeded runs) is unchanged — only the surface is
+// re-skinned and a `TopBar` with a back button is added so this screen reads
+// as a secondary-entry under the 家庭 tab.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useEffect, useState } from 'react';
@@ -35,15 +27,21 @@ import {
   type AgentTaskRun,
 } from '../shared/api';
 import { queryKeys } from '../shared/api/queryKeys';
+import { TopBar } from '../components/layout/TopBar';
+import {
+  colors,
+  fontFamily,
+  radii,
+  shadows,
+  spacing,
+  typography,
+} from '../shared/theme';
 
 type Route =
   | { kind: 'list' }
   | { kind: 'run'; runId: string; definition: AgentTaskDefinition | null };
 
-export function AgentTasksScreen({
-  initialRunId,
-  onInitialRunConsumed,
-}: {
+interface AgentTasksScreenProps {
   /**
    * Run id to open immediately on mount. Used by the push deep-link path
    * so tapping a "task completed" notification lands the user on the run
@@ -51,15 +49,25 @@ export function AgentTasksScreen({
    */
   initialRunId?: string | null;
   onInitialRunConsumed?: () => void;
-} = {}) {
+  /**
+   * Optional back handler — surfaced as a TopBar chevron when provided.
+   * Wired by the ProfileStack so the screen reads as a secondary entry
+   * below 家庭.
+   */
+  onClose?: () => void;
+}
+
+export function AgentTasksScreen({
+  initialRunId,
+  onInitialRunConsumed,
+  onClose,
+}: AgentTasksScreenProps = {}) {
   const [route, setRoute] = useState<Route>(
     initialRunId
       ? { kind: 'run', runId: initialRunId, definition: null }
       : { kind: 'list' },
   );
 
-  // When a new initialRunId arrives after mount (e.g. a second push tap),
-  // swap to it and notify the parent so the slot can be cleared.
   useEffect(() => {
     if (!initialRunId) return;
     setRoute((current) => {
@@ -87,6 +95,7 @@ export function AgentTasksScreen({
 
   return (
     <ListView
+      onClose={onClose}
       onOpenRun={(runId, definition) =>
         setRoute({ kind: 'run', runId, definition })
       }
@@ -98,9 +107,10 @@ export function AgentTasksScreen({
 
 interface ListViewProps {
   onOpenRun: (runId: string, definition: AgentTaskDefinition | null) => void;
+  onClose?: () => void;
 }
 
-function ListView({ onOpenRun }: ListViewProps) {
+function ListView({ onOpenRun, onClose }: ListViewProps) {
   const { data, isPending, isFetching, isError, error, refetch } = useQuery(
     agentTaskQueries.definitions(),
   );
@@ -121,9 +131,6 @@ function ListView({ onOpenRun }: ListViewProps) {
       onOpenRun(run.id, definition);
     },
     onError: (err: unknown, def) => {
-      // Concurrency: if a run is already in progress, jump straight to it
-      // instead of showing a scary error — that matches the spec ("避免重复
-      // 点击重复跑").
       if (err instanceof TaskTriggerError && err.existingRunId) {
         onOpenRun(err.existingRunId, def);
         return;
@@ -135,8 +142,11 @@ function ListView({ onOpenRun }: ListViewProps) {
 
   if (isPending && !data) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2c7a4b" />
+      <View style={styles.root}>
+        <TopBar title="Agent 任务" onBack={onClose} />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors['fawn-amber']} />
+        </View>
       </View>
     );
   }
@@ -144,56 +154,62 @@ function ListView({ onOpenRun }: ListViewProps) {
   const definitions = data ?? [];
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.listContainer}
-      refreshControl={
-        <RefreshControl refreshing={isFetching} onRefresh={() => refetch()} />
-      }
-    >
-      <Text style={styles.title}>Agent 任务</Text>
-      <Text style={styles.subtitle}>选择一个任务并触发，运行结果会显示在下一页。</Text>
+    <View style={styles.root}>
+      <TopBar title="Agent 任务" onBack={onClose} />
+      <ScrollView
+        contentContainerStyle={styles.listContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={isFetching}
+            onRefresh={() => refetch()}
+            tintColor={colors['fawn-amber']}
+          />
+        }
+      >
+        <Text style={styles.subtitle}>选择一个任务并触发，运行结果会显示在下一页。</Text>
 
-      {isError && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>
-            离线 / 拉取失败。{'\n'}
-            {(error as Error)?.message ?? ''}
-          </Text>
-        </View>
-      )}
+        {isError && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              离线 / 拉取失败。{'\n'}
+              {(error as Error)?.message ?? ''}
+            </Text>
+          </View>
+        )}
 
-      {definitions.length === 0 ? (
-        <Text style={styles.empty}>当前没有可触发的任务。</Text>
-      ) : (
-        definitions.map((def) => {
-          const pending = triggeringName === def.name && triggerMutation.isPending;
-          return (
-            <TouchableOpacity
-              key={def.name}
-              style={[
-                styles.taskCard,
-                !def.enabled && styles.taskCardDisabled,
-                pending && styles.taskCardPending,
-              ]}
-              activeOpacity={0.85}
-              disabled={!def.enabled || triggerMutation.isPending}
-              onPress={() => triggerMutation.mutate(def)}
-              accessibilityRole="button"
-              accessibilityLabel={`触发任务 ${def.title}`}
-            >
-              <View style={styles.taskHeader}>
-                <Text style={styles.taskTitle}>{def.title}</Text>
-                <Text style={styles.taskEta}>~{def.estimated_duration_seconds}s</Text>
-              </View>
-              <Text style={styles.taskDesc}>{def.description}</Text>
-              <Text style={styles.taskCta}>
-                {pending ? '触发中…' : def.enabled ? '点击触发 ▸' : '暂未开放'}
-              </Text>
-            </TouchableOpacity>
-          );
-        })
-      )}
-    </ScrollView>
+        {definitions.length === 0 ? (
+          <Text style={styles.empty}>当前没有可触发的任务。</Text>
+        ) : (
+          definitions.map((def) => {
+            const pending = triggeringName === def.name && triggerMutation.isPending;
+            return (
+              <TouchableOpacity
+                key={def.name}
+                style={[
+                  styles.taskCard,
+                  !def.enabled && styles.taskCardDisabled,
+                  pending && styles.taskCardPending,
+                ]}
+                activeOpacity={0.85}
+                disabled={!def.enabled || triggerMutation.isPending}
+                onPress={() => triggerMutation.mutate(def)}
+                accessibilityRole="button"
+                accessibilityLabel={`触发任务 ${def.title}`}
+              >
+                <View style={styles.taskHeader}>
+                  <Text style={styles.taskTitle}>{def.title}</Text>
+                  <Text style={styles.taskEta}>~{def.estimated_duration_seconds}s</Text>
+                </View>
+                <Text style={styles.taskDesc}>{def.description}</Text>
+                <Text style={styles.taskCta}>
+                  {pending ? '触发中…' : def.enabled ? '点击触发 ▸' : '暂未开放'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -212,7 +228,6 @@ function RunView({ runId, definition, onBack, onSwitchRun }: RunViewProps) {
   const queryClient = useQueryClient();
   const query = useQuery({
     ...agentTaskQueries.run(runId),
-    // Poll every 2s until terminal. Once terminal, stop hitting the server.
     refetchInterval: (q) => {
       const r = q.state.data as AgentTaskRun | undefined;
       if (r && TERMINAL_STATUSES.has(r.status)) return false;
@@ -227,15 +242,11 @@ function RunView({ runId, definition, onBack, onSwitchRun }: RunViewProps) {
       return triggerRun(definition.name);
     },
     onSuccess: (run) => {
-      // Seed the new run's cache so the swap to its detail view doesn't
-      // flash an empty loading spinner.
       queryClient.setQueryData(queryKeys.agentTasks.run(run.id), run);
       onSwitchRun(run.id);
     },
     onError: (err: unknown) => {
       if (err instanceof TaskTriggerError && err.existingRunId) {
-        // Backend says another run is already in flight — follow that one
-        // instead of failing loudly.
         onSwitchRun(err.existingRunId);
         return;
       }
@@ -246,36 +257,33 @@ function RunView({ runId, definition, onBack, onSwitchRun }: RunViewProps) {
 
   const run = query.data;
   const showInitialSpinner = query.isPending && !run;
+  const headerTitle = definition?.title ?? run?.name ?? '任务运行';
 
   return (
     <View style={styles.root}>
-      <View style={styles.runHeader}>
-        <TouchableOpacity onPress={onBack} accessibilityRole="button">
-          <Text style={styles.backButton}>← 返回</Text>
-        </TouchableOpacity>
-        <Text style={styles.runHeaderTitle} numberOfLines={1}>
-          {definition?.title ?? run?.name ?? '任务运行'}
-        </Text>
-        <View style={styles.backButtonPlaceholder} />
-      </View>
-
+      <TopBar title={headerTitle} onBack={onBack} />
       <ScrollView
         contentContainerStyle={styles.runBody}
         refreshControl={
           <RefreshControl
             refreshing={query.isFetching}
             onRefresh={() => query.refetch()}
+            tintColor={colors['fawn-amber']}
           />
         }
       >
         {showInitialSpinner ? (
           <View style={styles.center}>
-            <ActivityIndicator size="large" color="#2c7a4b" />
+            <ActivityIndicator size="large" color={colors['fawn-amber']} />
           </View>
         ) : !run ? (
           <Text style={styles.empty}>无法加载运行状态。</Text>
         ) : (
-          <RunStateView run={run} onRetry={() => retryMutation.mutate()} retrying={retryMutation.isPending} />
+          <RunStateView
+            run={run}
+            onRetry={() => retryMutation.mutate()}
+            retrying={retryMutation.isPending}
+          />
         )}
       </ScrollView>
     </View>
@@ -302,7 +310,6 @@ function RunStateView({
   if (run.status === 'failed') {
     return <FailedView run={run} onRetry={onRetry} retrying={retrying} />;
   }
-  // cancelled
   return (
     <View style={styles.stateBlock}>
       <Text style={styles.stateBadgeNeutral}>已取消</Text>
@@ -317,12 +324,10 @@ function RunningView({ run }: { run: AgentTaskRun }) {
   return (
     <View style={styles.stateBlock}>
       <View style={styles.runningRow}>
-        <ActivityIndicator size="small" color="#2c7a4b" />
+        <ActivityIndicator size="small" color={colors['fawn-amber']} />
         <Text style={styles.runningLabel}>{label}</Text>
       </View>
-      <Text style={styles.stateHint}>
-        任务正在后台执行，完成后会自动刷新结果。
-      </Text>
+      <Text style={styles.stateHint}>任务正在后台执行，完成后会自动刷新结果。</Text>
       <RunMeta run={run} />
     </View>
   );
@@ -419,15 +424,8 @@ function extractSummaryMarkdown(
 }
 
 /**
- * Minimal Markdown renderer for the subset weekly_report emits:
- *   - `#`/`##`/`###` headings
- *   - `-` / `*` bullet lists
- *   - blank-line paragraph breaks
- *   - inline `**bold**`
- *
- * Anything else falls through as a plain paragraph. We deliberately do NOT
- * pull react-native-markdown-display for v1 — it would be the only large dep
- * added for one screen.
+ * Minimal Markdown renderer for the subset weekly_report emits.
+ * Kept inline — same as before — to avoid pulling a heavy dep for v1.
  */
 function SimpleMarkdown({ source }: { source: string }) {
   const lines = source.replace(/\r\n/g, '\n').split('\n');
@@ -461,7 +459,10 @@ function SimpleMarkdown({ source }: { source: string }) {
       blocks.push(
         <Text
           key={`h-${blocks.length}`}
-          style={[mdStyles.heading, level === 1 ? mdStyles.h1 : level === 2 ? mdStyles.h2 : mdStyles.h3]}
+          style={[
+            mdStyles.heading,
+            level === 1 ? mdStyles.h1 : level === 2 ? mdStyles.h2 : mdStyles.h3,
+          ]}
         >
           {renderInline(text)}
         </Text>,
@@ -487,7 +488,6 @@ function SimpleMarkdown({ source }: { source: string }) {
 }
 
 function renderInline(text: string): React.ReactNode {
-  // Split on **bold** segments; everything else is plain text.
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
     const m = /^\*\*([^*]+)\*\*$/.exec(part);
@@ -505,152 +505,234 @@ function renderInline(text: string): React.ReactNode {
 // ----- styles -----
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  listContainer: { padding: 24, paddingTop: 64, paddingBottom: 32 },
-  title: { fontSize: 24, fontWeight: '700', color: '#222', marginBottom: 4 },
-  subtitle: { fontSize: 13, color: '#666', marginBottom: 20 },
-  banner: {
-    backgroundColor: '#fff4e0',
-    borderColor: '#e0a96d',
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
+  root: { flex: 1, backgroundColor: colors['warm-cream'] },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing['6'],
   },
-  bannerText: { color: '#8a5a17', fontSize: 13 },
-  empty: { fontSize: 14, color: '#666', textAlign: 'center', marginTop: 48 },
+  listContainer: {
+    padding: spacing['4'],
+    paddingBottom: spacing['8'],
+    gap: spacing['3'],
+  },
+  subtitle: {
+    ...typography.bodySmall,
+    color: colors['dark-gray'],
+    marginBottom: spacing['2'],
+  },
+  banner: {
+    backgroundColor: colors['warning-amber-light'],
+    borderColor: colors['warning-amber'],
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing['3'],
+    marginBottom: spacing['2'],
+  },
+  bannerText: {
+    ...typography.bodySmall,
+    color: colors['warning-amber'],
+  },
+  empty: {
+    ...typography.body,
+    color: colors['dark-gray'],
+    textAlign: 'center',
+    marginTop: spacing['10'],
+  },
   taskCard: {
     borderWidth: 1,
-    borderColor: '#e3e3e3',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    backgroundColor: '#fff',
+    borderColor: colors['oat-border'],
+    borderRadius: radii.lg,
+    padding: spacing['4'],
+    backgroundColor: colors['card'],
+    ...shadows.card,
   },
   taskCardDisabled: { opacity: 0.5 },
-  taskCardPending: { borderColor: '#2c7a4b' },
+  taskCardPending: { borderColor: colors['fawn-amber'] },
   taskHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: spacing['1'],
   },
-  taskTitle: { fontSize: 17, fontWeight: '700', color: '#222' },
-  taskEta: { fontSize: 12, color: '#888' },
-  taskDesc: { fontSize: 14, color: '#555', lineHeight: 20 },
+  taskTitle: {
+    ...typography.heading,
+    color: colors['soft-charcoal'],
+  },
+  taskEta: {
+    ...typography.caption,
+    color: colors['mid-gray'],
+  },
+  taskDesc: {
+    ...typography.body,
+    color: colors['dark-gray'],
+  },
   taskCta: {
-    marginTop: 12,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#2c7a4b',
+    marginTop: spacing['3'],
+    ...typography.caption,
+    color: colors['brand-strong'],
+    fontFamily: typography.heading.fontFamily,
   },
-  runHeader: {
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
-    backgroundColor: '#fff',
+  runBody: {
+    padding: spacing['5'],
+    paddingBottom: spacing['8'],
+    flexGrow: 1,
   },
-  backButton: { fontSize: 15, color: '#2c7a4b', fontWeight: '600', width: 70 },
-  backButtonPlaceholder: { width: 70 },
-  runHeaderTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#222',
+  stateBlock: { gap: spacing['3'] },
+  stateBadgeBase: {
+    alignSelf: 'flex-start',
+    ...typography.caption,
+    fontFamily: typography.heading.fontFamily,
+    paddingHorizontal: spacing['3'],
+    paddingVertical: spacing['1'],
+    borderRadius: radii.chip,
+    overflow: 'hidden',
   },
-  runBody: { padding: 20, paddingBottom: 48, flexGrow: 1 },
-  stateBlock: { gap: 12 },
   stateBadgeSuccess: {
     alignSelf: 'flex-start',
-    backgroundColor: '#e6f4ec',
-    color: '#2c7a4b',
-    fontSize: 12,
-    fontWeight: '700',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+    ...typography.caption,
+    fontFamily: typography.heading.fontFamily,
+    backgroundColor: colors['sage-green-light'],
+    color: colors['sage-green'],
+    paddingHorizontal: spacing['3'],
+    paddingVertical: spacing['1'],
+    borderRadius: radii.chip,
     overflow: 'hidden',
   },
   stateBadgeError: {
     alignSelf: 'flex-start',
-    backgroundColor: '#fde8e8',
-    color: '#b03030',
-    fontSize: 12,
-    fontWeight: '700',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+    ...typography.caption,
+    fontFamily: typography.heading.fontFamily,
+    backgroundColor: colors['safety-red-light'],
+    color: colors['safety-red'],
+    paddingHorizontal: spacing['3'],
+    paddingVertical: spacing['1'],
+    borderRadius: radii.chip,
     overflow: 'hidden',
   },
   stateBadgeNeutral: {
     alignSelf: 'flex-start',
-    backgroundColor: '#eee',
-    color: '#555',
-    fontSize: 12,
-    fontWeight: '700',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+    ...typography.caption,
+    fontFamily: typography.heading.fontFamily,
+    backgroundColor: colors['warm-gray'],
+    color: colors['dark-gray'],
+    paddingHorizontal: spacing['3'],
+    paddingVertical: spacing['1'],
+    borderRadius: radii.chip,
     overflow: 'hidden',
   },
-  stateBody: { fontSize: 15, color: '#222', marginTop: 4 },
-  stateHint: { fontSize: 13, color: '#666' },
-  runningRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  runningLabel: { fontSize: 16, fontWeight: '600', color: '#2c7a4b' },
+  stateBody: {
+    ...typography.body,
+    color: colors['soft-charcoal'],
+  },
+  stateHint: {
+    ...typography.bodySmall,
+    color: colors['dark-gray'],
+  },
+  runningRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing['2'],
+  },
+  runningLabel: {
+    ...typography.heading,
+    color: colors['brand-strong'],
+  },
   markdownCard: {
     borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 10,
-    padding: 16,
-    backgroundColor: '#fafafa',
+    borderColor: colors['oat-border'],
+    borderRadius: radii.md,
+    padding: spacing['4'],
+    backgroundColor: colors['card'],
   },
   errorCard: {
     borderWidth: 1,
-    borderColor: '#f1c2c2',
-    borderRadius: 10,
-    padding: 12,
-    backgroundColor: '#fdf2f2',
+    borderColor: colors['safety-red-light'],
+    borderRadius: radii.md,
+    padding: spacing['3'],
+    backgroundColor: colors['safety-red-light'],
   },
-  errorMessage: { fontSize: 15, color: '#7a1f1f', lineHeight: 22 },
-  errorCode: { marginTop: 6, fontSize: 12, color: '#a04a4a', fontFamily: 'Menlo' },
+  errorMessage: {
+    ...typography.body,
+    color: colors['safety-red'],
+  },
+  errorCode: {
+    marginTop: spacing['1'],
+    ...typography.caption,
+    color: colors['safety-red'],
+    fontFamily: fontFamily.mono,
+  },
   retryButton: {
-    backgroundColor: '#2c7a4b',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    backgroundColor: colors['fawn-amber'],
+    borderRadius: radii.md,
+    paddingVertical: spacing['3'],
+    paddingHorizontal: spacing['5'],
     alignSelf: 'flex-start',
   },
   retryButtonDisabled: { opacity: 0.6 },
-  retryButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  retryButtonText: {
+    ...typography.button,
+    color: colors['card'],
+  },
   metaBlock: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: spacing['3'],
+    paddingTop: spacing['3'],
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#eee',
+    borderTopColor: colors['oat-border'],
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: spacing['1'],
   },
-  metaLabel: { fontSize: 12, color: '#888' },
-  metaValue: { fontSize: 12, color: '#444' },
+  metaLabel: {
+    ...typography.caption,
+    color: colors['mid-gray'],
+  },
+  metaValue: {
+    ...typography.caption,
+    color: colors['dark-gray'],
+  },
 });
 
 const mdStyles = StyleSheet.create({
-  paragraph: { fontSize: 14, color: '#222', lineHeight: 22, marginBottom: 8 },
-  heading: { color: '#222', marginTop: 12, marginBottom: 6 },
-  h1: { fontSize: 20, fontWeight: '700' },
-  h2: { fontSize: 17, fontWeight: '700' },
-  h3: { fontSize: 15, fontWeight: '600' },
-  bold: { fontWeight: '700' },
-  bulletRow: { flexDirection: 'row', marginBottom: 4, paddingLeft: 4 },
-  bulletDot: { width: 14, color: '#2c7a4b', fontSize: 14, lineHeight: 22 },
-  bulletText: { flex: 1, fontSize: 14, color: '#222', lineHeight: 22 },
+  paragraph: {
+    ...typography.body,
+    color: colors['soft-charcoal'],
+    marginBottom: spacing['2'],
+  },
+  heading: {
+    color: colors['soft-charcoal'],
+    marginTop: spacing['3'],
+    marginBottom: spacing['1'],
+  },
+  h1: {
+    ...typography.title,
+  },
+  h2: {
+    ...typography.heading,
+  },
+  h3: {
+    ...typography.body,
+    fontFamily: typography.heading.fontFamily,
+  },
+  bold: {
+    fontFamily: typography.heading.fontFamily,
+  },
+  bulletRow: {
+    flexDirection: 'row',
+    marginBottom: spacing['1'],
+    paddingLeft: spacing['1'],
+  },
+  bulletDot: {
+    width: 14,
+    color: colors['brand-strong'],
+    ...typography.body,
+  },
+  bulletText: {
+    flex: 1,
+    ...typography.body,
+    color: colors['soft-charcoal'],
+  },
 });
