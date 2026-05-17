@@ -1,3 +1,10 @@
+// Read-only view of a historical conversation. Reuses the same
+// `chat.conversation(id)` query as the live chat screen, so opening a
+// conversation here hits the persisted cache instantly and updates in the
+// background when online. No input bar, no send / upload UI.
+//
+// Visual language strictly from `mobile/src/shared/theme.ts`.
+
 import { useQuery } from '@tanstack/react-query';
 import { Image as ExpoImage } from 'expo-image';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -7,7 +14,6 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 
@@ -18,6 +24,14 @@ import {
 } from '../shared/api';
 import { getApiBaseUrl } from '../lib/api';
 import { getToken } from '../lib/tokenStorage';
+import { TopBar } from '../components/layout/TopBar';
+import {
+  colors,
+  radii,
+  shadows,
+  spacing,
+  typography,
+} from '../shared/theme';
 
 interface Props {
   conversationId: string;
@@ -30,12 +44,6 @@ function formatDate(iso: string): string {
   return d.toLocaleString();
 }
 
-/**
- * Read-only view of a historical conversation. Reuses the same
- * `chat.conversation(id)` query as the live chat screen, so opening a
- * conversation here hits the persisted cache instantly and updates in the
- * background when online. No input bar, no send / upload UI.
- */
 export function HistoryConversationScreen({ conversationId, onBack }: Props) {
   const baseUrl = getApiBaseUrl();
   const { data, isPending, isError, error, refetch, isFetching } = useQuery(
@@ -91,8 +99,11 @@ export function HistoryConversationScreen({ conversationId, onBack }: Props) {
 
   if (isPending && !data) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2c7a4b" />
+      <View style={styles.root}>
+        <TopBar title="历史会话" onBack={onBack} />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors['fawn-amber']} />
+        </View>
       </View>
     );
   }
@@ -103,15 +114,7 @@ export function HistoryConversationScreen({ conversationId, onBack }: Props) {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton} accessibilityRole="button">
-          <Text style={styles.backText}>← 历史</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {headerTitle}
-        </Text>
-        <Text style={styles.headerMeta}>只读</Text>
-      </View>
+      <TopBar title={headerTitle} onBack={onBack} />
 
       {isError && (
         <View style={styles.banner}>
@@ -128,7 +131,11 @@ export function HistoryConversationScreen({ conversationId, onBack }: Props) {
         renderItem={renderMessage}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={isFetching} onRefresh={() => refetch()} />
+          <RefreshControl
+            refreshing={isFetching}
+            onRefresh={() => refetch()}
+            tintColor={colors['fawn-amber']}
+          />
         }
         ListEmptyComponent={
           <Text style={styles.empty}>这个会话还没有消息。</Text>
@@ -139,49 +146,61 @@ export function HistoryConversationScreen({ conversationId, onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  header: {
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
-    backgroundColor: '#fafafa',
+  root: { flex: 1, backgroundColor: colors['warm-cream'] },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  backButton: { paddingVertical: 4 },
-  backText: { color: '#2c7a4b', fontSize: 14 },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: '#222', marginTop: 4 },
-  headerMeta: { fontSize: 11, color: '#888', marginTop: 2 },
   banner: {
-    margin: 16,
-    backgroundColor: '#fff4e0',
-    borderColor: '#e0a96d',
+    margin: spacing['4'],
+    backgroundColor: colors['warning-amber-light'],
+    borderColor: colors['warning-amber'],
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: radii.md,
+    padding: spacing['3'],
   },
-  bannerText: { color: '#8a5a17', fontSize: 13 },
-  listContent: { paddingHorizontal: 16, paddingVertical: 12, flexGrow: 1 },
-  empty: { fontSize: 14, color: '#666', textAlign: 'center', marginTop: 32 },
-  bubbleRow: { flexDirection: 'row', marginVertical: 4 },
+  bannerText: {
+    ...typography.bodySmall,
+    color: colors['warning-amber'],
+  },
+  listContent: {
+    paddingHorizontal: spacing['4'],
+    paddingTop: spacing['3'],
+    paddingBottom: spacing['6'],
+    flexGrow: 1,
+  },
+  empty: {
+    ...typography.body,
+    color: colors['dark-gray'],
+    textAlign: 'center',
+    marginTop: spacing['8'],
+  },
+  bubbleRow: { flexDirection: 'row', marginVertical: spacing['1'] },
   bubbleLeft: { justifyContent: 'flex-start' },
   bubbleRight: { justifyContent: 'flex-end' },
   bubble: {
     maxWidth: '78%',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingHorizontal: spacing['3'],
+    paddingVertical: spacing['2'],
+    borderRadius: radii.bubble,
+    ...shadows.card,
   },
-  bubbleUser: { backgroundColor: '#2c7a4b' },
-  bubbleAssistant: { backgroundColor: '#f1f3f2' },
-  bubbleText: { fontSize: 15, lineHeight: 20 },
-  bubbleTextUser: { color: '#fff' },
-  bubbleTextAssistant: { color: '#222' },
+  bubbleUser: { backgroundColor: colors['bubble-user'] },
+  bubbleAssistant: {
+    backgroundColor: colors['bubble-agent'],
+    borderWidth: 1,
+    borderColor: colors['oat-border'],
+  },
+  bubbleText: {
+    ...typography.body,
+  },
+  bubbleTextUser: { color: colors['card'] },
+  bubbleTextAssistant: { color: colors['soft-charcoal'] },
   messageImage: {
     width: 200,
     height: 200,
-    borderRadius: 8,
-    marginBottom: 6,
+    borderRadius: radii.md,
+    marginBottom: spacing['1'],
   },
 });
