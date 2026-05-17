@@ -443,22 +443,38 @@ function ZoomablePhoto({ photo, active, width, height }: ZoomablePhotoProps) {
     [height, resetZoom, scale, translateX, translateY, width],
   );
 
-  const onTouchEnd = (e: GestureResponderEvent) => {
-    // Treat a touch with no significant movement as a tap.
-    if (Math.abs(e.nativeEvent.locationX) > 0) handleTap();
-  };
+  const onTouchEnd = useCallback(
+    (e: GestureResponderEvent) => {
+      // Treat a touch with no significant movement as a tap.
+      if (Math.abs(e.nativeEvent.locationX) > 0) handleTap();
+    },
+    [handleTap],
+  );
+
+  // Compose our tap detector with PanResponder.panHandlers without replacing
+  // the responder's own onResponderRelease — the underlying release handler
+  // resets pinchStart, springs scale back to 1× when below threshold, and
+  // clamps pan bounds. Assigning `onResponderRelease={onTouchEnd}` after the
+  // spread would silently clobber all of that.
+  const combinedHandlers = useMemo(() => {
+    const handlers = { ...responder.panHandlers };
+    const baseRelease = handlers.onResponderRelease;
+    handlers.onResponderRelease = (e: GestureResponderEvent) => {
+      if (baseRelease) baseRelease(e);
+      onTouchEnd(e);
+    };
+    return handlers;
+  }, [responder, onTouchEnd]);
 
   return (
     <View
       style={[styles.page, { width, height }]}
-      {...responder.panHandlers}
-      // IMPORTANT: when scale === 1 (the default), leave single-finger touches
-      // to the parent horizontal FlatList so it can flip between photos.
-      // Only claim the start responder once we're zoomed in — at that point
-      // single-finger drag is panning, and tap-to-zoom-out is meaningful.
-      // Two-finger pinch is handled separately via PanResponder.onMove*.
+      {...combinedHandlers}
+      // When scale === 1, defer single-finger touches to the parent FlatList
+      // so it can flip between photos. Once zoomed in, claim them for pan /
+      // tap-to-zoom-out. Two-finger pinch is still handled via
+      // PanResponder.onMove* regardless of this flag.
       onStartShouldSetResponder={() => scaleValue.current > 1}
-      onResponderRelease={onTouchEnd}
     >
       <Animated.View
         style={{
