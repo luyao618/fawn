@@ -31,4 +31,13 @@ export const queryKeys = {
     definitions: () => [...queryKeys.agentTasks.all, 'definitions'] as const,
     run: (id: string) => [...queryKeys.agentTasks.all, 'run', id] as const,
   },
+  dashboard: {
+    all: ['dashboard'] as const,
+    summary: () => [...queryKeys.dashboard.all, 'summary'] as const,
+    feedingStats: (days: number) =>
+      [...queryKeys.dashboard.all, 'feeding-stats', { days }] as const,
+    sleepStats: (days: number) =>
+      [...queryKeys.dashboard.all, 'sleep-stats', { days }] as const,
+    health: () => [...queryKeys.dashboard.all, 'health'] as const,
+  },
 } as const;

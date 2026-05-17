@@ -7,3 +7,4 @@ export * from './records';
 export * from './growth';
 export * from './agentTasks';
 export * from './push';
+export * from './dashboard';
