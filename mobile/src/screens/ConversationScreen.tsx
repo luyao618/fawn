@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -111,6 +111,42 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
     content: string;
   } | null>(null);
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  // 30 cps typewriter effect — matches Doubao / ChatGPT pacing
+  const pendingBuffer = useRef<string>('');
+  const typingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopTypingTimer = useCallback(() => {
+    if (typingTimer.current !== null) {
+      clearInterval(typingTimer.current);
+      typingTimer.current = null;
+    }
+  }, []);
+
+  const flushBuffer = useCallback(() => {
+    stopTypingTimer();
+    if (pendingBuffer.current.length > 0) {
+      const remaining = pendingBuffer.current;
+      pendingBuffer.current = '';
+      setStreamingAssistant((prev) =>
+        prev ? { content: prev.content + remaining } : { content: remaining },
+      );
+    }
+  }, [stopTypingTimer]);
+
+  const startTypingTimer = useCallback(() => {
+    if (typingTimer.current !== null) return;
+    typingTimer.current = setInterval(() => {
+      if (pendingBuffer.current.length === 0) {
+        stopTypingTimer();
+        return;
+      }
+      const char = pendingBuffer.current.slice(0, 1);
+      pendingBuffer.current = pendingBuffer.current.slice(1);
+      setStreamingAssistant((prev) =>
+        prev ? { content: prev.content + char } : { content: char },
+      );
+    }, 33); // ~30 chars/sec
+  }, [stopTypingTimer]);
 
   const baseMessages = data?.messages ?? [];
   // Synthesize the optimistic user + streaming assistant rows at the tail of
@@ -156,6 +192,13 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
       cancelled = true;
     };
   }, []);
+
+  // Clear typewriter timer on unmount to avoid setState on an unmounted component.
+  useEffect(() => {
+    return () => {
+      stopTypingTimer();
+    };
+  }, [stopTypingTimer]);
 
   const imageHeaders = useMemo(
     () => (authToken ? { Authorization: `Bearer ${authToken}` } : undefined),
@@ -216,13 +259,13 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
         token,
         {
           onToken: (chunk) => {
-            setStreamingAssistant((prev) =>
-              prev ? { content: prev.content + chunk } : { content: chunk },
-            );
+            pendingBuffer.current += chunk;
+            startTypingTimer();
           },
           onDone: () => {
-            // Authoritative rows will replace the optimistic placeholders on
-            // the next render cycle once the query refetches below.
+            // Flush remaining buffer before invalidating queries so the user
+            // never sees text jump from mid-typewriter to the full response.
+            flushBuffer();
           },
         },
       );
@@ -236,6 +279,8 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
       setStreamingAssistant(null);
     } catch (err) {
       // Roll back optimistic UI so the user can retry without ghost rows.
+      stopTypingTimer();
+      pendingBuffer.current = '';
       setOptimisticUser(null);
       setStreamingAssistant(null);
       Alert.alert('发送失败', (err as Error).message);
