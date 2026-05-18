@@ -6,8 +6,10 @@ import { api } from './client';
 import { queryKeys } from './queryKeys';
 import type {
   DashboardSummary,
+  FeedingRecord,
   FeedingStatsData,
   HealthRecord,
+  SleepRecord,
   SleepStatsData,
 } from './types';
 
@@ -51,5 +53,41 @@ export const dashboardQueries = {
   health: () => ({
     queryKey: queryKeys.dashboard.health(),
     queryFn: fetchHealthRecords,
+  }),
+};
+
+// ---------------------------------------------------------------------------
+// Tracker record list queries — feed the TrackerRecordList tabs in DashboardScreen.
+// Mirrors frontend getFeedingRecords / getSleepRecords / getHealthRecords from
+// frontend/src/lib/api.ts (paths: /tracker/feeding, /tracker/sleep, /tracker/health).
+// ---------------------------------------------------------------------------
+
+async function fetchTrackerFeeding(): Promise<FeedingRecord[]> {
+  const { data } = await api.get<FeedingRecord[]>('/tracker/feeding');
+  return data;
+}
+
+async function fetchTrackerSleep(): Promise<SleepRecord[]> {
+  const { data } = await api.get<SleepRecord[]>('/tracker/sleep');
+  return data;
+}
+
+async function fetchTrackerHealth(): Promise<HealthRecord[]> {
+  const { data } = await api.get<HealthRecord[]>('/tracker/health');
+  return data;
+}
+
+export const trackerQueries = {
+  feeding: () => ({
+    queryKey: queryKeys.tracker.feeding(),
+    queryFn: fetchTrackerFeeding,
+  }),
+  sleep: () => ({
+    queryKey: queryKeys.tracker.sleep(),
+    queryFn: fetchTrackerSleep,
+  }),
+  health: () => ({
+    queryKey: queryKeys.tracker.health(),
+    queryFn: fetchTrackerHealth,
   }),
 };

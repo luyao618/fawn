@@ -21,6 +21,7 @@ import {
   babyQueries,
   dashboardQueries,
   growthQueries,
+  trackerQueries,
 } from '../shared/api';
 import { colors, layout, spacing, typography } from '../shared/theme';
 
@@ -52,6 +53,9 @@ export function DashboardScreen() {
       dashboardQueries.sleepStats(30),
       dashboardQueries.health(),
       growthQueries.records(),
+      trackerQueries.feeding(),
+      trackerQueries.sleep(),
+      trackerQueries.health(),
     ],
   });
   const [
@@ -62,6 +66,9 @@ export function DashboardScreen() {
     sleepResult,
     healthResult,
     growthRecordsResult,
+    trackerFeedingResult,
+    trackerSleepResult,
+    trackerHealthResult,
   ] = results;
 
   const isFetching = results.some((r) => r.isFetching);
@@ -141,7 +148,15 @@ export function DashboardScreen() {
         {/* TrackerRecordList — tabbed multi-type record browser (read-only; canWrite=false) */}
         <TrackerRecordList
           type={trackerType}
-          records={trackerType === 'growth' ? (growthRecordsResult.data ?? []) : []}
+          records={
+            trackerType === 'growth'
+              ? (growthRecordsResult.data ?? [])
+              : trackerType === 'feeding'
+                ? (trackerFeedingResult.data ?? [])
+                : trackerType === 'sleep'
+                  ? (trackerSleepResult.data ?? [])
+                  : (trackerHealthResult.data ?? [])
+          }
           onTypeChange={setTrackerType}
           onEdit={async () => {}}
           onDelete={async () => {}}
