@@ -38,6 +38,7 @@ import { useAuth } from '../auth/AuthContext';
 import { fetchFamilyMembers } from '../lib/auth';
 import { StoredUser } from '../lib/tokenStorage';
 import { TopBar } from '../components/layout/TopBar';
+import { ProfileItemList } from '../components/profile/ProfileItemList';
 import {
   colors,
   radii,
@@ -421,6 +422,14 @@ export function ProfileScreen({ onOpenAgentTasks, onOpenHistory }: ProfileScreen
             </View>
           )}
         </View>
+
+        {/* Family members profile items — representative consumer of ProfileItemList */}
+        <ProfileItemList
+          items={[]}
+          eyebrow="家庭画像"
+          title="成员记忆"
+          emptyText="暂无画像记录"
+        />
 
         <TouchableOpacity
           style={styles.signOutButton}
