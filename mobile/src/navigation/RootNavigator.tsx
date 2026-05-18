@@ -16,6 +16,8 @@ import { HistoryListScreen } from '../screens/HistoryListScreen';
 import { HistoryConversationScreen } from '../screens/HistoryConversationScreen';
 import { RecordsScreen } from '../screens/RecordsScreen';
 import { AlbumScreen } from '../screens/AlbumScreen';
+import { MemoryFileListScreen } from '../screens/MemoryFileListScreen';
+import { MemoryFileEditorScreen } from '../screens/MemoryFileEditorScreen';
 import { colors } from '../shared/theme';
 import { ROUTES } from './routeNames';
 
@@ -98,6 +100,7 @@ function ProfileStack() {
           <ProfileScreen
             onOpenAgentTasks={() => navigation.navigate(ROUTES.AGENT_TASKS)}
             onOpenHistory={() => navigation.navigate(ROUTES.HISTORY_LIST)}
+            onOpenMemory={() => navigation.navigate(ROUTES.MEMORY_FILE_LIST)}
           />
         )}
       </ProfileNav.Screen>
@@ -135,6 +138,17 @@ function ProfileStack() {
             />
           );
         }}
+      </ProfileNav.Screen>
+      <ProfileNav.Screen name={ROUTES.MEMORY_FILE_LIST}>
+        {({ navigation }) => <MemoryFileListScreen navigation={navigation} />}
+      </ProfileNav.Screen>
+      <ProfileNav.Screen name={ROUTES.MEMORY_FILE_EDITOR}>
+        {({ route, navigation }) => (
+          <MemoryFileEditorScreen
+            route={route as { params: { id: string } }}
+            navigation={navigation}
+          />
+        )}
       </ProfileNav.Screen>
     </ProfileNav.Navigator>
   );

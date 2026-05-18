@@ -70,3 +70,39 @@ api.interceptors.response.use(
 export function getApiBaseUrl(): string {
   return resolveBaseUrl();
 }
+
+// ---------------------------------------------------------------------------
+// Memory files
+// ---------------------------------------------------------------------------
+
+export type MemoryFileKind = 'soul' | 'family' | 'baby' | 'user';
+
+export interface MemoryFileSummary {
+  id: string;
+  label: string;
+  kind: MemoryFileKind;
+  filename: string;
+  can_edit: boolean;
+  limit: number;
+}
+
+export interface MemoryFileRead extends MemoryFileSummary {
+  content: string;
+}
+
+export async function getMemoryFiles(): Promise<MemoryFileSummary[]> {
+  const response = await api.get<MemoryFileSummary[]>('/memory/files');
+  return response.data;
+}
+
+export async function getMemoryFile(id: string): Promise<MemoryFileRead> {
+  const response = await api.get<MemoryFileRead>(`/memory/files/${encodeURIComponent(id)}`);
+  return response.data;
+}
+
+export async function updateMemoryFile(id: string, content: string): Promise<MemoryFileRead> {
+  const response = await api.put<MemoryFileRead>(`/memory/files/${encodeURIComponent(id)}`, {
+    content,
+  });
+  return response.data;
+}

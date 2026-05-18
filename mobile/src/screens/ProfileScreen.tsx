@@ -59,6 +59,10 @@ interface ProfileScreenProps {
    * surface so the two-screen history flow is reachable from 家庭 tab.
    */
   onOpenHistory: () => void;
+  /**
+   * Navigate to the Memory file list. Wired by ProfileStack.
+   */
+  onOpenMemory: () => void;
 }
 
 const ACCESS_TYPE_LABEL: Record<string, string> = {
@@ -102,7 +106,7 @@ function accessTypeLabel(t: string | undefined | null): string {
   return ACCESS_TYPE_LABEL[t] ?? t;
 }
 
-export function ProfileScreen({ onOpenAgentTasks, onOpenHistory }: ProfileScreenProps) {
+export function ProfileScreen({ onOpenAgentTasks, onOpenHistory, onOpenMemory }: ProfileScreenProps) {
   const { user, accounts, scopeVersion, switchAccount, addAccount, forgetAccount, signOut } =
     useAuth();
 
@@ -257,6 +261,18 @@ export function ProfileScreen({ onOpenAgentTasks, onOpenHistory }: ProfileScreen
           title="对话记录"
           onPress={onOpenHistory}
           accessibilityLabel="打开历史会话"
+          rightAdornment={
+            <Ionicons name="chevron-forward" size={20} color={colors['mid-gray']} />
+          }
+        />
+
+        {/* Memory entry — opens long-term memory file list. */}
+        <SectionCard
+          icon="document-text-outline"
+          eyebrow="长期记忆"
+          title="记忆文件"
+          onPress={onOpenMemory}
+          accessibilityLabel="打开长期记忆"
           rightAdornment={
             <Ionicons name="chevron-forward" size={20} color={colors['mid-gray']} />
           }
