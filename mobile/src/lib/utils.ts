@@ -2,6 +2,66 @@
 // `frontend/src/lib/utils.ts`. Self-contained age computation (no date-fns
 // dependency in mobile).
 
+/**
+ * Lightweight `clsx`/`tailwind-merge` replacement — RN has no className
+ * pipeline so we just filter truthy strings and join. Kept to mirror the web
+ * `cn(...)` call shape so ported components diff cleanly.
+ */
+export function cn(...inputs: Array<string | false | null | undefined>): string {
+  return inputs.filter((value): value is string => Boolean(value)).join(' ');
+}
+
+function parseIsoLocal(value: string): Date {
+  // Treat bare YYYY-MM-DD as local-date (date-fns parseISO does same) so the
+  // displayed month/day matches the user's wall clock instead of shifting by
+  // timezone.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split('-').map(Number);
+    return new Date(y, (m ?? 1) - 1, d ?? 1);
+  }
+  return new Date(value);
+}
+
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+
+/**
+ * Mobile `formatDate` — supports the patterns used by the dashboard port:
+ * default `M月d日`, plus `yyyy年M月d日` and `M/d`. Falls back to default for
+ * any other pattern instead of pulling in date-fns.
+ */
+export function formatDate(value: string | Date, pattern = 'M月d日'): string {
+  const date = typeof value === 'string' ? parseIsoLocal(value) : value;
+  if (Number.isNaN(date.getTime())) return typeof value === 'string' ? value : '';
+  const y = date.getFullYear();
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  if (pattern === 'yyyy年M月d日') return `${y}年${m}月${d}日`;
+  if (pattern === 'M/d') return `${m}/${d}`;
+  return `${m}月${d}日`;
+}
+
+/**
+ * Mobile `formatDateTime` — default `M月d日 HH:mm` mirrors web.
+ */
+export function formatDateTime(value: string | Date, pattern = 'M月d日 HH:mm'): string {
+  const date = typeof value === 'string' ? parseIsoLocal(value) : value;
+  if (Number.isNaN(date.getTime())) return typeof value === 'string' ? value : '';
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  const hh = pad2(date.getHours());
+  const mm = pad2(date.getMinutes());
+  if (pattern === 'M月d日 HH:mm') return `${m}月${d}日 ${hh}:${mm}`;
+  return `${m}月${d}日 ${hh}:${mm}`;
+}
+
+/** Mobile `toKg` — `grams/1000` to 1 decimal kg; `暂无` when null. */
+export function toKg(grams: number | null | undefined): string {
+  if (grams == null) return '暂无';
+  return `${(grams / 1000).toFixed(1)}kg`;
+}
+
 export function accessTypeLabel(accessType: string | undefined | null): string {
   if (accessType === 'parent') return '父母权限';
   if (accessType === 'family') return '家人权限';
