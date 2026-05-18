@@ -54,12 +54,6 @@ interface ProfileScreenProps {
    */
   onOpenAgentTasks: () => void;
   /**
-   * Navigate to the History list secondary entry. Wired by the
-   * ProfileStack in RootNavigator. Mirrors the Web `app/(main)/history`
-   * surface so the two-screen history flow is reachable from 家庭 tab.
-   */
-  onOpenHistory: () => void;
-  /**
    * Navigate to the Memory file list. Wired by ProfileStack.
    */
   onOpenMemory: () => void;
@@ -106,7 +100,7 @@ function accessTypeLabel(t: string | undefined | null): string {
   return ACCESS_TYPE_LABEL[t] ?? t;
 }
 
-export function ProfileScreen({ onOpenAgentTasks, onOpenHistory, onOpenMemory }: ProfileScreenProps) {
+export function ProfileScreen({ onOpenAgentTasks, onOpenMemory }: ProfileScreenProps) {
   const { user, accounts, scopeVersion, switchAccount, addAccount, forgetAccount, signOut } =
     useAuth();
 
@@ -249,18 +243,6 @@ export function ProfileScreen({ onOpenAgentTasks, onOpenHistory, onOpenMemory }:
           title="Agent 任务"
           onPress={onOpenAgentTasks}
           accessibilityLabel="打开 Agent 任务"
-          rightAdornment={
-            <Ionicons name="chevron-forward" size={20} color={colors['mid-gray']} />
-          }
-        />
-
-        {/* History secondary entry — opens the two-screen history flow. */}
-        <SectionCard
-          icon="time-outline"
-          eyebrow="历史会话"
-          title="对话记录"
-          onPress={onOpenHistory}
-          accessibilityLabel="打开历史会话"
           rightAdornment={
             <Ionicons name="chevron-forward" size={20} color={colors['mid-gray']} />
           }
