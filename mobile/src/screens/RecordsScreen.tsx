@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useMemo, useState } from 'react';
+import { GrowthHistoryList } from '../components/dashboard/GrowthHistoryList';
 import {
   ActivityIndicator,
   Alert,
@@ -33,6 +34,7 @@ import { getApiBaseUrl } from '../lib/api';
 import {
   createFeeding,
   createGrowth,
+  growthQueries,
   recordQueries,
   uploadPhoto,
   type FeedingRecord,
@@ -102,12 +104,14 @@ export function RecordsScreen() {
   const { data, isPending, isFetching, isError, error, refetch } = useQuery(
     recordQueries.timeline(),
   );
+  const { data: growthRecords } = useQuery(growthQueries.records());
   const [activeKind, setActiveKind] = useState<Kind | null>(null);
 
   const entries = data ?? [];
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: recordQueries.timeline().queryKey });
+    await queryClient.invalidateQueries({ queryKey: growthQueries.records().queryKey });
   };
 
   return (
@@ -165,6 +169,15 @@ export function RecordsScreen() {
                   </Text>
                 </View>
               ) : null}
+
+              {/* Growth history — low-frequency explainer + sorted list of past measurements */}
+              <View style={styles.growthSection}>
+                <Text style={styles.growthExplainer}>
+                  成长指标无需每日测量，按医生建议或自身节奏记录即可。
+                </Text>
+                <Text style={styles.growthHeading}>成长记录历史</Text>
+                <GrowthHistoryList records={growthRecords ?? []} />
+              </View>
             </View>
           }
           refreshControl={
@@ -538,6 +551,24 @@ const styles = StyleSheet.create({
   bannerText: {
     ...typography.bodySmall,
     color: colors['warning-amber'],
+  },
+
+  // --- Growth history section ---------------------------------------------
+  growthSection: {
+    gap: spacing['2'],
+  },
+  growthExplainer: {
+    ...typography.caption,
+    color: colors['dark-gray'],
+    backgroundColor: colors['warm-gray'],
+    borderRadius: radii.md,
+    paddingHorizontal: spacing['3'],
+    paddingVertical: spacing['2'],
+  },
+  growthHeading: {
+    fontSize: 15,
+    fontFamily: typography.heading.fontFamily,
+    color: colors['soft-charcoal'],
   },
 
   // --- Timeline list ------------------------------------------------------

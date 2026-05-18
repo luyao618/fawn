@@ -13,7 +13,6 @@ import { TopBar } from '../components/layout/TopBar';
 import { BabyInfoCard } from '../components/dashboard/BabyInfoCard';
 import { FeedingStats } from '../components/dashboard/FeedingStats';
 import { GrowthChart } from '../components/dashboard/GrowthChart';
-import { GrowthHistoryList } from '../components/dashboard/GrowthHistoryList';
 import { HealthTimeline } from '../components/dashboard/HealthTimeline';
 import { LatestGrowthCards } from '../components/dashboard/LatestGrowthCards';
 import { SleepStats } from '../components/dashboard/SleepStats';
@@ -138,9 +137,6 @@ export function DashboardScreen() {
         ) : (
           <View style={styles.skeletonTall} />
         )}
-
-        {/* GrowthHistoryList — shows all growth records in a scrollable list */}
-        <GrowthHistoryList records={growthRecordsResult.data ?? []} />
 
         {/* TrackerRecordList — tabbed multi-type record browser (read-only; canWrite=false) */}
         <TrackerRecordList
