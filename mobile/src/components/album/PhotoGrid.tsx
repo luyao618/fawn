@@ -38,7 +38,8 @@ function formatGroupDate(iso: string): string {
 function formatShortDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // Mirrors Web `formatDate(..., 'M月d日')` default used by PhotoGrid tile.
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
 function pickGroupKey(photo: PhotoRecord, view: AlbumView): string {

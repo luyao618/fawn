@@ -233,7 +233,8 @@ const styles = StyleSheet.create({
   },
   modeCard: {
     borderRadius: radii.tile,
-    backgroundColor: colors['card-translucent'],
+    // Mirrors Web `bg-white/85` on the album mode card.
+    backgroundColor: colors['white-soft'],
     borderWidth: 1,
     borderColor: colors['frosted-border'],
     padding: spacing['2'],
