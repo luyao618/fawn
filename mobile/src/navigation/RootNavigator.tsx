@@ -22,12 +22,9 @@ import { ROUTES } from './routeNames';
 
 /**
  * Root navigation skeleton: Bottom Tabs hosting 5 tabs (管家 / 成长 / 记录 /
- * 相册 / 家庭). Each tab is wrapped in its own native stack so subsequent
- * issues can push child screens (e.g. chat → history conversation, profile →
- * agent tasks) without disturbing the global tab bar.
- *
- * Today each tab renders a PlaceholderScreen. Replace these in the matching
- * sub-issues (#2..#6).
+ * 相册 / 家庭). Each tab is wrapped in its own native stack so child screens
+ * (e.g. chat → history conversation, profile → agent tasks) can be pushed
+ * without disturbing the global tab bar.
  */
 
 const Tab = createBottomTabNavigator();
