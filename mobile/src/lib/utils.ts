@@ -77,6 +77,14 @@ export function canManageFamily(accessType: string | undefined | null): boolean 
 }
 
 /**
+ * Mirrors web `canWriteTracker()` — friends are read-only, everyone else can
+ * write feeding/sleep/growth/health records.
+ */
+export function canWriteTracker(accessType: string | undefined | null): boolean {
+  return accessType === 'parent' || accessType === 'family';
+}
+
+/**
  * Return "X个月Y天" or "Nd天" — mirrors web `getAgeDisplay()` semantics
  * without pulling in date-fns. `birthDate` is an ISO date string (YYYY-MM-DD).
  */
