@@ -48,6 +48,7 @@ export const colors = {
   'warning-amber': '#B45309', // --color-focus
   'warning-amber-light': '#FFFBEB', // --color-butter
   'focus-ring': '#B45309',
+  'focus-soft': '#F0A030', // --color-focus-soft
 
   // Info / accent
   'info-blue': '#567B9C',

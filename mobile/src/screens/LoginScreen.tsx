@@ -1,11 +1,9 @@
 import { AxiosError } from 'axios';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,6 +22,7 @@ import {
 } from '../shared/theme';
 import { useAuth } from '../auth/AuthContext';
 import { getApiBaseUrl } from '../lib/api';
+import { Button } from '../components/ui/Button';
 
 /**
  * Login screen — Android equivalent of `frontend/src/app/login/LoginClient.tsx`
@@ -119,22 +118,15 @@ export function LoginScreen() {
             />
           </View>
 
-          <Pressable
+          <Button
+            variant="primary"
             onPress={onSubmit}
             disabled={submitting}
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.button,
-              submitting && styles.buttonDisabled,
-              pressed && !submitting && styles.buttonPressed,
-            ]}
+            loading={submitting}
+            style={styles.button}
           >
-            {submitting ? (
-              <ActivityIndicator color={colors['on-brand']} />
-            ) : (
-              <Text style={styles.buttonText}>登录</Text>
-            )}
-          </Pressable>
+            登录
+          </Button>
 
           <Text style={styles.footer}>API: {getApiBaseUrl()}</Text>
         </View>
