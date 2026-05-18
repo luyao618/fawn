@@ -8,6 +8,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -44,6 +45,7 @@ const MODES: ReadonlyArray<{ value: AlbumView; label: string }> = [
 ];
 
 export function AlbumScreen() {
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [view, setView] = useState<AlbumView>('timeline');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -127,7 +129,7 @@ export function AlbumScreen() {
   );
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}

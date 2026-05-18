@@ -1,5 +1,6 @@
 import { useQueries } from '@tanstack/react-query';
 import React, { useMemo } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -48,6 +49,7 @@ const STATS_HISTORY_DAYS = 90;
  * triads/duads above.
  */
 export function DashboardScreen() {
+  const insets = useSafeAreaInsets();
   const results = useQueries({
     queries: [
       dashboardQueries.summary(),
@@ -109,7 +111,7 @@ export function DashboardScreen() {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={

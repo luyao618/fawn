@@ -358,7 +358,7 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
       }
     };
     return (
-      <View style={styles.canvas}>
+      <View style={[styles.canvas, hideHeader ? { paddingTop: insets.top } : undefined]}>
         {hideHeader ? null : <TopBar title="管家" onBack={onBack} />}
         <View style={styles.center}>
           <View style={styles.emptyCard}>
@@ -386,7 +386,7 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
   }
 
   return (
-    <View style={styles.canvas}>
+    <View style={[styles.canvas, hideHeader ? { paddingTop: insets.top } : undefined]}>
       {hideHeader ? null : (
         <TopBar
           title={data?.conversation.summary ?? '管家'}

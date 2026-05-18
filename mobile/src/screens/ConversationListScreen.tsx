@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import React from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   FlatList,
@@ -44,6 +45,7 @@ function summaryFor(c: ConversationSummary): string {
 }
 
 export function ConversationListScreen({ onOpenConversation }: Props) {
+  const insets = useSafeAreaInsets();
   const { data, isPending, isFetching, isError, error, refetch } = useQuery(
     chatQueries.conversations(),
   );
@@ -57,7 +59,7 @@ export function ConversationListScreen({ onOpenConversation }: Props) {
   }
 
   return (
-    <View style={styles.canvas}>
+    <View style={[styles.canvas, { paddingTop: insets.top }]}>
       {isError ? (
         <View style={styles.banner}>
           <Text style={styles.bannerText}>

@@ -13,6 +13,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   Alert,
@@ -115,6 +116,7 @@ function babySubtitle(baby: Baby | null): string {
 }
 
 export function ProfileScreen({ navigation }: ProfileScreenProps) {
+  const insets = useSafeAreaInsets();
   const { user: currentUser, signOut } = useAuth();
   const canManage = canManageFamily(currentUser?.access_type);
 
@@ -313,7 +315,7 @@ export function ProfileScreen({ navigation }: ProfileScreenProps) {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView contentContainerStyle={styles.scroll}>
         {loading ? (
           <View style={styles.centerBlock}>
