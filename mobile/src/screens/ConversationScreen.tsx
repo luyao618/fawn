@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,6 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
 
 import {
   chatImageUrl,
@@ -70,11 +69,6 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
   const baseUrl = getApiBaseUrl();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  // When this screen is mounted under a bottom-tabs navigator the tab bar
-  // height must be added to the keyboard offset so the composer stays
-  // visible. When mounted from a stack (HistoryConversation) the context is
-  // null and offset stays 0.
-  const tabBarHeight = useContext(BottomTabBarHeightContext) ?? 0;
 
   // When no id is provided (tab root entry), pick the active conversation or
   // fall back to the most recent one. If the user has no conversations yet,
@@ -271,8 +265,8 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : tabBarHeight}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         {isError ? (
           <View style={styles.banner}>
