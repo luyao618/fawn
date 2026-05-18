@@ -35,7 +35,13 @@ const Stack = createNativeStackNavigator;
 function ChatStack() {
   const ChatNav = Stack();
   return (
-    <ChatNav.Navigator screenOptions={{ headerShown: false }}>
+    <ChatNav.Navigator
+      // Chat tab now lands directly on the conversation surface — the list
+      // screen stays registered for future deep-links but is no longer the
+      // tab root (mirrors Web /chat → ChatClient with no intermediate page).
+      initialRouteName={ROUTES.CHAT_CONVERSATION}
+      screenOptions={{ headerShown: false }}
+    >
       <ChatNav.Screen name={ROUTES.CHAT_LIST}>
         {({ navigation }) => (
           <ConversationListScreen
@@ -47,11 +53,16 @@ function ChatStack() {
       </ChatNav.Screen>
       <ChatNav.Screen name={ROUTES.CHAT_CONVERSATION}>
         {({ navigation, route }) => {
-          const { id } = route.params as { id: string };
+          const params = (route.params ?? {}) as { id?: string };
+          // No id == tab root entry: ConversationScreen resolves the active
+          // conversation internally and renders without its own TopBar so the
+          // user sees the chat surface immediately.
+          const isTabRoot = !params.id;
           return (
             <ConversationScreen
-              conversationId={id}
-              onBack={() => navigation.goBack()}
+              conversationId={params.id}
+              onBack={isTabRoot ? undefined : () => navigation.goBack()}
+              hideHeader={isTabRoot}
             />
           );
         }}

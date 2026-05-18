@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   chatImageUrl,
   chatQueries,
+  createConversation,
   resolveChatImageUrl,
   sendChatMessage,
   uploadChatImage,
@@ -46,8 +47,9 @@ import { TimeSeparator } from '../components/chat/TimeSeparator';
  */
 
 interface Props {
-  conversationId: string;
-  onBack: () => void;
+  conversationId?: string;
+  onBack?: () => void;
+  hideHeader?: boolean;
 }
 
 interface PendingImage {
@@ -62,14 +64,32 @@ function senderMeta(user: { display_name?: string | null; role?: string | null }
   };
 }
 
-export function ConversationScreen({ conversationId, onBack }: Props) {
+export function ConversationScreen({ conversationId, onBack, hideHeader }: Props) {
   const queryClient = useQueryClient();
   const baseUrl = getApiBaseUrl();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const { data, isPending, isError, error, refetch, isFetching } = useQuery(
-    chatQueries.conversation(conversationId),
-  );
+
+  // When no id is provided (tab root entry), pick the active conversation or
+  // fall back to the most recent one. If the user has no conversations yet,
+  // show an empty CTA that creates one on demand.
+  const conversationsQuery = useQuery({
+    ...chatQueries.conversations(),
+    enabled: !conversationId,
+  });
+  const resolvedId = useMemo(() => {
+    if (conversationId) return conversationId;
+    const list = conversationsQuery.data ?? [];
+    if (list.length === 0) return undefined;
+    return (list.find((c) => c.is_active) ?? list[0]).id;
+  }, [conversationId, conversationsQuery.data]);
+
+  const [creating, setCreating] = useState(false);
+
+  const { data, isPending, isError, error, refetch, isFetching } = useQuery({
+    ...chatQueries.conversation(resolvedId ?? ''),
+    enabled: Boolean(resolvedId),
+  });
 
   const [text, setText] = useState('');
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
@@ -102,6 +122,7 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
   }, [messages.length]);
 
   const handlePickImage = async () => {
+    if (!resolvedId) return;
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert('需要相册权限', '请在系统设置中授予相册访问权限');
@@ -117,7 +138,7 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
     try {
       const mimeType = asset.mimeType ?? 'image/jpeg';
       const filename = asset.fileName ?? `upload-${Date.now()}.jpg`;
-      const res = await uploadChatImage(conversationId, asset.uri, mimeType, filename);
+      const res = await uploadChatImage(resolvedId, asset.uri, mimeType, filename);
       setPendingImage({ imageUrl: res.image_url, localUri: asset.uri });
     } catch (err) {
       Alert.alert('上传失败', (err as Error).message);
@@ -127,13 +148,14 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
   };
 
   const handleSend = async () => {
+    if (!resolvedId) return;
     const content = text.trim();
     if (!content && !pendingImage) return;
     setSending(true);
     try {
       const token = authToken ?? (await getToken());
       await sendChatMessage(
-        conversationId,
+        resolvedId,
         content || (pendingImage ? '[图片]' : ''),
         pendingImage?.imageUrl ?? null,
         baseUrl,
@@ -142,7 +164,7 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
       setText('');
       setPendingImage(null);
       await queryClient.invalidateQueries({
-        queryKey: chatQueries.conversation(conversationId).queryKey,
+        queryKey: chatQueries.conversation(resolvedId).queryKey,
       });
       await queryClient.invalidateQueries({
         queryKey: chatQueries.conversations().queryKey,
@@ -181,6 +203,49 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
     );
   };
 
+  if (!conversationId && conversationsQuery.isPending && !conversationsQuery.data) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={colors['fawn-amber']} />
+      </View>
+    );
+  }
+
+  if (!resolvedId) {
+    // No conversations yet — offer a one-tap CTA to create one.
+    const handleCreate = async () => {
+      setCreating(true);
+      try {
+        await createConversation();
+        await queryClient.invalidateQueries({
+          queryKey: chatQueries.conversations().queryKey,
+        });
+      } catch (err) {
+        Alert.alert('新建会话失败', (err as Error).message);
+      } finally {
+        setCreating(false);
+      }
+    };
+    return (
+      <View style={styles.canvas}>
+        {hideHeader ? null : <TopBar title="管家" onBack={onBack} />}
+        <View style={styles.center}>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>还没有任何会话</Text>
+            <Text style={styles.emptyBody}>新建一个会话开始与管家对话。</Text>
+            <Text
+              accessibilityRole="button"
+              onPress={creating ? undefined : handleCreate}
+              style={styles.emptyCta}
+            >
+              {creating ? '创建中…' : '新建会话'}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   if (isPending && !data) {
     return (
       <View style={styles.center}>
@@ -191,10 +256,12 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
 
   return (
     <View style={styles.canvas}>
-      <TopBar
-        title={data?.conversation.summary ?? '管家'}
-        onBack={onBack}
-      />
+      {hideHeader ? null : (
+        <TopBar
+          title={data?.conversation.summary ?? '管家'}
+          onBack={onBack}
+        />
+      )}
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -296,5 +363,11 @@ const styles = StyleSheet.create({
   emptyBody: {
     ...typography.bodySmall,
     color: colors['dark-gray'],
+  },
+  emptyCta: {
+    ...typography.body,
+    color: colors['fawn-amber'],
+    marginTop: spacing['3'],
+    fontWeight: '600',
   },
 });
