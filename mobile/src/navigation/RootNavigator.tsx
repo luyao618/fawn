@@ -7,7 +7,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { TabBar } from '../components/layout/TabBar';
 import { DashboardScreen } from '../screens/DashboardScreen';
-import { PlaceholderScreen } from '../screens/PlaceholderScreen';
 import { ConversationListScreen } from '../screens/ConversationListScreen';
 import { ConversationScreen } from '../screens/ConversationScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -60,6 +59,31 @@ function ChatStack() {
           );
         }}
       </ChatNav.Screen>
+      {/*
+        History screens live in ChatStack so the two-screen history surface
+        shares the 管家 tab's back stack and does not inflate the bottom bar
+        with a dedicated tab (per YAO-36 IA alignment decision).
+      */}
+      <ChatNav.Screen name={ROUTES.HISTORY_LIST}>
+        {({ navigation }) => (
+          <HistoryListScreen
+            onOpenConversation={(id) =>
+              navigation.navigate(ROUTES.HISTORY_CONVERSATION, { id })
+            }
+          />
+        )}
+      </ChatNav.Screen>
+      <ChatNav.Screen name={ROUTES.HISTORY_CONVERSATION}>
+        {({ route, navigation }) => {
+          const params = (route.params ?? {}) as { id?: string };
+          return (
+            <HistoryConversationScreen
+              conversationId={params.id ?? ''}
+              onBack={() => navigation.goBack()}
+            />
+          );
+        }}
+      </ChatNav.Screen>
     </ChatNav.Navigator>
   );
 }
@@ -99,7 +123,6 @@ function ProfileStack() {
         {({ navigation }) => (
           <ProfileScreen
             onOpenAgentTasks={() => navigation.navigate(ROUTES.AGENT_TASKS)}
-            onOpenHistory={() => navigation.navigate(ROUTES.HISTORY_LIST)}
             onOpenMemory={() => navigation.navigate(ROUTES.MEMORY_FILE_LIST)}
           />
         )}
@@ -108,36 +131,6 @@ function ProfileStack() {
         {({ navigation }) => (
           <AgentTasksScreen onClose={() => navigation.goBack()} />
         )}
-      </ProfileNav.Screen>
-      {/*
-        History is exposed here as well so the two-screen history surface
-        from the Web app has a navigable home in the absence of a dedicated
-        tab (YAO-36 deliberately keeps history reachable without inflating
-        the bottom bar).
-      */}
-      <ProfileNav.Screen name={ROUTES.HISTORY_LIST}>
-        {({ navigation }) => (
-          <HistoryListScreen
-            onOpenConversation={(id) =>
-              navigation.navigate(ROUTES.HISTORY_CONVERSATION, { id })
-            }
-          />
-        )}
-      </ProfileNav.Screen>
-      <ProfileNav.Screen
-        name={ROUTES.HISTORY_CONVERSATION}
-        // We accept the conversation id through React Navigation params so the
-        // route is deep-linkable in future iterations.
-      >
-        {({ route, navigation }) => {
-          const params = (route.params ?? {}) as { id?: string };
-          return (
-            <HistoryConversationScreen
-              conversationId={params.id ?? ''}
-              onBack={() => navigation.goBack()}
-            />
-          );
-        }}
       </ProfileNav.Screen>
       <ProfileNav.Screen name={ROUTES.MEMORY_FILE_LIST}>
         {({ navigation }) => <MemoryFileListScreen navigation={navigation} />}
