@@ -1,5 +1,5 @@
 import { useQueries } from '@tanstack/react-query';
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -13,9 +13,11 @@ import { TopBar } from '../components/layout/TopBar';
 import { BabyInfoCard } from '../components/dashboard/BabyInfoCard';
 import { FeedingStats } from '../components/dashboard/FeedingStats';
 import { GrowthChart } from '../components/dashboard/GrowthChart';
+import { GrowthHistoryList } from '../components/dashboard/GrowthHistoryList';
 import { HealthTimeline } from '../components/dashboard/HealthTimeline';
 import { LatestGrowthCards } from '../components/dashboard/LatestGrowthCards';
 import { SleepStats } from '../components/dashboard/SleepStats';
+import { TrackerRecordList, type TrackerType } from '../components/dashboard/TrackerRecordList';
 import {
   babyQueries,
   dashboardQueries,
@@ -40,6 +42,8 @@ import { colors, layout, spacing, typography } from '../shared/theme';
  * spinner once any cache exists).
  */
 export function DashboardScreen() {
+  const [trackerType, setTrackerType] = useState<TrackerType>('growth');
+
   const results = useQueries({
     queries: [
       babyQueries.detail(),
@@ -48,6 +52,7 @@ export function DashboardScreen() {
       dashboardQueries.feedingStats(30),
       dashboardQueries.sleepStats(30),
       dashboardQueries.health(),
+      growthQueries.records(),
     ],
   });
   const [
@@ -57,6 +62,7 @@ export function DashboardScreen() {
     feedingResult,
     sleepResult,
     healthResult,
+    growthRecordsResult,
   ] = results;
 
   const isFetching = results.some((r) => r.isFetching);
@@ -132,6 +138,19 @@ export function DashboardScreen() {
         ) : (
           <View style={styles.skeletonTall} />
         )}
+
+        {/* GrowthHistoryList — shows all growth records in a scrollable list */}
+        <GrowthHistoryList records={growthRecordsResult.data ?? []} />
+
+        {/* TrackerRecordList — tabbed multi-type record browser (read-only; canWrite=false) */}
+        <TrackerRecordList
+          type={trackerType}
+          records={trackerType === 'growth' ? (growthRecordsResult.data ?? []) : []}
+          onTypeChange={setTrackerType}
+          onEdit={async () => {}}
+          onDelete={async () => {}}
+          canWrite={false}
+        />
       </ScrollView>
     </View>
   );

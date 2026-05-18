@@ -6,7 +6,7 @@
  * GrowthChart.tsx is View-based with no brush/range gesture. Revisit if mobile
  * gains brush.
  *
- * // PHASE-4-PENDING-CONSUMER: DashboardHome
+ * Consumed by DashboardScreen (Phase 4 IA migration).
  */
 
 import React from 'react';

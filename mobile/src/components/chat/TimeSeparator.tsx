@@ -22,7 +22,7 @@ function formatDateTime(ts: string): string {
   }
 }
 
-// PHASE-4-PENDING-CONSUMER: ChatConversation
+// Consumed by ConversationScreen (Phase 4 IA migration).
 export function TimeSeparator({ timestamp }: TimeSeparatorProps) {
   return (
     <View style={styles.container}>

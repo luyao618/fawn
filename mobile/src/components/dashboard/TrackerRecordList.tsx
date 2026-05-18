@@ -5,7 +5,7 @@
  * Renders a tabbed list of tracker records (growth/feeding/sleep/health) with
  * optional edit and delete actions. Uses Card + Button primitives.
  *
- * // PHASE-4-PENDING-CONSUMER: DashboardHome
+ * Consumed by DashboardScreen (Phase 4 IA migration).
  */
 
 import React, { useState } from 'react';

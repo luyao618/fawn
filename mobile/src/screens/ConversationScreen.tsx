@@ -34,6 +34,7 @@ import {
 import { TopBar } from '../components/layout/TopBar';
 import { ChatInput } from '../components/chat/ChatInput';
 import { MessageBubble } from '../components/chat/MessageBubble';
+import { TimeSeparator } from '../components/chat/TimeSeparator';
 
 /**
  * Conversation (聊天) screen — visual parity with Web `app/(main)/chat/page.tsx`.
@@ -155,19 +156,28 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
 
   const meta = senderMeta(user);
 
-  const renderMessage = ({ item }: { item: ChatMessage }) => {
+  const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
     const ref = item.metadata?.image_url;
     const uri = ref ? resolveChatImageUrl(baseUrl, ref) : null;
     const isOwnMessage =
       item.role === 'user' && (!item.sender_user_id || item.sender_user_id === user?.id);
+    // Insert a TimeSeparator before the first message and whenever the date
+    // changes between consecutive messages.
+    const prevItem = index > 0 ? messages[index - 1] : null;
+    const showSeparator =
+      !prevItem ||
+      new Date(item.created_at).toDateString() !== new Date(prevItem.created_at).toDateString();
     return (
-      <MessageBubble
-        message={item}
-        imageUri={uri}
-        imageHeaders={uri ? imageHeaders : undefined}
-        senderName={isOwnMessage ? meta.name : undefined}
-        senderRole={isOwnMessage ? meta.role : undefined}
-      />
+      <>
+        {showSeparator && <TimeSeparator timestamp={item.created_at} />}
+        <MessageBubble
+          message={item}
+          imageUri={uri}
+          imageHeaders={uri ? imageHeaders : undefined}
+          senderName={isOwnMessage ? meta.name : undefined}
+          senderRole={isOwnMessage ? meta.role : undefined}
+        />
+      </>
     );
   };
 
