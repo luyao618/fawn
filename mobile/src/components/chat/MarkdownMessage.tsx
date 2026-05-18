@@ -23,7 +23,9 @@ type MarkdownBlock =
   | { type: 'ordered-list'; items: string[] }
   | { type: 'unordered-list'; items: string[] }
   | { type: 'code'; code: string }
-  | { type: 'table'; headers: string[]; rows: string[][] };
+  | { type: 'table'; headers: string[]; rows: string[][] }
+  | { type: 'blockquote'; lines: string[] }
+  | { type: 'hr' };
 
 interface Props {
   content: string;
@@ -65,6 +67,8 @@ function startsBlock(line: string, nextLine?: string): boolean {
   return (
     trimmed.startsWith('```') ||
     /^#{1,3}\s+/.test(trimmed) ||
+    /^(---|\*\*\*|___)\s*$/.test(trimmed) ||
+    /^>\s?/.test(trimmed) ||
     orderedListText(line) !== null ||
     unorderedListText(line) !== null ||
     (nextLine !== undefined && isTableRow(line) && isTableSeparator(nextLine))
@@ -93,6 +97,22 @@ function parseMarkdown(content: string): MarkdownBlock[] {
       }
       if (i < lines.length) i += 1;
       blocks.push({ type: 'code', code: codeLines.join('\n') });
+      continue;
+    }
+
+    if (/^(---|\*\*\*|___)\s*$/.test(trimmed)) {
+      blocks.push({ type: 'hr' });
+      i += 1;
+      continue;
+    }
+
+    if (/^>\s?/.test(trimmed)) {
+      const bqLines: string[] = [];
+      while (i < lines.length && /^>\s?/.test(lines[i].trim())) {
+        bqLines.push(lines[i].replace(/^>\s?/, ''));
+        i += 1;
+      }
+      blocks.push({ type: 'blockquote', lines: bqLines });
       continue;
     }
 
@@ -278,6 +298,22 @@ export function MarkdownMessage({
           );
         }
 
+        if (block.type === 'blockquote') {
+          return (
+            <View key={index} style={styles.blockquote}>
+              {block.lines.map((line, li) => (
+                <Text key={li} style={[typography.body, { color: textColor }]}>
+                  {renderInline(line, textColor, linkColor)}
+                </Text>
+              ))}
+            </View>
+          );
+        }
+
+        if (block.type === 'hr') {
+          return <View key={index} style={styles.hr} />;
+        }
+
         return (
           <View key={index} style={styles.table}>
             <View style={styles.tableRow}>
@@ -365,5 +401,16 @@ const styles = StyleSheet.create({
   },
   tableHeader: {
     fontFamily: fontFamily.sansSemibold,
+  },
+  blockquote: {
+    borderLeftWidth: 3,
+    borderLeftColor: colors['mid-gray'],
+    paddingLeft: spacing['3'],
+    gap: spacing['2'],
+  },
+  hr: {
+    height: 1,
+    backgroundColor: colors['oat-border'],
+    marginVertical: spacing['3'],
   },
 });

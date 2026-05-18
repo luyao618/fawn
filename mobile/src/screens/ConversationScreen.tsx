@@ -111,7 +111,7 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
     content: string;
   } | null>(null);
   const listRef = useRef<FlatList<ChatMessage>>(null);
-  // 30 cps typewriter effect — matches Doubao / ChatGPT pacing
+  // 80 cps typewriter effect — faster pacing
   const pendingBuffer = useRef<string>('');
   const typingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -145,7 +145,7 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
       setStreamingAssistant((prev) =>
         prev ? { content: prev.content + char } : { content: char },
       );
-    }, 33); // ~30 chars/sec
+    }, 12); // ~80 chars/sec
   }, [stopTypingTimer]);
 
   const baseMessages = data?.messages ?? [];
