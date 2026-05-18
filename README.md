@@ -6,6 +6,16 @@ Fawn is a private, self-hosted baby-care agent for families. It combines structu
 
 ## 中文
 
+### 仓库结构
+
+| 目录 | 角色 | 技术栈 | 入口文档 |
+|------|------|--------|----------|
+| `backend/` | FastAPI 后端：业务 API、LangGraph agent、RAG、长期记忆。 | Python 3.12, FastAPI, SQLAlchemy, LangGraph, pgvector | `backend/pyproject.toml`、[`docs/deployment.md`](docs/deployment.md) |
+| `frontend/` | Next.js 移动端 Web 应用，对外提供登录、聊天、看板、记录、相册等页面。 | Next.js 15, React 19, TypeScript, Tailwind CSS | `frontend/package.json` |
+| `mobile/` | Expo / React Native 原生 Android 客户端，复用同一个 FastAPI 后端。 | Expo, React Native, TypeScript | [`mobile/README.md`](mobile/README.md)、[`mobile/AGENTS.md`](mobile/AGENTS.md)、[`docs/android-native-build.md`](docs/android-native-build.md) |
+| `docs/` | 部署、构建、PRD 等参考文档。 | Markdown | [`docs/deployment.md`](docs/deployment.md)、[`docs/android-native-build.md`](docs/android-native-build.md)、[`docs/PRD-V2.md`](docs/PRD-V2.md) |
+| `docker-compose.yml` | 一键拉起依赖（Postgres + pgvector、MinIO）以及生产部署的 backend/frontend 服务。 | Docker Compose v2 | [`docs/deployment.md`](docs/deployment.md) |
+
 ### 项目定位
 
 Fawn 是一个面向个人或家庭自部署的育儿管家系统。它不是公开 SaaS，也不是单纯的聊天机器人，而是一个围绕“宝宝、家庭成员、日常记录、照片、长期记忆和育儿知识库”组织起来的私有应用。
@@ -97,6 +107,81 @@ Agent 可以调用记录、查询、知识检索、相册浏览和用户画像�
 
 相册照片和聊天图片都存储在 MinIO。数据库保存照片元数据、标签和软删除状态；相册下载使用短期预签名 URL。这样可以让数据库负责关系和检索，MinIO 负责二进制文件。
 
+### Mobile App
+
+`mobile/` 是一个 Expo (managed workflow) + React Native + TypeScript 的原生 Android 客户端，复用 `backend/` 提供的 FastAPI 接口。
+
+- 当前发布形态：v1 仅支持 Android，`minSdkVersion = 26`（Android 8.0+），通过 EAS internal distribution 以 APK 形式分发，未上架 Play Store。
+- 默认连接的是生产后端 `https://lumingchuan.vip/api`；本地调试请按 [`mobile/AGENTS.md`](mobile/AGENTS.md) 临时改写 `mobile/app.json` 中的 `extra.apiBaseUrl`，不要把本地 URL 提交。
+- 日常 UI 开发可走本地 build chain（`npm run android:debug` / `android:install`）；发布版必须走 Expo EAS。详细说明见 [`mobile/README.md`](mobile/README.md) 和 [`docs/android-native-build.md`](docs/android-native-build.md)。
+
+iOS 暂未列入 v1 范围。
+
+### 本地开发快速起步
+
+下面这套流程让你在本机把 backend + frontend 跑起来，无需打开部署文档。生产部署仍以 [`docs/deployment.md`](docs/deployment.md) 为准。
+
+依赖：
+
+- Docker + Docker Compose v2
+- Python 3.12 与 [`uv`](https://docs.astral.sh/uv/)（backend）
+- Node ≥ 20（frontend 和 mobile）
+- 可选：Expo CLI、Android Studio / 实机（仅当需要跑 `mobile/`）
+- 可选：PostgreSQL client（`psql`），本地跑 `scripts.seed_knowledge` 时需要
+
+1. 启动依赖（Postgres + pgvector、MinIO）：
+
+   ```bash
+   docker compose up -d postgres minio minio-init
+   ```
+
+2. 配置 backend 环境：
+
+   ```bash
+   cp backend/.env.example backend/.env
+   # 至少确认 OPENAI_API_KEY / OPENAI_API_BASE / EMBEDDING_MODEL / EMBEDDING_DIMENSIONS / REGISTRATION_INVITE_CODE
+   ```
+
+3. 启动 backend（默认监听 `8000`）：
+
+   ```bash
+   cd backend
+   uv sync
+   uv run alembic upgrade head
+   uv run python -m scripts.seed_knowledge --idempotent
+   uv run python -m scripts.seed_who_data --csv seeds/who_growth_reference.csv --idempotent
+   uv run uvicorn fawn.main:app --reload
+   ```
+
+4. 启动 frontend（默认监听 `3000`，会把 `/api/*` 反向代理到 backend）：
+
+   ```bash
+   cd frontend
+   npm install
+   INTERNAL_API_URL=http://localhost:8000 npm run dev
+   ```
+
+5. （可选）启动 mobile：
+
+   ```bash
+   cd mobile
+   npm install
+   npm run start         # Expo dev server
+   npm run android       # 安装到连接的 Android 设备 / 模拟器
+   ```
+
+6. 注册第一个家庭：打开 `http://localhost:3000`，进入注册页，使用 `backend/.env` 中的 `REGISTRATION_INVITE_CODE`（默认值 `2026`）创建家庭、首个父母账号与密码。登录后到 `/profile` 补充宝宝档案。
+
+默认端口：
+
+| 服务 | 端口 |
+|------|------|
+| frontend | 3000 |
+| backend | 8000 |
+| postgres | 5432 |
+| minio (S3 API) | 9000 |
+| minio (console) | 9001 |
+
 ### 部署文档
 
 完整的新机器部署、生产配置、备份、无损更新和知识库 seed 说明见 [docs/deployment.md](docs/deployment.md)。
@@ -104,6 +189,16 @@ Agent 可以调用记录、查询、知识检索、相册浏览和用户画像�
 线上更新的推荐流程是先把代码合并到远程 `main`，再在部署机器从 `origin/main` 快进拉取并重建服务。具体命令和数据保留注意事项以部署文档为准。
 
 ## English
+
+### Repository layout
+
+| Directory | Role | Stack | Entry doc |
+|-----------|------|-------|-----------|
+| `backend/` | FastAPI backend: business APIs, LangGraph agent, RAG, long-term memory. | Python 3.12, FastAPI, SQLAlchemy, LangGraph, pgvector | `backend/pyproject.toml`, [`docs/deployment.md`](docs/deployment.md) |
+| `frontend/` | Next.js mobile-first web app: login, chat, dashboard, record, album. | Next.js 15, React 19, TypeScript, Tailwind CSS | `frontend/package.json` |
+| `mobile/` | Expo / React Native native Android client that reuses the same FastAPI backend. | Expo, React Native, TypeScript | [`mobile/README.md`](mobile/README.md), [`mobile/AGENTS.md`](mobile/AGENTS.md), [`docs/android-native-build.md`](docs/android-native-build.md) |
+| `docs/` | Deployment, build, PRD and other reference material. | Markdown | [`docs/deployment.md`](docs/deployment.md), [`docs/android-native-build.md`](docs/android-native-build.md), [`docs/PRD-V2.md`](docs/PRD-V2.md) |
+| `docker-compose.yml` | One-shot way to bring up dependencies (Postgres + pgvector, MinIO) and the production backend/frontend services. | Docker Compose v2 | [`docs/deployment.md`](docs/deployment.md) |
 
 ### Product Positioning
 
@@ -190,6 +285,81 @@ Long-term memory is stored as Markdown files in the backend memory volume, separ
 **Object storage**
 
 Album photos and chat images are stored in MinIO. PostgreSQL keeps metadata, tags, ownership, and soft-delete state; MinIO stores the binary files, and album downloads use short-lived pre-signed URLs.
+
+### Mobile App
+
+`mobile/` is an Expo (managed workflow) + React Native + TypeScript native Android client that reuses the FastAPI surface in `backend/`.
+
+- v1 ships Android only, `minSdkVersion = 26` (Android 8.0+), distributed as a sideloadable APK via EAS internal distribution. Not published to the Play Store.
+- The default backend baked into the app is production (`https://lumingchuan.vip/api`). For local debugging, follow [`mobile/AGENTS.md`](mobile/AGENTS.md) and temporarily override `extra.apiBaseUrl` in `mobile/app.json` — do not commit the local URL.
+- Day-to-day UI work can use the local build chain (`npm run android:debug` / `android:install`); release artifacts must go through Expo EAS. See [`mobile/README.md`](mobile/README.md) and [`docs/android-native-build.md`](docs/android-native-build.md).
+
+iOS is out of scope for v1.
+
+### Local development / Quick start
+
+This is the path to bring up `backend` + `frontend` on your machine without reaching for the deployment guide. Production deployment still follows [`docs/deployment.md`](docs/deployment.md).
+
+Prerequisites:
+
+- Docker + Docker Compose v2
+- Python 3.12 and [`uv`](https://docs.astral.sh/uv/) (for backend)
+- Node ≥ 20 (for frontend and mobile)
+- Optional: Expo CLI and Android Studio / a real device (only if you need `mobile/`)
+- Optional: PostgreSQL client (`psql`) — required when running `scripts.seed_knowledge` on the host
+
+1. Start dependencies (Postgres + pgvector, MinIO):
+
+   ```bash
+   docker compose up -d postgres minio minio-init
+   ```
+
+2. Configure the backend env:
+
+   ```bash
+   cp backend/.env.example backend/.env
+   # At minimum set OPENAI_API_KEY / OPENAI_API_BASE / EMBEDDING_MODEL / EMBEDDING_DIMENSIONS / REGISTRATION_INVITE_CODE
+   ```
+
+3. Start the backend (listens on `8000`):
+
+   ```bash
+   cd backend
+   uv sync
+   uv run alembic upgrade head
+   uv run python -m scripts.seed_knowledge --idempotent
+   uv run python -m scripts.seed_who_data --csv seeds/who_growth_reference.csv --idempotent
+   uv run uvicorn fawn.main:app --reload
+   ```
+
+4. Start the frontend (listens on `3000`, proxies `/api/*` to the backend):
+
+   ```bash
+   cd frontend
+   npm install
+   INTERNAL_API_URL=http://localhost:8000 npm run dev
+   ```
+
+5. (Optional) start mobile:
+
+   ```bash
+   cd mobile
+   npm install
+   npm run start         # Expo dev server
+   npm run android       # install onto a connected Android device / emulator
+   ```
+
+6. Register the first family: open `http://localhost:3000`, go to the register page, and use the `REGISTRATION_INVITE_CODE` from `backend/.env` (default `2026`) to create the family, the first parent account, and a password. After login, go to `/profile` to fill in the baby profile.
+
+Default ports:
+
+| Service | Port |
+|---------|------|
+| frontend | 3000 |
+| backend | 8000 |
+| postgres | 5432 |
+| minio (S3 API) | 9000 |
+| minio (console) | 9001 |
 
 ### Deployment
 
