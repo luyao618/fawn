@@ -17,6 +17,7 @@ import { HistoryConversationScreen } from '../screens/HistoryConversationScreen'
 import { RecordsScreen } from '../screens/RecordsScreen';
 import { AlbumScreen } from '../screens/AlbumScreen';
 import { colors } from '../shared/theme';
+import { ROUTES } from './routeNames';
 
 /**
  * Root navigation skeleton: Bottom Tabs hosting 5 tabs (管家 / 成长 / 记录 /
@@ -37,16 +38,16 @@ function ChatStack() {
   const ChatNav = Stack();
   return (
     <ChatNav.Navigator screenOptions={{ headerShown: false }}>
-      <ChatNav.Screen name="ChatList">
+      <ChatNav.Screen name={ROUTES.CHAT_LIST}>
         {({ navigation }) => (
           <ConversationListScreen
             onOpenConversation={(id) =>
-              navigation.navigate('ChatConversation', { id })
+              navigation.navigate(ROUTES.CHAT_CONVERSATION, { id })
             }
           />
         )}
       </ChatNav.Screen>
-      <ChatNav.Screen name="ChatConversation">
+      <ChatNav.Screen name={ROUTES.CHAT_CONVERSATION}>
         {({ navigation, route }) => {
           const { id } = route.params as { id: string };
           return (
@@ -65,7 +66,7 @@ function DashboardStack() {
   const DashboardNav = Stack();
   return (
     <DashboardNav.Navigator screenOptions={{ headerShown: false }}>
-      <DashboardNav.Screen name="DashboardHome" component={DashboardScreen} />
+      <DashboardNav.Screen name={ROUTES.DASHBOARD_HOME} component={DashboardScreen} />
     </DashboardNav.Navigator>
   );
 }
@@ -74,7 +75,7 @@ function RecordStack() {
   const RecordNav = Stack();
   return (
     <RecordNav.Navigator screenOptions={{ headerShown: false }}>
-      <RecordNav.Screen name="RecordHome" component={RecordsScreen} />
+      <RecordNav.Screen name={ROUTES.RECORD_HOME} component={RecordsScreen} />
     </RecordNav.Navigator>
   );
 }
@@ -83,7 +84,7 @@ function AlbumStack() {
   const AlbumNav = Stack();
   return (
     <AlbumNav.Navigator screenOptions={{ headerShown: false }}>
-      <AlbumNav.Screen name="AlbumHome" component={AlbumScreen} />
+      <AlbumNav.Screen name={ROUTES.ALBUM_HOME} component={AlbumScreen} />
     </AlbumNav.Navigator>
   );
 }
@@ -92,15 +93,15 @@ function ProfileStack() {
   const ProfileNav = Stack();
   return (
     <ProfileNav.Navigator screenOptions={{ headerShown: false }}>
-      <ProfileNav.Screen name="ProfileHome">
+      <ProfileNav.Screen name={ROUTES.PROFILE_HOME}>
         {({ navigation }) => (
           <ProfileScreen
-            onOpenAgentTasks={() => navigation.navigate('AgentTasks')}
-            onOpenHistory={() => navigation.navigate('HistoryList')}
+            onOpenAgentTasks={() => navigation.navigate(ROUTES.AGENT_TASKS)}
+            onOpenHistory={() => navigation.navigate(ROUTES.HISTORY_LIST)}
           />
         )}
       </ProfileNav.Screen>
-      <ProfileNav.Screen name="AgentTasks">
+      <ProfileNav.Screen name={ROUTES.AGENT_TASKS}>
         {({ navigation }) => (
           <AgentTasksScreen onClose={() => navigation.goBack()} />
         )}
@@ -111,17 +112,17 @@ function ProfileStack() {
         tab (YAO-36 deliberately keeps history reachable without inflating
         the bottom bar).
       */}
-      <ProfileNav.Screen name="HistoryList">
+      <ProfileNav.Screen name={ROUTES.HISTORY_LIST}>
         {({ navigation }) => (
           <HistoryListScreen
             onOpenConversation={(id) =>
-              navigation.navigate('HistoryConversation', { id })
+              navigation.navigate(ROUTES.HISTORY_CONVERSATION, { id })
             }
           />
         )}
       </ProfileNav.Screen>
       <ProfileNav.Screen
-        name="HistoryConversation"
+        name={ROUTES.HISTORY_CONVERSATION}
         // We accept the conversation id through React Navigation params so the
         // route is deep-linkable in future iterations.
       >
