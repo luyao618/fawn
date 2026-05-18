@@ -205,8 +205,25 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
     [authToken],
   );
 
+  // Track whether the list is pinned near the bottom. When the user scrolls
+  // up to read history we MUST NOT yank them back on every typewriter tick.
+  const isNearBottomRef = useRef(true);
+  const handleScroll = (e: {
+    nativeEvent: {
+      contentOffset: { y: number };
+      contentSize: { height: number };
+      layoutMeasurement: { height: number };
+    };
+  }) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const distanceFromBottom =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    isNearBottomRef.current = distanceFromBottom < 80; // px
+  };
+
   useEffect(() => {
     if (messages.length === 0) return;
+    if (!isNearBottomRef.current) return;
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
   }, [messages.length]);
 
@@ -401,7 +418,13 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
             styles.listContent,
             { paddingBottom: spacing['4'] },
           ]}
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={() => {
+            if (isNearBottomRef.current) {
+              listRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
+          onScroll={handleScroll}
+          scrollEventThrottle={64}
           refreshing={isFetching}
           onRefresh={() => refetch()}
           ListEmptyComponent={
