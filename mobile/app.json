@@ -4,7 +4,7 @@
     "slug": "fawn",
     "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/fawn-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -17,8 +17,9 @@
       "versionCode": 1,
       "minSdkVersion": 26,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/fawn-adaptive-foreground.png",
+        "backgroundColor": "#6B3E1F",
+        "monochromeImage": "./assets/fawn-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
