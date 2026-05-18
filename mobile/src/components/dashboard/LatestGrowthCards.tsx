@@ -8,9 +8,10 @@ import type {
 } from '../../shared/api';
 
 /**
- * Three-up snapshot of the latest weight / height / head measurements. Mirrors
- * `frontend/src/components/dashboard/LatestGrowthCards.tsx` — the Web version
- * uses a single warm-gray pill with three inline metrics.
+ * Compact inline pill showing the latest weight / height / head measurements.
+ * Mirrors `frontend/src/components/dashboard/LatestGrowthCards.tsx` post-4ce8ac2:
+ * a single warm-gray row with three inline metric slots — value + baby's own
+ * percentile (P35 etc.). WHO P50 reference line and "查看全部" button removed.
  */
 
 interface MetricProps {
@@ -92,7 +93,7 @@ const styles = StyleSheet.create({
   value: {
     fontFamily: fontFamily.mono,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
     color: colors['soft-charcoal'],
   },
   valueMuted: {
