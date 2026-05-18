@@ -45,14 +45,13 @@ export function formatDate(value: string | Date, pattern = 'M月d日'): string {
 /**
  * Mobile `formatDateTime` — default `M月d日 HH:mm` mirrors web.
  */
-export function formatDateTime(value: string | Date, pattern = 'M月d日 HH:mm'): string {
+export function formatDateTime(value: string | Date, _pattern = 'M月d日 HH:mm'): string {
   const date = typeof value === 'string' ? parseIsoLocal(value) : value;
   if (Number.isNaN(date.getTime())) return typeof value === 'string' ? value : '';
   const m = date.getMonth() + 1;
   const d = date.getDate();
   const hh = pad2(date.getHours());
   const mm = pad2(date.getMinutes());
-  if (pattern === 'M月d日 HH:mm') return `${m}月${d}日 ${hh}:${mm}`;
   return `${m}月${d}日 ${hh}:${mm}`;
 }
 

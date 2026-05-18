@@ -817,8 +817,7 @@ function HealthForm({
         accessibilityLabel="健康类型"
         options={HEALTH_TYPE_OPTIONS}
         value={value.record_type}
-        columns={3}
-        disabled={disabled}
+disabled={disabled}
         onChange={(record_type) => onChange((s) => ({ ...s, record_type }))}
       />
       <Field label="标题">

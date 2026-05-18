@@ -11,7 +11,6 @@ import React, { useMemo } from 'react';
 import {
   Dimensions,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -141,36 +140,9 @@ export function PhotoGrid({ photos, view, onPhotoPress }: PhotoGridProps) {
   );
 }
 
-/**
- * Convenience wrapper that places the grid inside a vertical ScrollView with
- * the right outer padding. The AlbumScreen uses this so the page-level header
- * (mode tabs) can sit above and scroll together with the grid.
- */
-export function PhotoGridScroll(
-  props: PhotoGridProps & { header?: React.ReactNode; footerPadding?: number },
-) {
-  return (
-    <ScrollView
-      contentContainerStyle={[
-        styles.scrollContent,
-        { paddingBottom: props.footerPadding ?? spacing['12'] },
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      {props.header}
-      <PhotoGrid {...props} />
-    </ScrollView>
-  );
-}
-
 const styles = StyleSheet.create({
   root: {
     gap: spacing['5'],
-  },
-  scrollContent: {
-    paddingHorizontal: spacing['4'],
-    paddingTop: spacing['4'],
-    gap: spacing['4'],
   },
   section: {
     gap: spacing['2'],

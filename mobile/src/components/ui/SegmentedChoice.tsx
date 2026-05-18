@@ -28,7 +28,6 @@ export interface SegmentedChoiceProps<T extends string> {
   accessibilityLabel: string;
   options: ReadonlyArray<SegmentedOption<T>>;
   value: T;
-  columns?: 2 | 3;
   disabled?: boolean;
   onChange: (value: T) => void;
 }

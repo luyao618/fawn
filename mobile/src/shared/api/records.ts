@@ -103,19 +103,6 @@ async function fetchPhotos(): Promise<PhotoRecord[]> {
   return data.items;
 }
 
-export async function uploadPhoto(
-  uri: string,
-  mimeType: string,
-  filename: string,
-): Promise<PhotoRecord> {
-  const form = new FormData();
-  form.append('file', { uri, type: mimeType, name: filename } as unknown as Blob);
-  const { data } = await api.post<PhotoRecord>('/album/photos', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-  return data;
-}
-
 // ---------- Unified timeline ----------
 
 /** Pick the timestamp we sort the unified timeline by. */
