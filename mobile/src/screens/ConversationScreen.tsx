@@ -96,9 +96,55 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  // Optimistic user message rendered immediately on send so the UI feels
+  // instant. Cleared after we invalidate the conversation query and the
+  // canonical row arrives.
+  const [optimisticUser, setOptimisticUser] = useState<{
+    content: string;
+    imageUrl: string | null;
+  } | null>(null);
+  // Local streaming state for the assistant reply — we accumulate SSE tokens
+  // into `content` and render it as a synthetic trailing message. Setting back
+  // to `null` removes the placeholder (either after `done` + refetch, or on
+  // error to roll back).
+  const [streamingAssistant, setStreamingAssistant] = useState<{
+    content: string;
+  } | null>(null);
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
-  const messages = data?.messages ?? [];
+  const baseMessages = data?.messages ?? [];
+  // Synthesize the optimistic user + streaming assistant rows at the tail of
+  // the list. Using a stable, prefixed id keeps FlatList's keyExtractor happy
+  // and avoids collisions with real server ids (UUIDs).
+  const messages = useMemo<ChatMessage[]>(() => {
+    if (!resolvedId) return baseMessages;
+    const extras: ChatMessage[] = [];
+    if (optimisticUser) {
+      extras.push({
+        id: 'temp-user',
+        conversation_id: resolvedId,
+        sender_user_id: user?.id ?? null,
+        role: 'user',
+        content: optimisticUser.content,
+        message_type: optimisticUser.imageUrl ? 'image' : 'text',
+        metadata: optimisticUser.imageUrl ? { image_url: optimisticUser.imageUrl } : null,
+        created_at: new Date().toISOString(),
+      });
+    }
+    if (streamingAssistant) {
+      extras.push({
+        id: 'temp-assistant',
+        conversation_id: resolvedId,
+        sender_user_id: null,
+        role: 'assistant',
+        content: streamingAssistant.content,
+        message_type: 'text',
+        metadata: null,
+        created_at: new Date().toISOString(),
+      });
+    }
+    return extras.length > 0 ? [...baseMessages, ...extras] : baseMessages;
+  }, [baseMessages, optimisticUser, streamingAssistant, resolvedId, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -151,25 +197,47 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
     if (!resolvedId) return;
     const content = text.trim();
     if (!content && !pendingImage) return;
+    const sentContent = content || (pendingImage ? '[图片]' : '');
+    const sentImageUrl = pendingImage?.imageUrl ?? null;
+    // Clear composer + show optimistic rows synchronously so the keyboard
+    // dismiss and bubbles land in the same frame.
+    setText('');
+    setPendingImage(null);
+    setOptimisticUser({ content: sentContent, imageUrl: sentImageUrl });
+    setStreamingAssistant({ content: '' });
     setSending(true);
     try {
       const token = authToken ?? (await getToken());
       await sendChatMessage(
         resolvedId,
-        content || (pendingImage ? '[图片]' : ''),
-        pendingImage?.imageUrl ?? null,
+        sentContent,
+        sentImageUrl,
         baseUrl,
         token,
+        {
+          onToken: (chunk) => {
+            setStreamingAssistant((prev) =>
+              prev ? { content: prev.content + chunk } : { content: chunk },
+            );
+          },
+          onDone: () => {
+            // Authoritative rows will replace the optimistic placeholders on
+            // the next render cycle once the query refetches below.
+          },
+        },
       );
-      setText('');
-      setPendingImage(null);
       await queryClient.invalidateQueries({
         queryKey: chatQueries.conversation(resolvedId).queryKey,
       });
       await queryClient.invalidateQueries({
         queryKey: chatQueries.conversations().queryKey,
       });
+      setOptimisticUser(null);
+      setStreamingAssistant(null);
     } catch (err) {
+      // Roll back optimistic UI so the user can retry without ghost rows.
+      setOptimisticUser(null);
+      setStreamingAssistant(null);
       Alert.alert('发送失败', (err as Error).message);
     } finally {
       setSending(false);
@@ -198,6 +266,7 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
           imageHeaders={uri ? imageHeaders : undefined}
           senderName={isOwnMessage ? meta.name : undefined}
           senderRole={isOwnMessage ? meta.role : undefined}
+          isStreaming={item.id === 'temp-assistant'}
         />
       </>
     );
