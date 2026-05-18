@@ -33,7 +33,6 @@ import {
 } from 'react-native';
 
 import { GrowthHistoryList } from '../components/dashboard/GrowthHistoryList';
-import { TopBar } from '../components/layout/TopBar';
 import { Button, Card, SegmentedChoice } from '../components/ui';
 import { useAuth } from '../auth/AuthContext';
 import { canWriteTracker, formatDate } from '../lib/utils';
@@ -370,7 +369,6 @@ export function RecordsScreen() {
 
   return (
     <View style={styles.root}>
-      <TopBar title="记录" />
       <KeyboardAvoidingView
         style={styles.kav}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

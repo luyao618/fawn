@@ -21,7 +21,6 @@ import {
   View,
 } from 'react-native';
 
-import { TopBar } from '../components/layout/TopBar';
 import {
   PhotoGrid,
   type AlbumView,
@@ -129,8 +128,6 @@ export function AlbumScreen() {
 
   return (
     <View style={styles.root}>
-      <TopBar title="相册" />
-
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}

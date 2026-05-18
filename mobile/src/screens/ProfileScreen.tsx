@@ -27,7 +27,6 @@ import {
 } from 'react-native';
 
 import { useAuth } from '../auth/AuthContext';
-import { TopBar } from '../components/layout/TopBar';
 import { Button } from '../components/ui/Button';
 import {
   createUser,
@@ -315,7 +314,6 @@ export function ProfileScreen({ navigation }: ProfileScreenProps) {
 
   return (
     <View style={styles.root}>
-      <TopBar title="家庭" />
       <ScrollView contentContainerStyle={styles.scroll}>
         {loading ? (
           <View style={styles.centerBlock}>

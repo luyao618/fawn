@@ -9,7 +9,6 @@ import {
   View,
 } from 'react-native';
 
-import { TopBar } from '../components/layout/TopBar';
 import { DashboardOverview } from '../components/dashboard/DashboardOverview';
 import { FeedingStats } from '../components/dashboard/FeedingStats';
 import { HealthTimeline } from '../components/dashboard/HealthTimeline';
@@ -111,7 +110,6 @@ export function DashboardScreen() {
 
   return (
     <View style={styles.root}>
-      <TopBar title="成长" />
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={
