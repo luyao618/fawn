@@ -1,17 +1,15 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { colors, fontFamily, radii, spacing, typography } from '../../shared/theme';
+import { colors, fontFamily, spacing, typography } from '../../shared/theme';
 import { MarkdownMessage } from './MarkdownMessage';
 
 /**
  * Safety-alert bubble shown for `message_type === 'safety_alert'`.
  * Mirrors `frontend/src/components/chat/SafetyAlert.tsx`:
- *   - markdown body in soft-charcoal
+ *   - markdown body in soft-charcoal directly on the canvas (no surface fill,
+ *     no border, no padding)
  *   - italic disclaimer footer in dark-gray
- *
- * The outer surface (background, padding, shadow) is owned by
- * MessageBubble so this is a pure content shape.
  */
 
 interface Props {
@@ -30,12 +28,6 @@ export function SafetyAlert({ content }: Props) {
 const styles = StyleSheet.create({
   root: {
     gap: spacing['2'],
-    borderRadius: radii.lg,
-    borderLeftWidth: 3,
-    borderLeftColor: colors['safety-red'],
-    backgroundColor: colors['safety-red-light'],
-    paddingVertical: spacing['3'],
-    paddingHorizontal: spacing['3'],
   },
   footer: {
     ...typography.bodySmall,

@@ -1,8 +1,9 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { colors, radii, shadows, spacing, typography } from '../../shared/theme';
+import { colors, radii, spacing, typography } from '../../shared/theme';
 import type { DashboardSummary } from '../../shared/api';
+import { Card } from '../ui/Card';
 
 /**
  * Card showing the baby's name + age — the top-of-page identity strip on the
@@ -14,7 +15,7 @@ import type { DashboardSummary } from '../../shared/api';
 export function BabyInfoCard({ summary }: { summary: DashboardSummary }) {
   if (!summary.baby) {
     return (
-      <View style={styles.card}>
+      <Card style={styles.card}>
         <View style={styles.avatar}>
           <Text style={styles.avatarLabel}>宝</Text>
         </View>
@@ -22,7 +23,7 @@ export function BabyInfoCard({ summary }: { summary: DashboardSummary }) {
           <Text style={styles.title}>还没有宝宝档案</Text>
           <Text style={styles.subtitle}>暂无生长数据</Text>
         </View>
-      </View>
+      </Card>
     );
   }
 
@@ -30,7 +31,7 @@ export function BabyInfoCard({ summary }: { summary: DashboardSummary }) {
   const age = summary.baby.age_display ?? '出生日期待填';
 
   return (
-    <View style={styles.card}>
+    <Card style={styles.card}>
       <View style={styles.avatar}>
         <Text style={styles.avatarLabel}>{name.slice(0, 1)}</Text>
       </View>
@@ -40,7 +41,7 @@ export function BabyInfoCard({ summary }: { summary: DashboardSummary }) {
         </Text>
         <Text style={styles.subtitle}>{age}</Text>
       </View>
-    </View>
+    </Card>
   );
 }
 
@@ -49,12 +50,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing['4'],
-    backgroundColor: colors.card,
-    borderRadius: radii.card,
-    padding: spacing['4'],
     borderWidth: 1,
     borderColor: colors['oat-border'],
-    ...shadows.card,
   },
   avatar: {
     width: 56,

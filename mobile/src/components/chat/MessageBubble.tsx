@@ -12,6 +12,7 @@ import {
 import type { ChatMessage } from '../../shared/api';
 import { MarkdownMessage } from './MarkdownMessage';
 import { SafetyAlert } from './SafetyAlert';
+import { ThinkingDots } from './ThinkingDots';
 
 /**
  * Chat bubble — Android equivalent of `frontend/src/components/chat/MessageBubble.tsx`.
@@ -69,6 +70,8 @@ export function MessageBubble({
               transition={150}
               accessibilityLabel="聊天图片"
             />
+          ) : isStreaming && message.content === '' ? (
+            <ThinkingDots />
           ) : (
             <>
               <MarkdownMessage content={message.content} textColor={colors['soft-charcoal']} />

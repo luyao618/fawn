@@ -1,50 +1,56 @@
-// Records screen — entry point for the 4 育儿事件 kinds + reverse-chronological list.
+// RecordsScreen — RN port of frontend/src/app/(main)/record/page.tsx.
 //
-// Visual contract: every color / radius / spacing / shadow / type style comes
-// from `mobile/src/shared/theme.ts`. No literal hex / px values are allowed in
-// this file — that keeps the Android UI aligned with Web (Tailwind tokens) and
-// makes future re-skins a one-token change.
+// Mirrors the structured-form layout used on Web: a 4-tab picker
+// (喂养 / 睡眠 / 生长 / 健康) that swaps in a tab-specific form. Submits land in
+// the same /tracker/* endpoints used by the web app. Replaces the previous
+// "quick-add chips + Modal" UI so the two surfaces feel identical.
+//
+// Visual contract: tokens only — every color / radius / spacing / shadow / type
+// style comes from `mobile/src/shared/theme.ts`. No literal hex / px values.
 //
 // Layout (top → bottom):
 //   • TopBar "记录"
-//   • Intro section (subtitle copy mirroring Web)
-//   • 4-up action cards (喂奶 / 身高 / 体重 / 照片) — each opens a modal form
-//   • FlatList of all recent entries from the unified `/records/timeline` query
+//   • Header date / title / subtitle  (mirrors web `<section>`)
+//   • Permission / babyMissing banners
+//   • 4-up tab cards (aria-pressed via accessibilityState.selected)
+//   • Active-tab form Card
+//   • Status banner + Submit button
+//   • Growth tab → 成长记录历史 (reuses GrowthHistoryList)
 
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Image as ExpoImage } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
-  RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 
-import { TopBar } from '../components/layout/TopBar';
-import { getApiBaseUrl } from '../lib/api';
+import { GrowthHistoryList } from '../components/dashboard/GrowthHistoryList';
+import { Button, Card, SegmentedChoice } from '../components/ui';
+import { useAuth } from '../auth/AuthContext';
+import { canWriteTracker, formatDate } from '../lib/utils';
+import { ROUTES } from '../navigation/routeNames';
 import {
   createFeeding,
   createGrowth,
+  createHealth,
+  createSleep,
+  dashboardQueries,
+  growthQueries,
   recordQueries,
-  uploadPhoto,
-  type FeedingRecord,
-  type GrowthRecord,
-  type PhotoRecord,
-  type RecordEntry,
 } from '../shared/api';
 import {
   borderWidth,
   colors,
   layout,
-  opacity,
   radii,
   shadows,
   spacing,
@@ -52,650 +58,1025 @@ import {
   type ColorToken,
 } from '../shared/theme';
 
-type Kind = 'feeding' | 'weight' | 'height' | 'photo';
+// ---------- Constants -------------------------------------------------------
 
-/**
- * Per-kind visual metadata. `tintBg` / `tintFg` mirror the Web tinted-icon
- * pattern (e.g. `bg-nursery-butter text-warning-amber`). All values are theme
- * tokens so re-skinning is a single edit in `theme.ts`.
- */
-const KIND_META: Record<
-  Kind,
-  { label: string; emoji: string; tintBg: ColorToken; tintFg: ColorToken }
-> = {
-  feeding: {
-    label: '喂奶',
-    emoji: '🍼',
+type RecordKind = 'feeding' | 'sleep' | 'growth' | 'health';
+type FeedType = 'formula' | 'breast';
+type SleepType = 'nap' | 'night';
+type HealthType = 'checkup' | 'vaccination' | 'illness';
+
+interface RecordCard {
+  kind: RecordKind;
+  label: string;
+  description: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  tintBg: ColorToken;
+  tintFg: ColorToken;
+}
+
+const RECORD_CARDS: RecordCard[] = [
+  {
+    kind: 'feeding',
+    label: '喂养',
+    description: '配方奶量、亲喂时长',
+    icon: 'restaurant-outline',
     tintBg: 'nursery-butter',
     tintFg: 'warning-amber',
   },
-  height: {
-    label: '身高',
-    emoji: '📏',
-    tintBg: 'nursery-mint',
-    tintFg: 'brand-strong',
-  },
-  weight: {
-    label: '体重',
-    emoji: '⚖️',
+  {
+    kind: 'sleep',
+    label: '睡眠',
+    description: '小睡、夜睡、夜醒次数',
+    icon: 'moon-outline',
     tintBg: 'nursery-powder',
     tintFg: 'info-blue',
   },
-  photo: {
-    label: '照片',
-    emoji: '📷',
+  {
+    kind: 'growth',
+    label: '生长',
+    description: '体重、身高、头围',
+    icon: 'resize-outline',
+    tintBg: 'nursery-mint',
+    tintFg: 'brand-strong',
+  },
+  {
+    kind: 'health',
+    label: '健康',
+    description: '疫苗、就诊、身体状况',
+    icon: 'medical-outline',
     tintBg: 'safety-red-light',
     tintFg: 'safety-red',
   },
-};
+];
 
-const KIND_ORDER: Kind[] = ['feeding', 'height', 'weight', 'photo'];
+const FEED_TYPE_OPTIONS = [
+  { value: 'formula' as FeedType, label: '配方奶' },
+  { value: 'breast' as FeedType, label: '母乳' },
+];
 
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString();
+const SLEEP_TYPE_OPTIONS = [
+  { value: 'nap' as SleepType, label: '小睡' },
+  { value: 'night' as SleepType, label: '夜睡' },
+];
+
+const HEALTH_TYPE_OPTIONS = [
+  { value: 'checkup' as HealthType, label: '体检' },
+  { value: 'vaccination' as HealthType, label: '疫苗' },
+  { value: 'illness' as HealthType, label: '不适' },
+];
+
+// ---------- Date / number helpers (mirror web record/page.tsx) --------------
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0');
 }
+
+function localDateValue(date = new Date()): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function localDateTimeValue(date = new Date()): string {
+  return `${localDateValue(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// PORT DECISION: datetime picker requires @react-native-community/datetimepicker;
+// deferred. Inputs accept the literal `YYYY-MM-DDTHH:mm` / `YYYY-MM-DD` shape
+// that web `<input type=datetime-local>` emits, so the create payloads match.
+const DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function toIsoDateTime(value: string): string {
+  return new Date(value).toISOString();
+}
+
+function positiveIntegerOrNull(value: string, label: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^\d+$/.test(trimmed)) throw new Error(`${label}需要填写大于 0 的整数`);
+  const n = Number(trimmed);
+  if (!Number.isSafeInteger(n) || n <= 0) throw new Error(`${label}需要填写有效的整数`);
+  return n;
+}
+
+function positiveInteger(value: string, label: string): number {
+  const n = positiveIntegerOrNull(value, label);
+  if (n == null) throw new Error(`${label}不能为空`);
+  return n;
+}
+
+function nonNegativeIntegerOrZero(value: string, label: string): number {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  if (!/^\d+$/.test(trimmed)) throw new Error(`${label}需要填写 0 或更大的整数`);
+  const n = Number(trimmed);
+  if (!Number.isSafeInteger(n)) throw new Error(`${label}需要填写有效的整数`);
+  return n;
+}
+
+function positiveDecimalOrNull(value: string, label: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^\d+(?:\.\d+)?$/.test(trimmed)) throw new Error(`${label}需要填写大于 0 的数字`);
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`${label}需要填写大于 0 的数字`);
+  return n;
+}
+
+function textOrNull(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function validateDateTime(value: string, label: string, birthDate: string | undefined): void {
+  if (!DATETIME_PATTERN.test(value)) {
+    throw new Error(`${label}格式应为 YYYY-MM-DDTHH:mm`);
+  }
+  if (birthDate && value.slice(0, 10) < birthDate) {
+    throw new Error(`${label}不能早于宝宝出生日期`);
+  }
+  if (value > localDateTimeValue()) {
+    throw new Error(`${label}不能晚于当前时间`);
+  }
+}
+
+function validateDate(value: string, label: string, birthDate: string | undefined): void {
+  if (!DATE_PATTERN.test(value)) {
+    throw new Error(`${label}格式应为 YYYY-MM-DD`);
+  }
+  if (birthDate && value < birthDate) {
+    throw new Error(`${label}不能早于宝宝出生日期`);
+  }
+  if (value > localDateValue()) {
+    throw new Error(`${label}不能晚于今天`);
+  }
+}
+
+// ---------- Initial form state ---------------------------------------------
+
+function initialFeedingForm() {
+  return {
+    feed_time: localDateTimeValue(),
+    feed_type: 'formula' as FeedType,
+    amount_ml: '',
+    duration_min: '',
+    notes: '',
+  };
+}
+
+function initialSleepForm() {
+  const end = new Date();
+  const start = new Date(end.getTime() - 90 * 60_000);
+  return {
+    sleep_start: localDateTimeValue(start),
+    sleep_end: localDateTimeValue(end),
+    sleep_type: 'nap' as SleepType,
+    night_wakings: '0',
+    notes: '',
+  };
+}
+
+function initialGrowthForm() {
+  return {
+    measurement_date: localDateValue(),
+    weight_g: '',
+    height_cm: '',
+    head_cm: '',
+    notes: '',
+  };
+}
+
+function initialHealthForm() {
+  return {
+    record_date: localDateValue(),
+    record_type: 'checkup' as HealthType,
+    title: '',
+    description: '',
+  };
+}
+
+// ---------- Screen ----------------------------------------------------------
 
 export function RecordsScreen() {
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const queryClient = useQueryClient();
-  const { data, isPending, isFetching, isError, error, refetch } = useQuery(
-    recordQueries.timeline(),
+  const { user } = useAuth();
+  const canWrite = canWriteTracker(user?.access_type);
+
+  const { data: summary } = useQuery(dashboardQueries.summary());
+  const { data: growthRecords } = useQuery(growthQueries.records());
+
+  const [activeKind, setActiveKind] = useState<RecordKind>('feeding');
+  const [feeding, setFeeding] = useState(initialFeedingForm);
+  const [sleep, setSleep] = useState(initialSleepForm);
+  const [growth, setGrowth] = useState(initialGrowthForm);
+  const [health, setHealth] = useState(initialHealthForm);
+  const [status, setStatus] = useState<
+    { type: 'success' | 'error'; message: string } | null
+  >(null);
+
+  const babyMissing = summary?.baby === null;
+  const birthDate = summary?.baby?.birth_date ?? undefined;
+  const formDisabled = !canWrite || babyMissing;
+
+  const activeCard = useMemo(
+    () => RECORD_CARDS.find((c) => c.kind === activeKind) ?? RECORD_CARDS[0],
+    [activeKind],
   );
-  const [activeKind, setActiveKind] = useState<Kind | null>(null);
 
-  const entries = data ?? [];
-
-  const invalidate = async () => {
-    await queryClient.invalidateQueries({ queryKey: recordQueries.timeline().queryKey });
-  };
-
-  return (
-    <View style={styles.root}>
-      <TopBar title="记录" />
-
-      {isPending && !data ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors['fawn-amber']} />
-        </View>
-      ) : (
-        <FlatList
-          data={entries}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <RecordRow entry={item} />}
-          contentContainerStyle={styles.listContent}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListHeaderComponent={
-            <View style={styles.headerBlock}>
-              <Text style={styles.subtitle}>育儿事件 · 倒序展示</Text>
-
-              <View style={styles.actions}>
-                {KIND_ORDER.map((k) => {
-                  const meta = KIND_META[k];
-                  return (
-                    <Pressable
-                      key={k}
-                      style={({ pressed }) => [
-                        styles.actionCard,
-                        pressed && styles.actionCardPressed,
-                      ]}
-                      onPress={() => setActiveKind(k)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`新增${meta.label}`}
-                    >
-                      <View
-                        style={[
-                          styles.actionIcon,
-                          { backgroundColor: colors[meta.tintBg] },
-                        ]}
-                      >
-                        <Text style={styles.actionEmoji}>{meta.emoji}</Text>
-                      </View>
-                      <Text style={styles.actionLabel}>+{meta.label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {isError ? (
-                <View style={styles.banner}>
-                  <Text style={styles.bannerText}>
-                    离线 / 拉取失败，显示的是缓存数据。{'\n'}
-                    {(error as Error)?.message ?? ''}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={isFetching}
-              onRefresh={() => refetch()}
-              tintColor={colors['fawn-amber']}
-              colors={[colors['fawn-amber']]}
-            />
-          }
-          ListEmptyComponent={
-            <Text style={styles.empty}>还没有记录。点击上方按钮录入第一条。</Text>
-          }
-        />
-      )}
-
-      <Modal
-        visible={activeKind !== null}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setActiveKind(null)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            {activeKind && (
-              <RecordForm
-                kind={activeKind}
-                onCancel={() => setActiveKind(null)}
-                onSubmitted={async () => {
-                  setActiveKind(null);
-                  await invalidate();
-                }}
-              />
-            )}
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
-}
-
-// ----- Row renderer --------------------------------------------------------
-
-function RecordRow({ entry }: { entry: RecordEntry }) {
-  const meta = KIND_META[entry.kind];
-  const baseUrl = getApiBaseUrl();
-  let when = '';
-  let body: React.ReactNode = null;
-
-  if (entry.kind === 'feeding') {
-    const r: FeedingRecord = entry.record;
-    when = formatTime(r.feed_time);
-    const parts: string[] = [];
-    const typeLabel = { breast: '母乳', formula: '配方奶', solid: '辅食' }[r.feed_type];
-    parts.push(typeLabel);
-    if (r.amount_ml != null) parts.push(`${r.amount_ml} ml`);
-    if (r.duration_min != null) parts.push(`${r.duration_min} 分钟`);
-    body = <Text style={styles.rowBody}>{parts.join(' · ')}</Text>;
-  } else if (entry.kind === 'weight') {
-    const r: GrowthRecord = entry.record;
-    when = r.measurement_date;
-    body = <Text style={styles.rowBody}>{r.weight_g} g</Text>;
-  } else if (entry.kind === 'height') {
-    const r: GrowthRecord = entry.record;
-    when = r.measurement_date;
-    body = <Text style={styles.rowBody}>{r.height_cm} cm</Text>;
-  } else {
-    const r: PhotoRecord = entry.record;
-    when = formatTime(r.taken_at ?? r.uploaded_at);
-    const uri = r.storage_url.startsWith('http')
-      ? r.storage_url
-      : `${baseUrl}${r.storage_url}`;
-    body = (
-      <ExpoImage
-        source={{ uri }}
-        style={styles.thumb}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        accessibilityLabel="照片"
-      />
-    );
+  function resetActiveForm() {
+    if (activeKind === 'feeding') setFeeding(initialFeedingForm());
+    if (activeKind === 'sleep') setSleep(initialSleepForm());
+    if (activeKind === 'growth') setGrowth(initialGrowthForm());
+    if (activeKind === 'health') setHealth(initialHealthForm());
   }
-
-  return (
-    <View style={styles.row}>
-      <View style={[styles.rowIcon, { backgroundColor: colors[meta.tintBg] }]}>
-        <Text style={styles.rowIconText}>{meta.emoji}</Text>
-      </View>
-      <View style={styles.rowMain}>
-        <Text style={[styles.rowKind, { color: colors[meta.tintFg] }]}>{meta.label}</Text>
-        {body}
-        <Text style={styles.rowWhen}>{when}</Text>
-      </View>
-    </View>
-  );
-}
-
-// ----- Form ----------------------------------------------------------------
-
-interface FormProps {
-  kind: Kind;
-  onCancel: () => void;
-  onSubmitted: () => void | Promise<void>;
-}
-
-function RecordForm({ kind, onCancel, onSubmitted }: FormProps) {
-  const [feedType, setFeedType] = useState<'breast' | 'formula' | 'solid'>('breast');
-  const [amountMl, setAmountMl] = useState('');
-  const [durationMin, setDurationMin] = useState('');
-  const [weightG, setWeightG] = useState('');
-  const [heightCm, setHeightCm] = useState('');
-  const [notes, setNotes] = useState('');
-
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const nowIso = useMemo(() => new Date().toISOString(), []);
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (kind === 'feeding') {
-        const amt = amountMl.trim() ? Number(amountMl) : null;
-        const dur = durationMin.trim() ? Number(durationMin) : null;
-        if (amt !== null && (!Number.isFinite(amt) || amt <= 0)) throw new Error('奶量需为正数');
-        if (dur !== null && (!Number.isFinite(dur) || dur <= 0)) throw new Error('时长需为正数');
+      if (activeKind === 'feeding') {
+        validateDateTime(feeding.feed_time, '喂养时间', birthDate);
+        const isFormula = feeding.feed_type === 'formula';
+        const isBreast = feeding.feed_type === 'breast';
         await createFeeding({
-          feed_time: nowIso,
-          feed_type: feedType,
-          amount_ml: amt,
-          duration_min: dur,
-          notes: notes.trim() || null,
+          feed_time: toIsoDateTime(feeding.feed_time),
+          feed_type: feeding.feed_type,
+          amount_ml: isFormula ? positiveInteger(feeding.amount_ml, '配方奶量') : null,
+          duration_min: isBreast ? positiveInteger(feeding.duration_min, '亲喂时长') : null,
+          notes: textOrNull(feeding.notes),
         });
         return;
       }
-      if (kind === 'weight') {
-        const w = Number(weightG);
-        if (!Number.isFinite(w) || w <= 0) throw new Error('体重需为正数 (g)');
+      if (activeKind === 'sleep') {
+        validateDateTime(sleep.sleep_start, '睡眠开始时间', birthDate);
+        if (sleep.sleep_end) {
+          validateDateTime(sleep.sleep_end, '睡眠结束时间', birthDate);
+          if (sleep.sleep_end <= sleep.sleep_start) {
+            throw new Error('睡眠结束时间必须晚于开始时间');
+          }
+        }
+        await createSleep({
+          sleep_start: toIsoDateTime(sleep.sleep_start),
+          sleep_end: sleep.sleep_end ? toIsoDateTime(sleep.sleep_end) : null,
+          sleep_type: sleep.sleep_type,
+          night_wakings:
+            sleep.sleep_type === 'night'
+              ? nonNegativeIntegerOrZero(sleep.night_wakings, '夜醒次数')
+              : 0,
+          notes: textOrNull(sleep.notes),
+        });
+        return;
+      }
+      if (activeKind === 'growth') {
+        validateDate(growth.measurement_date, '生长记录日期', birthDate);
         await createGrowth({
-          measurement_date: today,
-          weight_g: w,
-          notes: notes.trim() || null,
+          measurement_date: growth.measurement_date,
+          weight_g: positiveIntegerOrNull(growth.weight_g, '体重'),
+          height_cm: positiveDecimalOrNull(growth.height_cm, '身高'),
+          head_cm: positiveDecimalOrNull(growth.head_cm, '头围'),
+          notes: textOrNull(growth.notes),
         });
         return;
       }
-      if (kind === 'height') {
-        const h = Number(heightCm);
-        if (!Number.isFinite(h) || h <= 0) throw new Error('身高需为正数 (cm)');
-        await createGrowth({
-          measurement_date: today,
-          height_cm: h,
-          notes: notes.trim() || null,
-        });
-        return;
-      }
-      // photo
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) throw new Error('需要相册权限');
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
+      // health
+      validateDate(health.record_date, '健康记录日期', birthDate);
+      const title = health.title.trim();
+      if (!title) throw new Error('标题不能为空');
+      await createHealth({
+        record_date: health.record_date,
+        record_type: health.record_type,
+        title,
+        description: textOrNull(health.description),
       });
-      if (result.canceled || result.assets.length === 0) throw new Error('已取消');
-      const asset = result.assets[0];
-      const mimeType = asset.mimeType ?? 'image/jpeg';
-      const filename = asset.fileName ?? `upload-${Date.now()}.jpg`;
-      await uploadPhoto(asset.uri, mimeType, filename);
     },
-    onSuccess: () => {
-      void onSubmitted();
+    onSuccess: async () => {
+      setStatus({
+        type: 'success',
+        message: `${activeCard.label}已保存，成长看板会同步更新。`,
+      });
+      resetActiveForm();
+      // Refresh dependent caches so dashboard/growth lists pick up the new row.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: recordQueries.timeline().queryKey }),
+        queryClient.invalidateQueries({ queryKey: growthQueries.records().queryKey }),
+        queryClient.invalidateQueries({ queryKey: dashboardQueries.summary().queryKey }),
+      ]);
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg === '已取消') {
-        onCancel();
-        return;
-      }
-      Alert.alert('保存失败', msg);
+      setStatus({
+        type: 'error',
+        message: err instanceof Error ? err.message : '保存失败，请稍后再试',
+      });
     },
   });
 
   return (
-    <View>
-      <Text style={styles.formTitle}>
-        {KIND_META[kind].emoji} 新增{KIND_META[kind].label}
-      </Text>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <KeyboardAvoidingView
+        style={styles.kav}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerDate}>{formatDate(new Date(), 'M月d日')}</Text>
+            <Text style={styles.headerTitle}>
+              记录{summary?.baby?.name ?? '宝宝'}今天的变化
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              保存后会同步到成长看板和后续对话参考。
+            </Text>
+          </View>
 
-      {kind === 'feeding' && (
-        <>
-          <Text style={styles.label}>类型</Text>
-          <View style={styles.segmented}>
-            {(['breast', 'formula', 'solid'] as const).map((t) => {
-              const active = feedType === t;
+          {/* Banners */}
+          {!canWrite ? (
+            <View style={[styles.banner, styles.bannerWarn]}>
+              <Text style={styles.bannerText}>
+                当前账号只有查看权限，无法新增记录。请让父母或管理员账号记录，已有数据仍可在成长页查看。
+              </Text>
+            </View>
+          ) : null}
+
+          {babyMissing ? (
+            <View style={[styles.banner, styles.bannerInfo]}>
+              <Text style={styles.bannerText}>还没有宝宝档案，暂时不能保存记录。</Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  // Hop to the Profile tab (sibling tab); fall back to in-stack
+                  // navigate if the parent navigator isn't available.
+                  const parent = navigation.getParent();
+                  if (parent) parent.navigate('Profile' as never);
+                  else navigation.navigate(ROUTES.PROFILE_HOME as never);
+                }}
+                style={({ pressed }) => [
+                  styles.bannerAction,
+                  pressed && styles.bannerActionPressed,
+                ]}
+              >
+                <Text style={styles.bannerActionText}>去家庭页</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {/* Tab cards */}
+          <View style={styles.tabs}>
+            {RECORD_CARDS.map((card) => {
+              const active = card.kind === activeKind;
               return (
                 <Pressable
-                  key={t}
-                  style={[styles.segment, active && styles.segmentActive]}
-                  onPress={() => setFeedType(t)}
+                  key={card.kind}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={`${card.label}：${card.description}`}
+                  onPress={() => {
+                    setActiveKind(card.kind);
+                    setStatus(null);
+                  }}
+                  style={({ pressed }) => [
+                    styles.tabCard,
+                    active && styles.tabCardActive,
+                    pressed && styles.tabCardPressed,
+                  ]}
                 >
-                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-                    {t === 'breast' ? '母乳' : t === 'formula' ? '配方奶' : '辅食'}
-                  </Text>
+                  <View
+                    style={[
+                      styles.tabIcon,
+                      { backgroundColor: colors[card.tintBg] },
+                    ]}
+                  >
+                    <Ionicons
+                      name={card.icon}
+                      size={16}
+                      color={colors[card.tintFg]}
+                    />
+                  </View>
+                  <Text style={styles.tabLabel}>{card.label}</Text>
                 </Pressable>
               );
             })}
           </View>
 
-          <Text style={styles.label}>奶量 (ml，可选)</Text>
-          <TextInput
-            style={styles.input}
-            value={amountMl}
-            onChangeText={setAmountMl}
-            keyboardType="numeric"
-            placeholder="120"
-            placeholderTextColor={colors['mid-gray']}
-          />
+          {/* Active tab form */}
+          <Card style={styles.formCard}>
+            <View style={styles.formHeader}>
+              <View
+                style={[
+                  styles.formHeaderIcon,
+                  { backgroundColor: colors[activeCard.tintBg] },
+                ]}
+              >
+                <Ionicons
+                  name={activeCard.icon}
+                  size={18}
+                  color={colors[activeCard.tintFg]}
+                />
+              </View>
+              <View style={styles.formHeaderTextBlock}>
+                <Text style={styles.formHeaderTitle}>保存{activeCard.label}</Text>
+                <Text style={styles.formHeaderDesc}>{activeCard.description}</Text>
+              </View>
+            </View>
 
-          <Text style={styles.label}>时长 (分钟，可选)</Text>
-          <TextInput
-            style={styles.input}
-            value={durationMin}
-            onChangeText={setDurationMin}
-            keyboardType="numeric"
-            placeholder="15"
-            placeholderTextColor={colors['mid-gray']}
-          />
-        </>
-      )}
+            {activeKind === 'feeding' ? (
+              <FeedingForm
+                value={feeding}
+                onChange={setFeeding}
+                disabled={formDisabled}
+              />
+            ) : null}
+            {activeKind === 'sleep' ? (
+              <SleepForm value={sleep} onChange={setSleep} disabled={formDisabled} />
+            ) : null}
+            {activeKind === 'growth' ? (
+              <GrowthForm
+                value={growth}
+                onChange={setGrowth}
+                disabled={formDisabled}
+              />
+            ) : null}
+            {activeKind === 'health' ? (
+              <HealthForm
+                value={health}
+                onChange={setHealth}
+                disabled={formDisabled}
+              />
+            ) : null}
 
-      {kind === 'weight' && (
-        <>
-          <Text style={styles.label}>体重 (g)</Text>
-          <TextInput
-            style={styles.input}
-            value={weightG}
-            onChangeText={setWeightG}
-            keyboardType="numeric"
-            placeholder="6500"
-            placeholderTextColor={colors['mid-gray']}
-          />
-        </>
-      )}
+            {status ? (
+              <View
+                accessibilityRole="alert"
+                style={[
+                  styles.statusBanner,
+                  status.type === 'success'
+                    ? styles.statusSuccess
+                    : styles.statusError,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusText,
+                    status.type === 'success'
+                      ? styles.statusSuccessText
+                      : styles.statusErrorText,
+                  ]}
+                >
+                  {status.message}
+                </Text>
+              </View>
+            ) : null}
 
-      {kind === 'height' && (
-        <>
-          <Text style={styles.label}>身高 (cm)</Text>
-          <TextInput
-            style={styles.input}
-            value={heightCm}
-            onChangeText={setHeightCm}
-            keyboardType="numeric"
-            placeholder="62.5"
-            placeholderTextColor={colors['mid-gray']}
-          />
-        </>
-      )}
+            <Button
+              variant="primary"
+              loading={mutation.isPending}
+              disabled={formDisabled}
+              onPress={() => mutation.mutate()}
+              style={styles.submitButton}
+            >
+              保存{activeCard.label}
+            </Button>
+          </Card>
 
-      {kind === 'photo' && (
-        <Text style={styles.hint}>点击「选择照片」从相册中选取并上传。</Text>
-      )}
-
-      {kind !== 'photo' && (
-        <>
-          <Text style={styles.label}>备注 (可选)</Text>
-          <TextInput
-            style={[styles.input, styles.inputMultiline]}
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="额外信息"
-            placeholderTextColor={colors['mid-gray']}
-            multiline
-          />
-        </>
-      )}
-
-      <View style={styles.formActions}>
-        <Pressable
-          style={[styles.formButton, styles.formButtonSecondary]}
-          onPress={onCancel}
-          disabled={mutation.isPending}
-        >
-          <Text style={styles.formButtonSecondaryText}>取消</Text>
-        </Pressable>
-        <Pressable
-          style={[
-            styles.formButton,
-            styles.formButtonPrimary,
-            mutation.isPending && styles.buttonDisabled,
-          ]}
-          onPress={() => mutation.mutate()}
-          disabled={mutation.isPending}
-        >
-          <Text style={styles.formButtonText}>
-            {mutation.isPending ? '保存中…' : kind === 'photo' ? '选择照片' : '保存'}
-          </Text>
-        </Pressable>
-      </View>
+          {/* Growth history */}
+          {activeKind === 'growth' ? (
+            <Card style={styles.historyCard}>
+              <Text style={styles.historyTitle}>成长记录历史</Text>
+              <GrowthHistoryList records={growthRecords ?? []} />
+            </Card>
+          ) : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Styles — every value is a `theme.ts` token. Search for a literal hex / px
-// here should return zero hits.
-// ---------------------------------------------------------------------------
+// ---------- Sub-forms -------------------------------------------------------
+
+interface FieldProps {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}
+
+function Field({ label, hint, children }: FieldProps) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      {children}
+      {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
+    </View>
+  );
+}
+
+interface FormSubProps<T> {
+  value: T;
+  onChange: React.Dispatch<React.SetStateAction<T>>;
+  disabled: boolean;
+}
+
+function FeedingForm({
+  value,
+  onChange,
+  disabled,
+}: FormSubProps<ReturnType<typeof initialFeedingForm>>) {
+  return (
+    <View style={styles.formBody}>
+      <Field label="时间" hint="格式 YYYY-MM-DDTHH:mm">
+        <TextInput
+          editable={!disabled}
+          value={value.feed_time}
+          onChangeText={(v) => onChange((s) => ({ ...s, feed_time: v }))}
+          placeholder="2026-05-18T14:30"
+          placeholderTextColor={colors['mid-gray']}
+          style={[styles.input, disabled && styles.inputDisabled]}
+          autoCapitalize="none"
+        />
+      </Field>
+      <SegmentedChoice
+        label="类型"
+        accessibilityLabel="喂养类型"
+        options={FEED_TYPE_OPTIONS}
+        value={value.feed_type}
+        disabled={disabled}
+        onChange={(feed_type) => onChange((s) => ({ ...s, feed_type }))}
+      />
+      {value.feed_type === 'formula' ? (
+        <Field label="配方奶量 (ml)">
+          <TextInput
+            editable={!disabled}
+            value={value.amount_ml}
+            onChangeText={(v) => onChange((s) => ({ ...s, amount_ml: v }))}
+            keyboardType="numeric"
+            placeholder="120"
+            placeholderTextColor={colors['mid-gray']}
+            style={[styles.input, disabled && styles.inputDisabled]}
+          />
+        </Field>
+      ) : (
+        <Field label="亲喂时长 (分钟)">
+          <TextInput
+            editable={!disabled}
+            value={value.duration_min}
+            onChangeText={(v) => onChange((s) => ({ ...s, duration_min: v }))}
+            keyboardType="numeric"
+            placeholder="15"
+            placeholderTextColor={colors['mid-gray']}
+            style={[styles.input, disabled && styles.inputDisabled]}
+          />
+        </Field>
+      )}
+      <Field label="备注">
+        <TextInput
+          editable={!disabled}
+          value={value.notes}
+          onChangeText={(v) => onChange((s) => ({ ...s, notes: v }))}
+          placeholder="例如：精神好，喝完后拍嗝顺利"
+          placeholderTextColor={colors['mid-gray']}
+          multiline
+          style={[styles.input, styles.inputMultiline, disabled && styles.inputDisabled]}
+        />
+      </Field>
+    </View>
+  );
+}
+
+function SleepForm({
+  value,
+  onChange,
+  disabled,
+}: FormSubProps<ReturnType<typeof initialSleepForm>>) {
+  return (
+    <View style={styles.formBody}>
+      <Field label="开始" hint="格式 YYYY-MM-DDTHH:mm">
+        <TextInput
+          editable={!disabled}
+          value={value.sleep_start}
+          onChangeText={(v) => onChange((s) => ({ ...s, sleep_start: v }))}
+          placeholder="2026-05-18T13:00"
+          placeholderTextColor={colors['mid-gray']}
+          style={[styles.input, disabled && styles.inputDisabled]}
+          autoCapitalize="none"
+        />
+      </Field>
+      <Field label="结束">
+        <TextInput
+          editable={!disabled}
+          value={value.sleep_end}
+          onChangeText={(v) => onChange((s) => ({ ...s, sleep_end: v }))}
+          placeholder="2026-05-18T14:30"
+          placeholderTextColor={colors['mid-gray']}
+          style={[styles.input, disabled && styles.inputDisabled]}
+          autoCapitalize="none"
+        />
+      </Field>
+      <SegmentedChoice
+        label="类型"
+        accessibilityLabel="睡眠类型"
+        options={SLEEP_TYPE_OPTIONS}
+        value={value.sleep_type}
+        disabled={disabled}
+        onChange={(sleep_type) =>
+          onChange((s) => ({
+            ...s,
+            sleep_type,
+            night_wakings: sleep_type === 'nap' ? '0' : s.night_wakings,
+          }))
+        }
+      />
+      {value.sleep_type === 'night' ? (
+        <Field label="夜醒次数">
+          <TextInput
+            editable={!disabled}
+            value={value.night_wakings}
+            onChangeText={(v) => onChange((s) => ({ ...s, night_wakings: v }))}
+            keyboardType="numeric"
+            placeholder="0"
+            placeholderTextColor={colors['mid-gray']}
+            style={[styles.input, disabled && styles.inputDisabled]}
+          />
+        </Field>
+      ) : null}
+      <Field label="补充说明（可选）">
+        <TextInput
+          editable={!disabled}
+          value={value.notes}
+          onChangeText={(v) => onChange((s) => ({ ...s, notes: v }))}
+          placeholder={
+            value.sleep_type === 'night'
+              ? '例如：胀气醒、换尿布后继续睡'
+              : '例如：入睡方式、醒来状态'
+          }
+          placeholderTextColor={colors['mid-gray']}
+          multiline
+          style={[styles.input, styles.inputMultiline, disabled && styles.inputDisabled]}
+        />
+      </Field>
+    </View>
+  );
+}
+
+function GrowthForm({
+  value,
+  onChange,
+  disabled,
+}: FormSubProps<ReturnType<typeof initialGrowthForm>>) {
+  return (
+    <View style={styles.formBody}>
+      <Text style={styles.growthExplainer}>
+        成长指标无需每日测量，按医生建议或自身节奏记录即可。
+      </Text>
+      <Field label="日期" hint="格式 YYYY-MM-DD">
+        <TextInput
+          editable={!disabled}
+          value={value.measurement_date}
+          onChangeText={(v) => onChange((s) => ({ ...s, measurement_date: v }))}
+          placeholder="2026-05-18"
+          placeholderTextColor={colors['mid-gray']}
+          style={[styles.input, disabled && styles.inputDisabled]}
+          autoCapitalize="none"
+        />
+      </Field>
+      <View style={styles.growthGrid}>
+        <View style={styles.growthCell}>
+          <Field label="体重 (g)">
+            <TextInput
+              editable={!disabled}
+              value={value.weight_g}
+              onChangeText={(v) => onChange((s) => ({ ...s, weight_g: v }))}
+              keyboardType="numeric"
+              placeholder="6500"
+              placeholderTextColor={colors['mid-gray']}
+              style={[styles.input, disabled && styles.inputDisabled]}
+            />
+          </Field>
+        </View>
+        <View style={styles.growthCell}>
+          <Field label="身高 (cm)">
+            <TextInput
+              editable={!disabled}
+              value={value.height_cm}
+              onChangeText={(v) => onChange((s) => ({ ...s, height_cm: v }))}
+              keyboardType="numeric"
+              placeholder="62.5"
+              placeholderTextColor={colors['mid-gray']}
+              style={[styles.input, disabled && styles.inputDisabled]}
+            />
+          </Field>
+        </View>
+        <View style={styles.growthCell}>
+          <Field label="头围 (cm)">
+            <TextInput
+              editable={!disabled}
+              value={value.head_cm}
+              onChangeText={(v) => onChange((s) => ({ ...s, head_cm: v }))}
+              keyboardType="numeric"
+              placeholder="40.0"
+              placeholderTextColor={colors['mid-gray']}
+              style={[styles.input, disabled && styles.inputDisabled]}
+            />
+          </Field>
+        </View>
+      </View>
+      <Field label="补充说明（可选）">
+        <TextInput
+          editable={!disabled}
+          value={value.notes}
+          onChangeText={(v) => onChange((s) => ({ ...s, notes: v }))}
+          placeholder="例如：家用软尺测量、饭后称重、复查时记录"
+          placeholderTextColor={colors['mid-gray']}
+          multiline
+          style={[styles.input, styles.inputMultiline, disabled && styles.inputDisabled]}
+        />
+      </Field>
+    </View>
+  );
+}
+
+function HealthForm({
+  value,
+  onChange,
+  disabled,
+}: FormSubProps<ReturnType<typeof initialHealthForm>>) {
+  return (
+    <View style={styles.formBody}>
+      <Field label="日期" hint="格式 YYYY-MM-DD">
+        <TextInput
+          editable={!disabled}
+          value={value.record_date}
+          onChangeText={(v) => onChange((s) => ({ ...s, record_date: v }))}
+          placeholder="2026-05-18"
+          placeholderTextColor={colors['mid-gray']}
+          style={[styles.input, disabled && styles.inputDisabled]}
+          autoCapitalize="none"
+        />
+      </Field>
+      <SegmentedChoice
+        label="类型"
+        accessibilityLabel="健康类型"
+        options={HEALTH_TYPE_OPTIONS}
+        value={value.record_type}
+disabled={disabled}
+        onChange={(record_type) => onChange((s) => ({ ...s, record_type }))}
+      />
+      <Field label="标题">
+        <TextInput
+          editable={!disabled}
+          value={value.title}
+          onChangeText={(v) => onChange((s) => ({ ...s, title: v }))}
+          maxLength={200}
+          placeholder="例如：儿保复查"
+          placeholderTextColor={colors['mid-gray']}
+          style={[styles.input, disabled && styles.inputDisabled]}
+        />
+      </Field>
+      <Field label="说明">
+        <TextInput
+          editable={!disabled}
+          value={value.description}
+          onChangeText={(v) => onChange((s) => ({ ...s, description: v }))}
+          placeholder="记录医生建议、症状或观察重点"
+          placeholderTextColor={colors['mid-gray']}
+          multiline
+          style={[styles.input, styles.inputMultiline, disabled && styles.inputDisabled]}
+        />
+      </Field>
+    </View>
+  );
+}
+
+// ---------- Styles ---------------------------------------------------------
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors['warm-cream'],
   },
-  center: {
+  kav: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-
-  // --- List header (subtitle + action grid + offline banner) -------------
-  headerBlock: {
+  scrollContent: {
+    paddingHorizontal: spacing['4'],
     paddingTop: spacing['3'],
-    paddingBottom: spacing['4'],
-    gap: spacing['4'],
-  },
-  subtitle: {
-    ...typography.bodySmall,
-    paddingHorizontal: spacing['4'],
+    paddingBottom: layout.tabbarHeight + spacing['6'],
+    gap: spacing['3'],
   },
 
-  // --- 4-up action cards --------------------------------------------------
-  actions: {
-    flexDirection: 'row',
-    paddingHorizontal: spacing['4'],
+  // Header
+  header: {
+    paddingHorizontal: spacing['1'],
+    gap: spacing['1'],
+  },
+  headerDate: {
+    ...typography.caption,
+    color: colors['fawn-amber'],
+    fontFamily: typography.tabLabel.fontFamily,
+  },
+  headerTitle: {
+    ...typography.title,
+    fontSize: 20,
+    lineHeight: 26,
+  },
+  headerSubtitle: {
+    ...typography.caption,
+    color: colors['mid-gray'],
+    fontStyle: 'italic',
+  },
+
+  // Banners
+  banner: {
+    borderRadius: radii.card,
+    padding: spacing['3'],
+    borderWidth: borderWidth.hairline,
+  },
+  bannerWarn: {
+    backgroundColor: colors['warning-amber-light'],
+    borderColor: colors['warning-amber'],
+  },
+  bannerInfo: {
+    backgroundColor: colors['nursery-powder'],
+    borderColor: colors['info-blue'],
     gap: spacing['2'],
   },
-  actionCard: {
+  bannerText: {
+    ...typography.bodySmall,
+    color: colors['dark-gray'],
+  },
+  bannerAction: {
+    alignSelf: 'flex-start',
+    minHeight: 40,
+    paddingHorizontal: spacing['4'],
+    backgroundColor: colors['card'],
+    borderRadius: radii.input,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  bannerActionPressed: {
+    opacity: 0.85,
+  },
+  bannerActionText: {
+    ...typography.button,
+    color: colors['info-blue'],
+  },
+
+  // Tabs
+  tabs: {
+    flexDirection: 'row',
+    gap: spacing['2'],
+  },
+  tabCard: {
     flex: 1,
     backgroundColor: colors['card'],
     borderRadius: radii.lg,
     borderWidth: borderWidth.hairline,
-    borderColor: colors['oat-border'],
-    paddingVertical: spacing['3'],
-    paddingHorizontal: spacing['2'],
+    borderColor: colors['frosted-border'],
+    paddingVertical: spacing['2'],
+    paddingHorizontal: spacing['1'],
     alignItems: 'center',
     gap: spacing['1'],
     ...shadows.card,
   },
-  actionCardPressed: {
-    opacity: opacity.pressed,
+  tabCardActive: {
+    borderColor: colors['fawn-amber'],
+    backgroundColor: colors['nursery-mint'],
   },
-  actionIcon: {
-    width: layout.tintedIconSm,
-    height: layout.tintedIconSm,
+  tabCardPressed: {
+    opacity: 0.85,
+  },
+  tabIcon: {
+    width: 28,
+    height: 28,
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  actionEmoji: {
-    fontSize: typography.heading.fontSize,
-  },
-  actionLabel: {
+  tabLabel: {
     ...typography.tabLabel,
     color: colors['soft-charcoal'],
   },
 
-  // --- Offline banner -----------------------------------------------------
-  banner: {
-    marginHorizontal: spacing['4'],
-    backgroundColor: colors['warning-amber-light'],
-    borderColor: colors['warning-amber'],
-    borderWidth: borderWidth.hairline,
-    borderRadius: radii.md,
-    padding: spacing['3'],
-  },
-  bannerText: {
-    ...typography.bodySmall,
-    color: colors['warning-amber'],
-  },
-
-  // --- Timeline list ------------------------------------------------------
-  listContent: {
-    paddingHorizontal: spacing['4'],
-    paddingBottom: layout.tabbarHeight + spacing['6'],
-    flexGrow: 1,
-  },
-  empty: {
-    ...typography.body,
-    color: colors['mid-gray'],
-    textAlign: 'center',
-    marginTop: spacing['12'],
-  },
-  separator: {
-    height: spacing['2'],
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: colors['card'],
-    borderRadius: radii.lg,
-    borderWidth: borderWidth.hairline,
-    borderColor: colors['oat-border'],
-    padding: spacing['3'],
+  // Form card
+  formCard: {
     gap: spacing['3'],
-    ...shadows.card,
+    padding: spacing['4'],
   },
-  rowIcon: {
-    width: layout.tintedIconMd,
-    height: layout.tintedIconMd,
+  formHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing['3'],
+  },
+  formHeaderIcon: {
+    width: 36,
+    height: 36,
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowIconText: {
-    fontSize: typography.heading.fontSize,
-  },
-  rowMain: {
+  formHeaderTextBlock: {
     flex: 1,
     minWidth: 0,
+    gap: spacing['1'],
   },
-  rowKind: {
+  formHeaderTitle: {
+    ...typography.heading,
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  formHeaderDesc: {
     ...typography.caption,
-    fontFamily: typography.tabLabel.fontFamily,
+    color: colors['dark-gray'],
   },
-  rowBody: {
-    ...typography.body,
-    marginTop: spacing['1'],
-  },
-  rowWhen: {
-    ...typography.caption,
-    marginTop: spacing['1'],
-  },
-  thumb: {
-    width: layout.thumb,
-    height: layout.thumb,
-    borderRadius: radii.md,
-    marginTop: spacing['1'],
+  formBody: {
+    gap: spacing['3'],
   },
 
-  // --- Modal form ---------------------------------------------------------
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: colors['modal-backdrop'],
-    justifyContent: 'flex-end',
+  // Field
+  field: {
+    gap: spacing['1'],
   },
-  modalCard: {
-    backgroundColor: colors['card'],
-    borderTopLeftRadius: radii.card,
-    borderTopRightRadius: radii.card,
-    padding: spacing['5'],
-    paddingBottom: spacing['8'],
-    ...shadows.modal,
-  },
-  formTitle: {
-    ...typography.heading,
-    marginBottom: spacing['3'],
-  },
-  label: {
+  fieldLabel: {
     ...typography.bodySmall,
-    marginTop: spacing['3'],
-    marginBottom: spacing['2'],
+    fontFamily: typography.tabLabel.fontFamily,
+    color: colors['dark-gray'],
+  },
+  fieldHint: {
+    ...typography.caption,
+    color: colors['mid-gray'],
+    fontStyle: 'italic',
   },
   input: {
     borderWidth: borderWidth.hairline,
     borderColor: colors['oat-border'],
     borderRadius: radii.md,
+    backgroundColor: colors['card'],
     paddingHorizontal: spacing['3'],
     paddingVertical: spacing['3'],
-    backgroundColor: colors['card'],
-    ...typography.body,
+    minHeight: 44,
+    ...typography.inputBody,
   },
   inputMultiline: {
     minHeight: layout.inputMultilineMinHeight,
     textAlignVertical: 'top',
   },
-  hint: {
-    ...typography.bodySmall,
-    marginTop: spacing['3'],
+  inputDisabled: {
+    backgroundColor: colors['warm-gray'],
+    color: colors['mid-gray'],
   },
-  segmented: {
-    flexDirection: 'row',
-    gap: spacing['2'],
+
+  // Growth tab specifics
+  growthExplainer: {
+    ...typography.caption,
+    color: colors['dark-gray'],
     backgroundColor: colors['warm-gray'],
     borderRadius: radii.md,
-    padding: spacing['1'],
-    borderWidth: borderWidth.hairline,
-    borderColor: colors['oat-border'],
-  },
-  segment: {
-    flex: 1,
+    paddingHorizontal: spacing['3'],
     paddingVertical: spacing['2'],
-    borderRadius: radii.sm,
-    alignItems: 'center',
   },
-  segmentActive: {
-    backgroundColor: colors['card'],
-    ...shadows.card,
-  },
-  segmentText: {
-    ...typography.bodySmall,
-    color: colors['dark-gray'],
-  },
-  segmentTextActive: {
-    ...typography.button,
-    color: colors['fawn-amber'],
-  },
-  formActions: {
+  growthGrid: {
     flexDirection: 'row',
-    gap: spacing['3'],
-    marginTop: spacing['5'],
+    gap: spacing['2'],
   },
-  formButton: {
+  growthCell: {
     flex: 1,
-    paddingVertical: spacing['3'],
-    borderRadius: radii.input,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: layout.iconButton,
   },
-  formButtonPrimary: {
-    backgroundColor: colors['fawn-amber'],
+
+  // Status
+  statusBanner: {
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing['3'],
+    paddingVertical: spacing['2'],
   },
-  formButtonText: {
-    ...typography.button,
-    color: colors['card'],
+  statusSuccess: {
+    backgroundColor: colors['nursery-mint'],
   },
-  formButtonSecondary: {
-    backgroundColor: colors['card'],
-    borderWidth: borderWidth.hairline,
-    borderColor: colors['oat-border'],
+  statusError: {
+    backgroundColor: colors['safety-red-light'],
   },
-  formButtonSecondaryText: {
-    ...typography.button,
-    color: colors['dark-gray'],
+  statusText: {
+    ...typography.bodySmall,
   },
-  buttonDisabled: {
-    opacity: opacity.disabled,
+  statusSuccessText: {
+    color: colors['brand-strong'],
+  },
+  statusErrorText: {
+    color: colors['safety-red'],
+  },
+
+  submitButton: {
+    minHeight: 44,
+    width: '100%',
+  },
+
+  // Growth history card
+  historyCard: {
+    gap: spacing['2'],
+    padding: spacing['4'],
+  },
+  historyTitle: {
+    ...typography.heading,
+    fontSize: 16,
+    lineHeight: 20,
   },
 });

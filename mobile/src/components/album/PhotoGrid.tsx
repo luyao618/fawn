@@ -11,7 +11,6 @@ import React, { useMemo } from 'react';
 import {
   Dimensions,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -38,7 +37,8 @@ function formatGroupDate(iso: string): string {
 function formatShortDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // Mirrors Web `formatDate(..., 'M月d日')` default used by PhotoGrid tile.
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
 function pickGroupKey(photo: PhotoRecord, view: AlbumView): string {
@@ -140,36 +140,9 @@ export function PhotoGrid({ photos, view, onPhotoPress }: PhotoGridProps) {
   );
 }
 
-/**
- * Convenience wrapper that places the grid inside a vertical ScrollView with
- * the right outer padding. The AlbumScreen uses this so the page-level header
- * (mode tabs) can sit above and scroll together with the grid.
- */
-export function PhotoGridScroll(
-  props: PhotoGridProps & { header?: React.ReactNode; footerPadding?: number },
-) {
-  return (
-    <ScrollView
-      contentContainerStyle={[
-        styles.scrollContent,
-        { paddingBottom: props.footerPadding ?? spacing['12'] },
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      {props.header}
-      <PhotoGrid {...props} />
-    </ScrollView>
-  );
-}
-
 const styles = StyleSheet.create({
   root: {
     gap: spacing['5'],
-  },
-  scrollContent: {
-    paddingHorizontal: spacing['4'],
-    paddingTop: spacing['4'],
-    gap: spacing['4'],
   },
   section: {
     gap: spacing['2'],

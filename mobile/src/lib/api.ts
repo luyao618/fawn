@@ -2,6 +2,7 @@ import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'ax
 import Constants from 'expo-constants';
 
 import { getActiveAccount, getActiveUserId, removeAccount } from './tokenStorage';
+import type { Baby, Family, User, UserCreate, UserUpdate } from './types';
 
 // Extend axios request config so we can remember which stored userId actually
 // signed a given request. The 401 handler relies on this to avoid a race where
@@ -69,4 +70,89 @@ api.interceptors.response.use(
 
 export function getApiBaseUrl(): string {
   return resolveBaseUrl();
+}
+
+// ---------------------------------------------------------------------------
+// Memory files
+// ---------------------------------------------------------------------------
+
+export type MemoryFileKind = 'soul' | 'family' | 'baby' | 'user';
+
+export interface MemoryFileSummary {
+  id: string;
+  label: string;
+  kind: MemoryFileKind;
+  filename: string;
+  can_edit: boolean;
+  limit: number;
+}
+
+export interface MemoryFileRead extends MemoryFileSummary {
+  content: string;
+}
+
+export async function getMemoryFiles(): Promise<MemoryFileSummary[]> {
+  const response = await api.get<MemoryFileSummary[]>('/memory/files');
+  return response.data;
+}
+
+export async function getMemoryFile(id: string): Promise<MemoryFileRead> {
+  const response = await api.get<MemoryFileRead>(`/memory/files/${encodeURIComponent(id)}`);
+  return response.data;
+}
+
+export async function updateMemoryFile(id: string, content: string): Promise<MemoryFileRead> {
+  const response = await api.put<MemoryFileRead>(`/memory/files/${encodeURIComponent(id)}`, {
+    content,
+  });
+  return response.data;
+}
+
+// ---------------------------------------------------------------------------
+// Family / Baby / Users — mirrors frontend `api.*` methods. Endpoints come
+// from backend routers: `/family` (family.py), `/baby` (baby.py), and `/users`
+// (auth.py, no extra prefix).
+// ---------------------------------------------------------------------------
+
+export async function getFamily(): Promise<Family> {
+  const response = await api.get<Family>('/family');
+  return response.data;
+}
+
+export async function updateFamily(data: Partial<Family>): Promise<Family> {
+  const response = await api.patch<Family>('/family', data);
+  return response.data;
+}
+
+export async function getBaby(): Promise<Baby | null> {
+  const response = await api.get<Baby | null>('/baby');
+  return response.data;
+}
+
+export async function updateBaby(data: Partial<Baby>): Promise<Baby> {
+  const response = await api.patch<Baby>('/baby', data);
+  return response.data;
+}
+
+export async function getUsers(): Promise<User[]> {
+  const response = await api.get<User[]>('/users');
+  return response.data;
+}
+
+export async function createUser(data: UserCreate): Promise<User> {
+  const response = await api.post<User>('/users', data);
+  return response.data;
+}
+
+export async function updateUser(id: string, data: UserUpdate): Promise<User> {
+  const response = await api.patch<User>(`/users/${id}`, data);
+  return response.data;
+}
+
+export async function updateUserPassword(id: string, password: string): Promise<void> {
+  await api.patch(`/users/${id}/password`, { password });
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  await api.delete(`/users/${id}`);
 }

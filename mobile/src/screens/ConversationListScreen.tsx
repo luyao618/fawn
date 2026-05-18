@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import React from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   FlatList,
@@ -9,29 +10,21 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-
 import {
   chatQueries,
-  createConversation,
   type ConversationSummary,
 } from '../shared/api';
 import {
   colors,
   fontFamily,
-  iconButtonRadius,
-  layout,
   radii,
   shadows,
   spacing,
   typography,
 } from '../shared/theme';
-import { TopBar } from '../components/layout/TopBar';
-
 /**
  * Conversation list — entry point of the 管家 (chat) tab. Each row is a
- * cream card with the summary + meta. The "新会话" action sits in the TopBar
- * right slot so it stays consistent with other module headers.
+ * cream card with the summary + meta.
  *
  * Visual tokens only — never inline hex / radii / shadows.
  */
@@ -52,21 +45,10 @@ function summaryFor(c: ConversationSummary): string {
 }
 
 export function ConversationListScreen({ onOpenConversation }: Props) {
+  const insets = useSafeAreaInsets();
   const { data, isPending, isFetching, isError, error, refetch } = useQuery(
     chatQueries.conversations(),
   );
-  const [creating, setCreating] = React.useState(false);
-
-  const handleNewConversation = async () => {
-    setCreating(true);
-    try {
-      const conv = await createConversation();
-      await refetch();
-      onOpenConversation(conv.id);
-    } finally {
-      setCreating(false);
-    }
-  };
 
   if (isPending && !data) {
     return (
@@ -77,26 +59,7 @@ export function ConversationListScreen({ onOpenConversation }: Props) {
   }
 
   return (
-    <View style={styles.canvas}>
-      <TopBar
-        title="管家"
-        rightAction={
-          <Pressable
-            onPress={handleNewConversation}
-            disabled={creating}
-            accessibilityRole="button"
-            accessibilityLabel="新会话"
-            style={[styles.newButton, creating && styles.buttonDisabled]}
-          >
-            {creating ? (
-              <ActivityIndicator size="small" color={colors['on-brand']} />
-            ) : (
-              <Ionicons name="add" size={22} color={colors['on-brand']} />
-            )}
-          </Pressable>
-        }
-      />
-
+    <View style={[styles.canvas, { paddingTop: insets.top }]}>
       {isError ? (
         <View style={styles.banner}>
           <Text style={styles.bannerText}>
@@ -150,16 +113,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors['warm-cream'],
   },
-  newButton: {
-    width: layout.iconButton,
-    height: layout.iconButton,
-    borderRadius: iconButtonRadius,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors['fawn-amber'],
-    ...shadows.card,
-  },
-  buttonDisabled: { opacity: 0.6 },
   banner: {
     marginHorizontal: spacing['4'],
     marginTop: spacing['3'],

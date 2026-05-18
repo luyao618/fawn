@@ -40,6 +40,12 @@ export const queryKeys = {
       [...queryKeys.dashboard.all, 'sleep-stats', { days }] as const,
     health: () => [...queryKeys.dashboard.all, 'health'] as const,
   },
+  tracker: {
+    all: ['tracker'] as const,
+    feeding: () => [...queryKeys.tracker.all, 'feeding'] as const,
+    sleep: () => [...queryKeys.tracker.all, 'sleep'] as const,
+    health: () => [...queryKeys.tracker.all, 'health'] as const,
+  },
   album: {
     all: ['album'] as const,
     photos: (view: string) => [...queryKeys.album.all, 'photos', view] as const,

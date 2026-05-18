@@ -53,36 +53,102 @@ export async function uploadChatImage(
 }
 
 /**
- * Send a chat message. The backend streams an SSE response of tokens + a final
- * `done` event with the assistant message id. For v1 we don't render the
- * intermediate tokens — we wait for the stream to finish, then re-fetch the
- * conversation so the canonical user + assistant rows land in the cache. This
- * keeps the UI logic small and matches the AC ("发文本/图片消息成功并落聊天历史").
+ * Send a chat message. The backend streams an SSE response of tokens followed
+ * by a final `done` event with the assistant message id. We parse SSE frames
+ * incrementally via XMLHttpRequest's `onprogress` event (RN's default fetch
+ * buffers the whole body before resolving, which makes streaming impossible
+ * out of the box). Callers receive `onToken` for each token chunk and `onDone`
+ * once the assistant message is committed; after `onDone` they should
+ * invalidate the conversation query to swap the streamed text for the
+ * authoritative row.
  */
+export interface SendChatMessageCallbacks {
+  onToken?: (content: string) => void;
+  onDone?: (messageId: string, messageType: string) => void;
+}
+
 export async function sendChatMessage(
   conversationId: string,
   content: string,
   imageUrl: string | null,
   baseUrl: string,
   token: string | null,
+  callbacks: SendChatMessageCallbacks = {},
 ): Promise<void> {
   const url = `${baseUrl}/chat/conversations/${conversationId}/messages`;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'text/event-stream',
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ content, image_url: imageUrl }),
+  const body = JSON.stringify({ content, image_url: imageUrl });
+  const { onToken, onDone } = callbacks;
+
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    let processed = 0;
+    let buffer = '';
+
+    const parseChunk = (raw: string) => {
+      buffer += raw;
+      // SSE events are separated by a blank line ("\n\n"). Process every
+      // complete event and leave the trailing partial event in `buffer`.
+      let sepIdx: number;
+      while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
+        const event = buffer.slice(0, sepIdx);
+        buffer = buffer.slice(sepIdx + 2);
+        // Each event may have multiple lines; we only care about `data:` lines.
+        for (const line of event.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const payload = trimmed.slice(5).trim();
+          if (!payload) continue;
+          try {
+            const parsed = JSON.parse(payload) as {
+              type?: string;
+              content?: string;
+              message_id?: string;
+              message_type?: string;
+            };
+            if (parsed.type === 'token' && typeof parsed.content === 'string') {
+              onToken?.(parsed.content);
+            } else if (parsed.type === 'done') {
+              onDone?.(parsed.message_id ?? '', parsed.message_type ?? 'text');
+            }
+          } catch {
+            // Ignore malformed frames — the server occasionally sends keep-alives.
+          }
+        }
+      }
+    };
+
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('Accept', 'text/event-stream');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    xhr.onprogress = () => {
+      const text = xhr.responseText;
+      if (text.length > processed) {
+        const chunk = text.slice(processed);
+        processed = text.length;
+        parseChunk(chunk);
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`send message failed: ${xhr.status}`));
+        return;
+      }
+      // Flush any remaining bytes that arrived after the last `onprogress`.
+      const text = xhr.responseText;
+      if (text.length > processed) {
+        const chunk = text.slice(processed);
+        processed = text.length;
+        parseChunk(chunk);
+      }
+      resolve();
+    };
+    xhr.onerror = () => reject(new Error('send message network error'));
+    xhr.ontimeout = () => reject(new Error('send message timed out'));
+
+    xhr.send(body);
   });
-  if (!res.ok) {
-    throw new Error(`send message failed: ${res.status}`);
-  }
-  // Drain the body so the server commits before we re-fetch. We don't need to
-  // parse the SSE frames for v1.
-  await res.text();
 }
 
 export const chatQueries = {

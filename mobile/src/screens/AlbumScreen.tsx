@@ -8,6 +8,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -21,7 +22,6 @@ import {
   View,
 } from 'react-native';
 
-import { TopBar } from '../components/layout/TopBar';
 import {
   PhotoGrid,
   type AlbumView,
@@ -45,6 +45,7 @@ const MODES: ReadonlyArray<{ value: AlbumView; label: string }> = [
 ];
 
 export function AlbumScreen() {
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [view, setView] = useState<AlbumView>('timeline');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -128,9 +129,7 @@ export function AlbumScreen() {
   );
 
   return (
-    <View style={styles.root}>
-      <TopBar title="相册" />
-
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -233,7 +232,8 @@ const styles = StyleSheet.create({
   },
   modeCard: {
     borderRadius: radii.tile,
-    backgroundColor: colors['card-translucent'],
+    // Mirrors Web `bg-white/85` on the album mode card.
+    backgroundColor: colors['white-soft'],
     borderWidth: 1,
     borderColor: colors['frosted-border'],
     padding: spacing['2'],

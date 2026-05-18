@@ -1,5 +1,6 @@
 import { useQueries } from '@tanstack/react-query';
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -9,63 +10,97 @@ import {
   View,
 } from 'react-native';
 
-import { TopBar } from '../components/layout/TopBar';
-import { BabyInfoCard } from '../components/dashboard/BabyInfoCard';
+import { DashboardOverview } from '../components/dashboard/DashboardOverview';
 import { FeedingStats } from '../components/dashboard/FeedingStats';
-import { GrowthChart } from '../components/dashboard/GrowthChart';
 import { HealthTimeline } from '../components/dashboard/HealthTimeline';
 import { LatestGrowthCards } from '../components/dashboard/LatestGrowthCards';
 import { SleepStats } from '../components/dashboard/SleepStats';
 import {
-  babyQueries,
+  RecentRecords,
+  buildRecentRecords,
+} from '../components/dashboard/RecentRecords';
+import {
   dashboardQueries,
   growthQueries,
+  trackerQueries,
 } from '../shared/api';
-import { colors, layout, spacing, typography } from '../shared/theme';
+import { colors, layout, radii, spacing, typography } from '../shared/theme';
+
+const STATS_HISTORY_DAYS = 90;
 
 /**
- * 成长 Dashboard — single screen that replaces the old `HomeScreen`,
- * `GrowthScreen`, and `BabyScreen` trio. Mirrors the Web Dashboard
+ * 成长 Dashboard — mirrors the web Dashboard
  * (`frontend/src/app/(main)/dashboard/page.tsx`) section ordering:
  *
- *   1. BabyInfoCard      — name + age
- *   2. LatestGrowthCards — newest weight/height/head pill
- *   3. GrowthChart       — WHO percentile reference + actual line
- *   4. FeedingStats      — daily formula bars + averages
- *   5. SleepStats        — daily sleep hours + averages
- *   6. HealthTimeline    — health record list
+ *   1. Error banner (optional)
+ *   2. DashboardOverview    — avatar + 今日摘要 + StatChips
+ *   3. LatestGrowthCards    — 体重 / 身高 / 头围 inline pill
+ *   4. FeedingStats         — 日均统计 + bar (PORT DECISION: no chart lib)
+ *   5. SleepStats           — 日均统计 + bar (PORT DECISION: no chart lib)
+ *   6. HealthTimeline       — 健康事件 timeline
+ *   7. RecentRecords        — 最近 5 条混合记录
  *
- * Data is fetched in parallel via `useQueries` so the screen renders any
- * sections that resolve while others are still in flight (no full-screen
- * spinner once any cache exists).
+ * Data is fetched in parallel via `useQueries` so each section renders as its
+ * cache resolves; no full-screen spinner once any cache exists.
+ *
+ * PORT DECISION: brush range and recharts line/bar charts deferred — mobile
+ * has no chart lib in `package.json` and adding one is out of scope.
+ * `FeedingStats`/`SleepStats` use the in-house `MiniBarChart` with stat
+ * triads/duads above.
  */
 export function DashboardScreen() {
+  const insets = useSafeAreaInsets();
   const results = useQueries({
     queries: [
-      babyQueries.detail(),
       dashboardQueries.summary(),
-      growthQueries.chart(),
-      dashboardQueries.feedingStats(30),
-      dashboardQueries.sleepStats(30),
+      dashboardQueries.feedingStats(STATS_HISTORY_DAYS),
+      dashboardQueries.sleepStats(STATS_HISTORY_DAYS),
       dashboardQueries.health(),
+      growthQueries.records(),
+      trackerQueries.feeding(),
+      trackerQueries.sleep(),
     ],
   });
   const [
-    babyResult,
     summaryResult,
-    chartResult,
-    feedingResult,
-    sleepResult,
+    feedingStatsResult,
+    sleepStatsResult,
     healthResult,
+    growthRecordsResult,
+    feedingRecordsResult,
+    sleepRecordsResult,
   ] = results;
 
   const isFetching = results.some((r) => r.isFetching);
   const isInitialLoading = results.every((r) => r.isPending && r.data === undefined);
-  const anyError = results.find((r) => r.isError);
+  const failedCount = results.filter((r) => r.isError).length;
+  const loadError =
+    failedCount > 0 ? `有 ${failedCount} 项数据暂时没更新，已保留可用内容。` : null;
 
   const refetchAll = () => {
     results.forEach((r) => r.refetch());
   };
+
+  const recentRecords = useMemo(() => {
+    if (
+      !growthRecordsResult.data ||
+      !feedingRecordsResult.data ||
+      !sleepRecordsResult.data
+    ) {
+      return [];
+    }
+    return buildRecentRecords(
+      growthRecordsResult.data,
+      feedingRecordsResult.data,
+      sleepRecordsResult.data,
+      healthResult.data ?? [],
+    );
+  }, [
+    growthRecordsResult.data,
+    feedingRecordsResult.data,
+    sleepRecordsResult.data,
+    healthResult.data,
+  ]);
 
   if (isInitialLoading) {
     return (
@@ -76,8 +111,7 @@ export function DashboardScreen() {
   }
 
   return (
-    <View style={styles.root}>
-      <TopBar title="成长" />
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={
@@ -88,41 +122,31 @@ export function DashboardScreen() {
           />
         }
       >
-        {anyError ? (
+        {loadError ? (
           <View style={styles.banner}>
-            <Text style={styles.bannerText}>
-              离线 / 拉取失败，显示的是缓存数据。
-              {'\n'}
-              {(anyError.error as Error)?.message ?? ''}
-            </Text>
+            <Text style={styles.bannerText}>{loadError}</Text>
           </View>
         ) : null}
 
         {summaryResult.data ? (
-          <BabyInfoCard summary={summaryResult.data} />
+          <DashboardOverview
+            summary={summaryResult.data}
+            latestRecord={recentRecords[0]}
+          />
         ) : (
           <View style={styles.skeleton} />
         )}
 
         <LatestGrowthCards latest={summaryResult.data?.latest_growth ?? null} />
 
-        {chartResult.data ? (
-          <GrowthChart
-            data={chartResult.data}
-            birthDate={babyResult.data?.birth_date ?? null}
-          />
+        {feedingStatsResult.data ? (
+          <FeedingStats data={feedingStatsResult.data} />
         ) : (
           <View style={styles.skeletonTall} />
         )}
 
-        {feedingResult.data ? (
-          <FeedingStats data={feedingResult.data} />
-        ) : (
-          <View style={styles.skeletonTall} />
-        )}
-
-        {sleepResult.data ? (
-          <SleepStats data={sleepResult.data} />
+        {sleepStatsResult.data ? (
+          <SleepStats data={sleepStatsResult.data} />
         ) : (
           <View style={styles.skeletonTall} />
         )}
@@ -132,6 +156,8 @@ export function DashboardScreen() {
         ) : (
           <View style={styles.skeletonTall} />
         )}
+
+        <RecentRecords records={recentRecords} />
       </ScrollView>
     </View>
   );
@@ -158,7 +184,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors['warning-amber-light'],
     borderColor: colors['warning-amber'],
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: radii.lg,
     padding: spacing['3'],
   },
   bannerText: {
@@ -166,15 +192,15 @@ const styles = StyleSheet.create({
     color: colors['soft-charcoal'],
   },
   skeleton: {
-    height: 96,
+    height: 140,
     backgroundColor: colors.card,
-    borderRadius: 28,
+    borderRadius: radii.card,
     opacity: 0.5,
   },
   skeletonTall: {
-    height: 220,
+    height: 200,
     backgroundColor: colors.card,
-    borderRadius: 28,
+    borderRadius: radii.card,
     opacity: 0.5,
   },
 });

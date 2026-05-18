@@ -58,6 +58,35 @@ export async function createGrowth(input: GrowthCreateInput): Promise<GrowthReco
   return data;
 }
 
+// ---------- Sleep ----------
+
+export interface SleepCreateInput {
+  sleep_start: string; // ISO datetime
+  sleep_end?: string | null;
+  sleep_type: 'nap' | 'night';
+  night_wakings?: number;
+  notes?: string | null;
+}
+
+export async function createSleep(input: SleepCreateInput): Promise<unknown> {
+  const { data } = await api.post('/tracker/sleep', input);
+  return data;
+}
+
+// ---------- Health ----------
+
+export interface HealthCreateInput {
+  record_date: string; // YYYY-MM-DD
+  record_type: 'vaccination' | 'illness' | 'checkup';
+  title: string;
+  description?: string | null;
+}
+
+export async function createHealth(input: HealthCreateInput): Promise<unknown> {
+  const { data } = await api.post('/tracker/health', input);
+  return data;
+}
+
 // ---------- Photo (album) ----------
 
 interface PaginatedPhotos {
@@ -72,19 +101,6 @@ async function fetchPhotos(): Promise<PhotoRecord[]> {
     params: { view: 'timeline', page: 1, page_size: 50 },
   });
   return data.items;
-}
-
-export async function uploadPhoto(
-  uri: string,
-  mimeType: string,
-  filename: string,
-): Promise<PhotoRecord> {
-  const form = new FormData();
-  form.append('file', { uri, type: mimeType, name: filename } as unknown as Blob);
-  const { data } = await api.post<PhotoRecord>('/album/photos', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-  return data;
 }
 
 // ---------- Unified timeline ----------
