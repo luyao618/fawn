@@ -117,12 +117,7 @@ function ProfileStack() {
   return (
     <ProfileNav.Navigator screenOptions={{ headerShown: false }}>
       <ProfileNav.Screen name={ROUTES.PROFILE_HOME}>
-        {({ navigation }) => (
-          <ProfileScreen
-            onOpenAgentTasks={() => navigation.navigate(ROUTES.AGENT_TASKS)}
-            onOpenMemory={() => navigation.navigate(ROUTES.MEMORY_FILE_LIST)}
-          />
-        )}
+        {({ navigation }) => <ProfileScreen navigation={navigation} />}
       </ProfileNav.Screen>
       <ProfileNav.Screen name={ROUTES.AGENT_TASKS}>
         {({ navigation }) => (
