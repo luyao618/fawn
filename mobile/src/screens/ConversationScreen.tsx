@@ -200,6 +200,7 @@ export function ConversationScreen({ conversationId, onBack }: Props) {
           </View>
         ) : null}
 
+        {/* PORT DECISION: MessageList skipped — FlatList covers this RN-idiomatically. */}
         <FlatList
           ref={listRef}
           data={messages}
