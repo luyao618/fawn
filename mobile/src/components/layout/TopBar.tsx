@@ -9,20 +9,32 @@ import { colors, iconButtonRadius, layout, radii, shadows, spacing, typography }
  * Mobile TopBar — aligns with `frontend/src/components/layout/TopBar.tsx`.
  *
  * - Sticky header look with a soft cream background and a frosted border.
- * - Optional back button on the left, optional right action slot.
+ * - Optional leading button: either a back chevron (`onBack`) OR a hamburger
+ *   menu (`onMenu`) — mutually exclusive at the TypeScript level via a
+ *   discriminated union, so a caller cannot accidentally pass both.
+ * - Optional right action slot.
  * - Title uses the brand `soft-charcoal` color and Nunito SemiBold.
  */
 
-interface TopBarProps {
+interface BaseTopBarProps {
   title: string;
-  /** Optional back press handler — renders the chevron when provided. */
-  onBack?: () => void;
   /** Optional right-aligned slot for icons / actions. */
   rightAction?: React.ReactNode;
   style?: ViewStyle;
 }
 
-export function TopBar({ title, onBack, rightAction, style }: TopBarProps) {
+type LeadingMenu = { onMenu: (() => void) | undefined; onBack?: never };
+type LeadingBack = { onBack: (() => void) | undefined; onMenu?: never };
+type LeadingNone = { onBack?: never; onMenu?: never };
+
+export type TopBarProps = BaseTopBarProps & (LeadingMenu | LeadingBack | LeadingNone);
+
+export function TopBar(props: TopBarProps) {
+  const { title, rightAction, style } = props;
+  // Narrow without referencing the union members directly; runtime branches
+  // are mutually exclusive by construction (see discriminated union above).
+  const onBack = 'onBack' in props ? props.onBack : undefined;
+  const onMenu = 'onMenu' in props ? props.onMenu : undefined;
   const insets = useSafeAreaInsets();
 
   return (
@@ -36,7 +48,20 @@ export function TopBar({ title, onBack, rightAction, style }: TopBarProps) {
     >
       <View style={styles.bar}>
         <View style={styles.left}>
-          {onBack ? (
+          {onMenu ? (
+            <Pressable
+              onPress={onMenu}
+              accessibilityRole="button"
+              accessibilityLabel="菜单"
+              style={styles.backButton}
+            >
+              <Ionicons
+                name="menu-outline"
+                size={24}
+                color={colors['soft-charcoal']}
+              />
+            </Pressable>
+          ) : onBack ? (
             <Pressable
               onPress={onBack}
               accessibilityRole="button"
