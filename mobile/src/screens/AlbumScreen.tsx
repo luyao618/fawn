@@ -2,9 +2,9 @@
 //
 // Top of the page hosts a mode switcher (时间线 / 场景 / 里程碑) that drives the
 // `view` parameter on the photo list query. Below it sits the photo grid. A
-// floating upload button hovers above the bottom TabBar; tapping it triggers
-// the camera / library picker and uploads via the album API. Tapping a tile
-// opens the full-screen viewer with swipe / zoom gestures.
+// floating upload button hovers above the bottom safe-area inset; tapping it
+// triggers the camera / library picker and uploads via the album API. Tapping
+// a tile opens the full-screen viewer with swipe / zoom gestures.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
