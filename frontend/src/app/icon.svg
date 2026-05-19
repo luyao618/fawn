@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Fawn antlers icon">
-  <rect width="512" height="512" rx="112" fill="#ECFDF5" />
+  <rect width="512" height="512" rx="112" fill="#F4E4D0" />
   <path
     d="M256 364V214M256 214c-28-34-43-72-43-113M256 214c28-34 43-72 43-113M213 168c-34 0-62-25-76-68M213 168c-41 16-78 14-111-6M213 168c-17 29-42 47-74 55M299 168c34 0 62-25 76-68M299 168c41 16 78 14 111-6M299 168c17 29 42 47 74 55M256 364c-43-17-82-48-116-91M256 364c43-17 82-48 116-91"
     fill="none"
-    stroke="#294E3F"
+    stroke="#5A3415"
     stroke-width="34"
     stroke-linecap="round"
     stroke-linejoin="round"
   />
-  <circle cx="256" cy="378" r="22" fill="#416656" />
+  <circle cx="256" cy="378" r="22" fill="#7C4A20" />
 </svg>
