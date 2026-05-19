@@ -8,6 +8,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
@@ -27,6 +28,7 @@ import {
   type AlbumView,
 } from '../components/album/PhotoGrid';
 import { PhotoViewer } from '../components/album/PhotoViewer';
+import { TopBar } from '../components/layout/TopBar';
 import { UploadButton, type PickedAsset } from '../components/album/UploadButton';
 import {
   albumQueries,
@@ -46,6 +48,11 @@ const MODES: ReadonlyArray<{ value: AlbumView; label: string }> = [
 
 export function AlbumScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const openDrawer = useCallback(
+    () => navigation.dispatch(DrawerActions.openDrawer()),
+    [navigation],
+  );
   const queryClient = useQueryClient();
   const [view, setView] = useState<AlbumView>('timeline');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -129,9 +136,13 @@ export function AlbumScreen() {
   );
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={styles.root}>
+      <TopBar title="相册" onMenu={openDrawer} />
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + spacing['12'] },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={isFetching && !isPending} onRefresh={() => refetch()} />
@@ -227,7 +238,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing['4'],
     paddingTop: spacing['4'],
-    paddingBottom: layout.tabbarHeight + spacing['12'],
     gap: spacing['4'],
   },
   modeCard: {

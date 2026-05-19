@@ -12,6 +12,10 @@
 // Edit flows are implemented with native <Modal>s for simplicity.
 
 import { Ionicons } from '@expo/vector-icons';
+import {
+  DrawerActions,
+  useNavigation as useNavNative,
+} from '@react-navigation/native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -29,6 +33,7 @@ import {
 
 import { useAuth } from '../auth/AuthContext';
 import { Button } from '../components/ui/Button';
+import { TopBar } from '../components/layout/TopBar';
 import {
   createUser,
   deleteUser,
@@ -117,6 +122,13 @@ function babySubtitle(baby: Baby | null): string {
 
 export function ProfileScreen({ navigation }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
+  // Drawer access goes through the platform navigation (not the slim prop
+  // type accepted here) so we can dispatch DrawerActions.openDrawer.
+  const navNative = useNavNative();
+  const openDrawer = useCallback(
+    () => navNative.dispatch(DrawerActions.openDrawer()),
+    [navNative],
+  );
   const { user: currentUser, signOut } = useAuth();
   const canManage = canManageFamily(currentUser?.access_type);
 
@@ -315,8 +327,14 @@ export function ProfileScreen({ navigation }: ProfileScreenProps) {
   }
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+    <View style={styles.root}>
+      <TopBar title="家庭" onMenu={openDrawer} />
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingBottom: insets.bottom + spacing['12'] },
+        ]}
+      >
         {loading ? (
           <View style={styles.centerBlock}>
             <ActivityIndicator color={colors['fawn-amber']} />
@@ -960,7 +978,6 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors['warm-cream'] },
   scroll: {
     padding: spacing['4'],
-    paddingBottom: spacing['12'],
     gap: spacing['4'],
   },
   centerBlock: {

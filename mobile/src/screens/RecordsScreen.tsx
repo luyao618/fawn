@@ -18,10 +18,10 @@
 //   • Growth tab → 成长记录历史 (reuses GrowthHistoryList)
 
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -34,6 +34,7 @@ import {
 } from 'react-native';
 
 import { GrowthHistoryList } from '../components/dashboard/GrowthHistoryList';
+import { TopBar } from '../components/layout/TopBar';
 import { Button, Card, SegmentedChoice } from '../components/ui';
 import { useAuth } from '../auth/AuthContext';
 import { canWriteTracker, formatDate } from '../lib/utils';
@@ -259,6 +260,10 @@ function initialHealthForm() {
 export function RecordsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const openDrawer = useCallback(
+    () => navigation.dispatch(DrawerActions.openDrawer()),
+    [navigation],
+  );
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const canWrite = canWriteTracker(user?.access_type);
@@ -370,13 +375,17 @@ export function RecordsScreen() {
   });
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={styles.root}>
+      <TopBar title="记录" onMenu={openDrawer} />
       <KeyboardAvoidingView
         style={styles.kav}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + spacing['6'] },
+          ]}
           keyboardShouldPersistTaps="handled"
         >
           {/* Header */}
@@ -859,7 +868,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing['4'],
     paddingTop: spacing['3'],
-    paddingBottom: layout.tabbarHeight + spacing['6'],
     gap: spacing['3'],
   },
 
