@@ -139,7 +139,9 @@ async def test_registered_family_can_start_chat_without_baby(
     messages = list(
         (
             await db.execute(
-                select(Message).where(Message.conversation_id == uuid.UUID(conversation_id))
+                select(Message)
+                .where(Message.conversation_id == uuid.UUID(conversation_id))
+                .order_by(Message.created_at.asc(), Message.id.asc())
             )
         ).scalars()
     )

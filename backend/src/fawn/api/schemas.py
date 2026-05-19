@@ -139,6 +139,8 @@ class MessageRead(BaseModel):
 class ConversationDetail(BaseModel):
     conversation: ConversationRead
     messages: list[MessageRead]
+    has_more: bool = False
+    next_before: uuid.UUID | None = None
 
 
 class SendMessageRequest(BaseModel):

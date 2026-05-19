@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -42,7 +42,12 @@ class Message(UUIDMixin, Base):
             "message_type IN ('text', 'image', 'data_card', 'safety_alert')",
             name="ck_messages_message_type",
         ),
-        Index("idx_messages_conversation", "conversation_id", "created_at"),
+        Index(
+            "idx_messages_conversation_cursor",
+            "conversation_id",
+            text("created_at DESC"),
+            text("id DESC"),
+        ),
     )
 
     conversation_id: Mapped[uuid.UUID] = mapped_column(
