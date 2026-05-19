@@ -60,17 +60,17 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   }
 
   return (
-    <div className="flex justify-end" data-testid="user-message-row">
+    <div className="flex flex-col items-end" data-testid="user-message-row">
+      <div className="mb-1 flex max-w-[78%] flex-wrap items-center justify-end gap-1.5 px-1 leading-none max-[374px]:max-w-[84%]">
+        <span className="max-w-32 truncate text-xs font-semibold text-soft-charcoal">{sender.name}</span>
+        <span className="rounded-full bg-soft-charcoal/10 px-2 py-1 text-[11px] font-semibold text-dark-gray">{sender.role}</span>
+      </div>
       <div
         className={cn(
-          'animate-[bubble-in_200ms_ease-out] max-w-[78%] break-words rounded-[22px] rounded-br-md bg-fawn-amber px-4 py-3 text-base leading-normal text-white shadow-card',
+          'animate-[bubble-in_200ms_ease-out] max-w-[78%] break-words rounded-[22px] rounded-tr-md bg-fawn-amber px-4 py-3 text-base leading-normal text-white shadow-card',
           'max-[374px]:max-w-[84%]',
         )}
       >
-        <div className="mb-1.5 flex flex-wrap items-center justify-end gap-1.5 text-right leading-none">
-          <span className="max-w-32 truncate text-xs font-semibold text-white/95">{sender.name}</span>
-          <span className="rounded-full bg-white/20 px-2 py-1 text-[11px] font-semibold text-white/85">{sender.role}</span>
-        </div>
         {message.message_type === 'image' && imageUrl ? (
           <img src={imageUrl} alt={message.content} className="max-h-64 rounded-xl object-cover" />
         ) : (

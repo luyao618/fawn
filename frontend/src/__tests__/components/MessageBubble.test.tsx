@@ -96,7 +96,7 @@ describe('MessageBubble', () => {
       />,
     );
 
-    expect(screen.getByTestId('user-message-row')).toHaveClass('justify-end');
+    expect(screen.getByTestId('user-message-row')).toHaveClass('items-end');
     expect(screen.getByText('林雨')).toBeInTheDocument();
     expect(screen.getByText('妈妈')).toBeInTheDocument();
     expect(screen.queryByLabelText('林雨 · 妈妈')).not.toBeInTheDocument();
