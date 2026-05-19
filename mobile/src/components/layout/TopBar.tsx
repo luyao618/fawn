@@ -3,12 +3,15 @@ import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, iconButtonRadius, layout, radii, shadows, spacing, typography } from '../../shared/theme';
+import { colors, iconButtonRadius, layout, spacing, typography } from '../../shared/theme';
 
 /**
- * Mobile TopBar — aligns with `frontend/src/components/layout/TopBar.tsx`.
+ * Mobile TopBar — minimal, 豆包-style.
  *
- * - Sticky header look with a soft cream background and a frosted border.
+ * - Flush with the page canvas: no card surface, no border, no shadow, no
+ *   rounded corners. The bar simply sits below the system status bar and
+ *   inherits the screen background so the header reads as part of the page
+ *   rather than a floating chip.
  * - Optional leading button: either a back chevron (`onBack`) OR a hamburger
  *   menu (`onMenu`) — mutually exclusive at the TypeScript level via a
  *   discriminated union, so a caller cannot accidentally pass both.
@@ -41,8 +44,8 @@ export function TopBar(props: TopBarProps) {
     <View
       style={[
         styles.wrapper,
-        // Honor the platform status bar so the rounded card sits below it.
-        { paddingTop: insets.top + spacing['3'] },
+        // Sit directly under the system status bar, no card padding above.
+        { paddingTop: insets.top },
         style,
       ]}
     >
@@ -53,7 +56,8 @@ export function TopBar(props: TopBarProps) {
               onPress={onMenu}
               accessibilityRole="button"
               accessibilityLabel="菜单"
-              style={styles.backButton}
+              style={styles.iconButton}
+              hitSlop={8}
             >
               <Ionicons
                 name="menu-outline"
@@ -66,7 +70,8 @@ export function TopBar(props: TopBarProps) {
               onPress={onBack}
               accessibilityRole="button"
               accessibilityLabel="返回"
-              style={styles.backButton}
+              style={styles.iconButton}
+              hitSlop={8}
             >
               <Ionicons
                 name="chevron-back"
@@ -90,6 +95,10 @@ export function TopBar(props: TopBarProps) {
 
 const styles = StyleSheet.create({
   wrapper: {
+    // Transparent so the screen's canvas color shows through — this is what
+    // makes the header read as "part of the system status bar" rather than a
+    // floating chip.
+    backgroundColor: colors.transparent,
     paddingHorizontal: spacing['4'],
   },
   bar: {
@@ -98,15 +107,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing['3'],
     minHeight: layout.topbarBar,
-    borderBottomLeftRadius: radii.card,
-    borderBottomRightRadius: radii.card,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors['frosted-border'],
-    backgroundColor: colors['topbar-surface'],
-    paddingHorizontal: spacing['3'],
-    paddingVertical: spacing['3'],
-    ...shadows.topbar,
+    paddingVertical: spacing['2'],
+    // No background, no border, no shadow, no rounded corners — flush with
+    // the page so it blends into the system status bar.
+    backgroundColor: colors.transparent,
   },
   left: {
     flexShrink: 1,
@@ -125,13 +129,14 @@ const styles = StyleSheet.create({
   title: {
     flexShrink: 1,
   },
-  backButton: {
+  iconButton: {
     width: layout.iconButton,
     height: layout.iconButton,
     borderRadius: iconButtonRadius,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors['back-button-surface'],
-    ...shadows.card,
+    // Naked tap target — no surface tint or shadow so the icon reads as a
+    // simple system glyph against the page background.
+    backgroundColor: colors.transparent,
   },
 });
