@@ -49,6 +49,11 @@ const CANCEL_DY = -50;
 const MAX_RECORDING_MS = 60_000;
 /** Foot/tail of the user-visible recording status timer. */
 const ELAPSED_TICK_MS = 250;
+/** Minimum recording length before we bother uploading. Anything shorter is
+ * almost certainly an accidental hold-then-release with no real speech;
+ * we drop it silently to avoid charging Doubao for noise and to avoid
+ * showing the user a "识别失败" alert for what looks like a no-op tap. */
+const MIN_UPLOAD_MS = 500;
 
 /**
  * 16kHz mono m4a/aac matches the backend ASR submit body (codec:raw,
@@ -209,6 +214,11 @@ export function VoiceHoldButton({ onTranscribed, onUploadStart, onUploadEnd, dis
         // recorder may already be stopped by the auto-stop branch; ignore.
       }
       if (cancelled) return;
+      // Drop sub-500ms recordings silently — almost always an accidental
+      // tap-then-release that would either charge Doubao for noise or surface
+      // an "识别失败" alert with no recoverable content.
+      const recordedMs = startedAt.current > 0 ? Date.now() - startedAt.current : 0;
+      if (recordedMs < MIN_UPLOAD_MS) return;
       const uri = recorder.uri;
       if (!uri) return;
       setStage('uploading');
@@ -226,6 +236,8 @@ export function VoiceHoldButton({ onTranscribed, onUploadStart, onUploadEnd, dis
           uploadOk = true;
           onTranscribed(text);
         }
+        // Empty transcription → silent drop (no alert, no bubble). The
+        // onUploadEnd(false) callback below will clear the placeholder.
       } catch (err) {
         const errInfo = err as { response?: { data?: { detail?: string } } };
         const message =

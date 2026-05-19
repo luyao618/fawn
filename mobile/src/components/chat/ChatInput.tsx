@@ -1,8 +1,9 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
   Keyboard,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -82,7 +83,25 @@ export function ChatInput({
 }: Props) {
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [mode, setMode] = useState<'keyboard' | 'voice'>('keyboard');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const inputRef = useRef<TextInput>(null);
+
+  // Some Android skins (Vivo Origin OS, Oppo ColorOS) do NOT honor
+  // android:windowSoftInputMode=adjustResize under edge-to-edge mode,
+  // leaving the composer hidden behind the IME. Listen to keyboard events
+  // and lift the wrapper by the keyboard height ourselves.
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvt, (e) => {
+      setKeyboardHeight(e.endCoordinates?.height ?? 0);
+    });
+    const hide = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
   const canSend = (value.trim().length > 0 || !!attachedImageUri) && !sending && !uploading;
   const canUpload = !uploading && !sending;
   const canOpenActions = canUpload || Boolean(onOpenHistory);
@@ -120,7 +139,12 @@ export function ChatInput({
   }
 
   return (
-    <View style={styles.wrapper}>
+    <View
+      style={[
+        styles.wrapper,
+        keyboardHeight > 0 ? { paddingBottom: spacing['3'] + keyboardHeight } : null,
+      ]}
+    >
       {attachedImageUri ? (
         <View style={styles.attachPreview}>
           <Image source={{ uri: attachedImageUri }} style={styles.attachThumb} />
