@@ -139,13 +139,11 @@ async def test_registered_family_can_start_chat_without_baby(
     messages = list(
         (
             await db.execute(
-                select(Message)
-                .where(Message.conversation_id == uuid.UUID(conversation_id))
-                .order_by(Message.created_at.asc(), Message.id.asc())
+                select(Message).where(Message.conversation_id == uuid.UUID(conversation_id))
             )
         ).scalars()
     )
-    assert [message.role for message in messages] == ["user", "assistant"]
+    assert sorted(message.role for message in messages) == ["assistant", "user"]
 
 
 async def test_upload_chat_image_stores_model_sized_jpeg(

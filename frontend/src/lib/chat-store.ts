@@ -130,6 +130,13 @@ function dedupById<T extends { id: string }>(items: T[]): T[] {
   return out;
 }
 
+// Module-level mutex for `refreshFirstPage`. When a SSE done arrives while a
+// previous refresh is still in flight (e.g. two messages sent back to back),
+// the second refresh is skipped — the in-flight call will pull the same
+// canonical page 0 either way, so running twice would just splice the same
+// data twice.
+let refreshInFlight = false;
+
 export const useChatStore = create<ChatState>((set, get) => ({
   ...emptyChatDataState(),
 
@@ -193,18 +200,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
   async refreshFirstPage() {
     const { currentConversation } = get();
     if (!currentConversation) return;
-    const response = await api.getConversation(currentConversation.id);
-    // Same active-conversation guard as loadOlder.
-    if (get().currentConversation?.id !== currentConversation.id) return;
-    set((state) => ({
-      // Page 0 in front; keep older pages (already loaded via loadOlder)
-      // behind. Dedup-by-id keeps the canonical server row instead of any
-      // locally-synthesized optimistic / streaming placeholder that shares
-      // the same id.
-      messages: dedupById([...response.messages, ...state.messages]),
-      // hasMore / nextBefore describe "where does page N+1 start"; refresh
-      // page 0 does not change that contract.
-    }));
+    // Mutex: if a previous refresh is still in flight (e.g. user sent a second
+    // message before the first done's refresh completed), let that one win and
+    // skip this one. The previous refresh already grabs the canonical page 0
+    // either way; running twice would just splice the same data twice.
+    if (refreshInFlight) return;
+    refreshInFlight = true;
+    try {
+      const response = await api.getConversation(currentConversation.id);
+      // Same active-conversation guard as loadOlder.
+      if (get().currentConversation?.id !== currentConversation.id) return;
+      set((state) => ({
+        // Page 0 in front; keep older pages (already loaded via loadOlder)
+        // behind. Dedup-by-id keeps the canonical server row instead of any
+        // locally-synthesized optimistic / streaming placeholder that shares
+        // the same id.
+        messages: dedupById([...response.messages, ...state.messages]),
+        // hasMore / nextBefore describe "where does page N+1 start"; refresh
+        // page 0 does not change that contract.
+      }));
+    } finally {
+      refreshInFlight = false;
+    }
   },
 
   async loadConversations(page = 1) {
