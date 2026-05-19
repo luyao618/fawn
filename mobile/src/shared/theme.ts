@@ -18,9 +18,9 @@ import { Platform, TextStyle, ViewStyle } from 'react-native';
 
 export const colors = {
   // Brand
-  'fawn-amber': '#416656', // --color-brand
-  'fawn-amber-light': '#ECFDF5', // --color-brand-light
-  'brand-strong': '#294E3F', // --color-brand-strong
+  'fawn-amber': '#7C4A20', // --color-brand
+  'fawn-amber-light': '#F4E4D0', // --color-brand-light
+  'brand-strong': '#5A3415', // --color-brand-strong
 
   // Sage / success
   'sage-green': '#3F7A14', // --color-success
@@ -40,7 +40,7 @@ export const colors = {
 
   // Bubbles
   'bubble-agent': '#FFFFFF',
-  'bubble-user': '#416656',
+  'bubble-user': '#7C4A20',
 
   // Safety / status
   'safety-red': '#BA1A1A', // --color-safety

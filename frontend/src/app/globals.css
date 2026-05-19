@@ -10,9 +10,9 @@
 :root {
   --color-canvas: #FBF8EF;
   --color-card: #FFFFFF;
-  --color-brand: #416656;
-  --color-brand-strong: #294E3F;
-  --color-brand-light: #ECFDF5;
+  --color-brand: #7C4A20;
+  --color-brand-strong: #5A3415;
+  --color-brand-light: #F4E4D0;
   --color-mint: #DDF7EA;
   --color-butter: #FFFBEB;
   --color-powder: #D5E3FC;
@@ -22,7 +22,7 @@
   --color-text-placeholder: #8A918A;
   --color-border: #E6EEFF;
   --color-bubble-agent: #FFFFFF;
-  --color-bubble-user: #416656;
+  --color-bubble-user: #7C4A20;
   --color-safety: #BA1A1A;
   --color-safety-bg: #FFDAD6;
   --color-success: #3F7A14;
@@ -138,15 +138,15 @@ img {
 }
 
 .btn-press-secondary {
-  box-shadow: 0 4px 0 0 rgba(41, 78, 63, 0.25);
+  box-shadow: 0 4px 0 0 rgba(90, 52, 21, 0.25);
 }
 
 .btn-press-secondary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 5px 0 0 rgba(41, 78, 63, 0.3);
+  box-shadow: 0 5px 0 0 rgba(90, 52, 21, 0.3);
 }
 
 .btn-press-secondary:active:not(:disabled) {
   transform: translateY(2px);
-  box-shadow: 0 1px 0 0 rgba(41, 78, 63, 0.25);
+  box-shadow: 0 1px 0 0 rgba(90, 52, 21, 0.25);
 }
