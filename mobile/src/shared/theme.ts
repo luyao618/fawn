@@ -64,12 +64,10 @@ export const colors = {
   'role-grandma': '#B07CC6',
   'role-grandpa': '#6BAF8D',
 
-  // Frosted / translucent surfaces — used by TabBar / TopBar for the
+  // Frosted / translucent surfaces — used by TabBar for the
   // glassmorphism look. Centralized here so pages never inline rgba().
   'transparent': 'transparent',
   'tabbar-surface': 'rgba(255, 255, 255, 0.95)',
-  'topbar-surface': 'rgba(255, 251, 235, 0.88)',
-  'back-button-surface': 'rgba(255, 255, 255, 0.8)',
   'frosted-border': 'rgba(255, 255, 255, 0.7)',
 
   // On-color text + chip surfaces for the user bubble (brand `fawn-amber`
