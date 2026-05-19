@@ -1,3 +1,8 @@
+// gesture-handler must be the very first import in the bundle entry so the
+// native module registers before any navigator that depends on it (drawer
+// swipe, etc.). Per official docs this must be at the top of index.ts.
+import 'react-native-gesture-handler';
+
 import { registerRootComponent } from 'expo';
 
 import App from './App';
