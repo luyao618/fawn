@@ -690,15 +690,44 @@ export class ApiClient {
     return paginate(currentMockChatData().conversations, page);
   }
 
-  async getConversation(id: string): Promise<{ conversation: Conversation; messages: Message[] }> {
-    if (!isMockMode()) return this.request(`/chat/conversations/${id}`);
+  async getConversation(
+    id: string,
+    before?: string | null,
+    limit = 50,
+  ): Promise<{
+    conversation: Conversation;
+    messages: Message[];
+    has_more: boolean;
+    next_before: string | null;
+  }> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (before) params.set('before', before);
+    const qs = params.toString();
+    if (!isMockMode()) return this.request(`/chat/conversations/${id}?${qs}`);
     await delay();
     const chatData = currentMockChatData();
     const conversation = chatData.conversations.find((item) => item.id === id);
     if (!conversation) throw new ApiError(404, '对话不存在');
+    const all = chatData.messages.filter((message) => message.conversation_id === id);
+    // Mock messages have no `created_at` precision guarantee; mirror the
+    // backend's cursor ordering by treating the existing array order as the
+    // canonical chronological asc sequence.
+    let upper = all.length;
+    if (before) {
+      const idx = all.findIndex((message) => message.id === before);
+      if (idx === -1) throw new ApiError(400, `cursor message ${before} not found in conversation`);
+      upper = idx;
+    }
+    const start = Math.max(0, upper - limit);
+    const slice = all.slice(start, upper);
+    const has_more = start > 0;
+    const next_before = has_more && slice.length > 0 ? slice[0].id : null;
     return {
       conversation: clone(conversation),
-      messages: clone(chatData.messages.filter((message) => message.conversation_id === id)),
+      messages: clone(slice),
+      has_more,
+      next_before,
     };
   }
 
