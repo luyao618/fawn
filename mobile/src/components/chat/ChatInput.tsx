@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { MicButton } from './MicButton';
 import {
   colors,
   iconButtonRadius,
@@ -52,6 +53,8 @@ interface Props {
   placeholder?: string;
   /** Optional handler for navigating to history from the + action menu. */
   onOpenHistory?: () => void;
+  /** When provided, the mic button is rendered to the left of the send button. */
+  onVoiceTranscribed?: (text: string) => void;
 }
 
 export function ChatInput({
@@ -65,6 +68,7 @@ export function ChatInput({
   uploading,
   placeholder,
   onOpenHistory,
+  onVoiceTranscribed,
 }: Props) {
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const canSend = (value.trim().length > 0 || !!attachedImageUri) && !sending && !uploading;
@@ -192,6 +196,11 @@ export function ChatInput({
           )}
         </Pressable>
       </View>
+      {onVoiceTranscribed ? (
+        <View style={styles.micRow}>
+          <MicButton onTranscribed={onVoiceTranscribed} disabled={sending || uploading} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -312,5 +321,10 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: colors['oat-border'],
+  },
+  micRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingTop: spacing['2'],
   },
 });

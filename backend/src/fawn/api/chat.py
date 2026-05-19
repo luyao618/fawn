@@ -28,6 +28,7 @@ from fawn.api.schemas import (
     MessageRead,
     PaginatedResponse,
     SendMessageRequest,
+    VoiceTranscriptionResponse,
 )
 from fawn.config import get_settings
 from fawn.db.session import get_db
@@ -41,6 +42,7 @@ from fawn.services.images import (
 from fawn.services.long_term_memory import LongTermMemoryService
 from fawn.services.memory_curator import CuratorTurn, MemoryCurator
 from fawn.services.storage import get_bytes, put_bytes
+from fawn.services.voice_asr import DoubaoASRError, DoubaoASRService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger(__name__)
@@ -550,3 +552,45 @@ async def get_chat_image(
     content = get_bytes(_chat_image_key(conversation_id, filename))
     media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     return Response(content=content, media_type=media_type)
+
+
+_VOICE_MAX_BYTES = 2 * 1024 * 1024  # ~60s WAV PCM 16k mono 16-bit ≈ 1.92MB
+_VOICE_CHUNK_BYTES = 64 * 1024
+
+
+@router.post("/voice/transcribe", response_model=VoiceTranscriptionResponse)
+async def transcribe_voice(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+) -> VoiceTranscriptionResponse:
+    """Push-to-talk ASR via Doubao. Returns recognized Chinese text for the
+    caller to put in their chat draft (caller does NOT auto-send)."""
+    settings = get_settings()
+    if not settings.doubao_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="语音服务未配置",
+        )
+
+    # Streaming size guard — refuse oversize bodies before instantiating the
+    # ASR service (cheap DoS pre-cut). Worker memory bound at _VOICE_MAX_BYTES.
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await file.read(_VOICE_CHUNK_BYTES):
+        total += len(chunk)
+        if total > _VOICE_MAX_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="录音文件过大，请缩短时长",
+            )
+        chunks.append(chunk)
+    audio = b"".join(chunks)
+
+    service = DoubaoASRService(api_key=settings.doubao_api_key)
+    try:
+        text = await service.transcribe(audio)
+    except DoubaoASRError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    return VoiceTranscriptionResponse(text=text)

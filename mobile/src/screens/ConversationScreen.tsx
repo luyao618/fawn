@@ -500,6 +500,9 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
           onRemoveImage={() => setPendingImage(null)}
           sending={sending}
           uploading={uploading}
+          onVoiceTranscribed={(voiceText) =>
+            setText((prev) => (prev ? `${prev}${voiceText}` : voiceText))
+          }
         />
       </KeyboardAvoidingView>
     </View>

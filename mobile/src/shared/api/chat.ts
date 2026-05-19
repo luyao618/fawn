@@ -61,6 +61,30 @@ export async function uploadChatImage(
 }
 
 /**
+ * Upload a recorded voice file and receive the transcribed Chinese text.
+ * The caller is expected to write the result into the chat draft input
+ * (NOT auto-send) so the user can proof-read before pressing send.
+ *
+ * Backend resolves errors as 4xx/5xx with `{detail}` Chinese strings; the
+ * axios interceptor surfaces those as thrown errors with the message preserved
+ * on `error.response.data.detail`.
+ */
+export async function transcribeVoice(file: {
+  uri: string;
+  name: string;
+  type: string;
+}): Promise<{ text: string }> {
+  const form = new FormData();
+  form.append('file', file as unknown as Blob);
+  const { data } = await api.post<{ text: string }>(
+    '/chat/voice/transcribe',
+    form,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return data;
+}
+
+/**
  * Send a chat message. The backend streams an SSE response of tokens followed
  * by a final `done` event with the assistant message id. We parse SSE frames
  * incrementally via XMLHttpRequest's `onprogress` event (RN's default fetch
