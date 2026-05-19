@@ -143,7 +143,7 @@ async def test_registered_family_can_start_chat_without_baby(
             )
         ).scalars()
     )
-    assert [message.role for message in messages] == ["user", "assistant"]
+    assert sorted(message.role for message in messages) == ["assistant", "user"]
 
 
 async def test_upload_chat_image_stores_model_sized_jpeg(

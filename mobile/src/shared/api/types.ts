@@ -43,6 +43,8 @@ export interface ChatMessage {
 export interface ConversationDetail {
   conversation: ConversationSummary;
   messages: ChatMessage[];
+  has_more: boolean;
+  next_before: string | null;
 }
 
 export interface ChatImageUploadResponse {

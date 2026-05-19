@@ -5,7 +5,7 @@
 //
 // Visual language strictly from `mobile/src/shared/theme.ts`.
 
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Image as ExpoImage } from 'expo-image';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -46,8 +46,8 @@ function formatDate(iso: string): string {
 
 export function HistoryConversationScreen({ conversationId, onBack }: Props) {
   const baseUrl = getApiBaseUrl();
-  const { data, isPending, isError, error, refetch, isFetching } = useQuery(
-    chatQueries.conversation(conversationId),
+  const { data, isPending, isError, error, refetch, isFetching } = useInfiniteQuery(
+    chatQueries.messages(conversationId),
   );
 
   const [authToken, setAuthToken] = useState<string | null>(null);
@@ -68,7 +68,12 @@ export function HistoryConversationScreen({ conversationId, onBack }: Props) {
     [authToken],
   );
 
-  const messages = data?.messages ?? [];
+  // History surface intentionally shows only the latest page (the first
+  // infinite-query page). The infinite-query factory is reused so a future
+  // "view full conversation" affordance can wire up `fetchNextPage` without a
+  // second hook path.
+  const conversation = data?.pages[0]?.conversation;
+  const messages = data?.pages[0]?.messages ?? [];
 
   const renderMessage = ({ item }: { item: ChatMessage }) => {
     const isUser = item.role === 'user';
@@ -109,8 +114,8 @@ export function HistoryConversationScreen({ conversationId, onBack }: Props) {
   }
 
   const headerTitle =
-    data?.conversation.summary?.trim() ||
-    (data?.conversation.started_at ? formatDate(data.conversation.started_at) : '历史会话');
+    conversation?.summary?.trim() ||
+    (conversation?.started_at ? formatDate(conversation.started_at) : '历史会话');
 
   return (
     <View style={styles.root}>

@@ -12,7 +12,7 @@ export const queryKeys = {
   chat: {
     all: ['chat'] as const,
     conversations: () => [...queryKeys.chat.all, 'conversations'] as const,
-    conversation: (id: string) => [...queryKeys.chat.all, 'conversation', id] as const,
+    messages: (id: string) => [...queryKeys.chat.all, 'messages', id] as const,
     history: (pageSize: number) =>
       [...queryKeys.chat.all, 'history', { pageSize }] as const,
   },

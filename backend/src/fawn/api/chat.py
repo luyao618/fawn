@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response, StreamingResponse
 from langchain_core.messages import HumanMessage, SystemMessage
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -135,23 +135,47 @@ async def list_conversations(
 @router.get("/conversations/{conversation_id}", response_model=ConversationDetail)
 async def get_conversation(
     conversation_id: uuid.UUID,
+    before: uuid.UUID | None = Query(None),
+    limit: int = Query(50, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ConversationDetail:
     conversation = await _get_family_conversation(db, user, conversation_id)
-    messages = list(
-        (
+    cursor: tuple[Any, uuid.UUID] | None = None
+    if before is not None:
+        row = (
             await db.execute(
-                select(Message)
-                .options(selectinload(Message.sender))
-                .where(Message.conversation_id == conversation_id)
-                .order_by(Message.created_at.asc())
+                select(Message.created_at, Message.id).where(
+                    Message.id == before,
+                    Message.conversation_id == conversation_id,
+                )
             )
-        ).scalars()
+        ).first()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"cursor message {before} not found in conversation",
+            )
+        cursor = (row.created_at, row.id)
+    q = (
+        select(Message)
+        .options(selectinload(Message.sender))
+        .where(Message.conversation_id == conversation_id)
     )
+    if cursor is not None:
+        q = q.where(tuple_(Message.created_at, Message.id) < cursor)
+    q = q.order_by(Message.created_at.desc(), Message.id.desc()).limit(limit + 1)
+    rows = list((await db.execute(q)).scalars())
+    has_more = len(rows) > limit
+    if has_more:
+        rows = rows[:limit]
+    rows.reverse()  # asc for client
+    next_before = rows[0].id if (has_more and rows) else None
     return ConversationDetail(
         conversation=await _conversation_read(db, conversation),
-        messages=[MessageRead.model_validate(message) for message in messages],
+        messages=[MessageRead.model_validate(message) for message in rows],
+        has_more=has_more,
+        next_before=next_before,
     )
 
 

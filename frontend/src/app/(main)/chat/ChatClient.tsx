@@ -17,8 +17,11 @@ export function ChatClient() {
     streamingContent,
     pendingToolCalls,
     error,
+    hasMore,
+    isLoadingMore,
     loadConversation,
     loadConversations,
+    loadOlder,
     createConversation,
     sendMessage,
     uploadChatImage,
@@ -128,6 +131,9 @@ export function ChatClient() {
         isStreaming={isStreaming}
         streamingContent={streamingContent}
         pendingToolCalls={pendingToolCalls}
+        hasMore={hasMore}
+        isLoadingMore={isLoadingMore}
+        onLoadMore={loadOlder}
       />
       {error ? <div className="bg-safety-red-light px-4 py-2 text-sm text-safety-red">{error}</div> : null}
       <div ref={composerRef} className="fixed inset-x-0 z-50 mx-auto max-w-mobile" style={{ bottom: 'var(--chat-composer-bottom)' }}>

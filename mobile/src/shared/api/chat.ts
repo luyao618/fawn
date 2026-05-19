@@ -24,8 +24,16 @@ export async function fetchConversationsPage(
   return data;
 }
 
-async function fetchConversation(id: string): Promise<ConversationDetail> {
-  const { data } = await api.get<ConversationDetail>(`/chat/conversations/${id}`);
+export async function fetchConversation(
+  id: string,
+  before?: string,
+  limit = 50,
+): Promise<ConversationDetail> {
+  const params: Record<string, string | number> = { limit };
+  if (before) params.before = before;
+  const { data } = await api.get<ConversationDetail>(`/chat/conversations/${id}`, {
+    params,
+  });
   return data;
 }
 
@@ -156,9 +164,13 @@ export const chatQueries = {
     queryKey: queryKeys.chat.conversations(),
     queryFn: fetchConversations,
   }),
-  conversation: (id: string) => ({
-    queryKey: queryKeys.chat.conversation(id),
-    queryFn: () => fetchConversation(id),
+  messages: (id: string) => ({
+    queryKey: queryKeys.chat.messages(id),
+    queryFn: ({ pageParam }: { pageParam?: string }) =>
+      fetchConversation(id, pageParam, 50),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage: ConversationDetail): string | undefined =>
+      lastPage.has_more && lastPage.next_before ? lastPage.next_before : undefined,
   }),
   history: (pageSize: number) => ({
     queryKey: queryKeys.chat.history(pageSize),

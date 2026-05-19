@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -18,11 +18,14 @@ import {
   chatImageUrl,
   chatQueries,
   createConversation,
+  fetchConversation,
   resolveChatImageUrl,
   sendChatMessage,
   uploadChatImage,
   type ChatMessage,
+  type ConversationDetail,
 } from '../shared/api';
+import { dedupById } from '../shared/utils/dedupById';
 import { useAuth } from '../auth/AuthContext';
 import { getApiBaseUrl } from '../lib/api';
 import { getToken } from '../lib/tokenStorage';
@@ -110,8 +113,16 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
 
   const [creating, setCreating] = useState(false);
 
-  const { data, isPending, isError, error, refetch, isFetching } = useQuery({
-    ...chatQueries.conversation(resolvedId ?? ''),
+  const {
+    data,
+    isPending,
+    isError,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    ...chatQueries.messages(resolvedId ?? ''),
     enabled: Boolean(resolvedId),
   });
 
@@ -172,7 +183,15 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     }, 12); // ~80 chars/sec
   }, [stopTypingTimer]);
 
-  const baseMessages = data?.messages ?? [];
+  // Flatten infinite-query pages (each page is asc) and dedup by id BEFORE any
+  // reversal so consumers downstream never see duplicate keys at page
+  // boundaries (e.g. the canonical row appearing in both pages right after a
+  // SSE-done refresh).
+  const conversation = data?.pages[0]?.conversation;
+  const baseMessages = useMemo<ChatMessage[]>(
+    () => dedupById(data?.pages.flatMap((p) => p.messages) ?? []),
+    [data],
+  );
   // Synthesize the optimistic user + streaming assistant rows at the tail of
   // the list. Using a stable, prefixed id keeps FlatList's keyExtractor happy
   // and avoids collisions with real server ids (UUIDs).
@@ -205,6 +224,10 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     }
     return extras.length > 0 ? [...baseMessages, ...extras] : baseMessages;
   }, [baseMessages, optimisticUser, streamingAssistant, resolvedId, user?.id]);
+  // FlatList `inverted` consumes a reversed array: index 0 is the newest
+  // (visually at the bottom) and the last item is the oldest (visually at the
+  // top). dedup MUST happen before reverse and before FlatList consumption.
+  const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
 
   useEffect(() => {
     let cancelled = false;
@@ -228,28 +251,6 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     () => (authToken ? { Authorization: `Bearer ${authToken}` } : undefined),
     [authToken],
   );
-
-  // Track whether the list is pinned near the bottom. When the user scrolls
-  // up to read history we MUST NOT yank them back on every typewriter tick.
-  const isNearBottomRef = useRef(true);
-  const handleScroll = (e: {
-    nativeEvent: {
-      contentOffset: { y: number };
-      contentSize: { height: number };
-      layoutMeasurement: { height: number };
-    };
-  }) => {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-    const distanceFromBottom =
-      contentSize.height - (contentOffset.y + layoutMeasurement.height);
-    isNearBottomRef.current = distanceFromBottom < 80; // px
-  };
-
-  useEffect(() => {
-    if (messages.length === 0) return;
-    if (!isNearBottomRef.current) return;
-    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
-  }, [messages.length]);
 
   const handlePickImage = async () => {
     if (!resolvedId) return;
@@ -304,15 +305,25 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
             startTypingTimer();
           },
           onDone: () => {
-            // Flush remaining buffer before invalidating queries so the user
-            // never sees text jump from mid-typewriter to the full response.
+            // Flush remaining buffer before refreshing the first page so the
+            // user never sees text jump from mid-typewriter to the full
+            // response.
             flushBuffer();
           },
         },
       );
-      await queryClient.invalidateQueries({
-        queryKey: chatQueries.conversation(resolvedId).queryKey,
-      });
+      // Refresh page 0 only (NOT all pages, to avoid spurious refetch of every
+      // previously-loaded older page). React Query v5 removed `refetchPage`, so
+      // we manually fetch page 0 and splice it into the cache; dedup-by-id in
+      // `baseMessages` protects against boundary overlap with page 1.
+      const fresh = await fetchConversation(resolvedId, undefined, 50);
+      const key = chatQueries.messages(resolvedId).queryKey;
+      queryClient.setQueryData<
+        { pages: ConversationDetail[]; pageParams: (string | undefined)[] } | undefined
+      >(key, (old) => ({
+        pages: [fresh, ...(old?.pages.slice(1) ?? [])],
+        pageParams: [undefined, ...(old?.pageParams.slice(1) ?? [])],
+      }));
       await queryClient.invalidateQueries({
         queryKey: chatQueries.conversations().queryKey,
       });
@@ -337,15 +348,18 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     const uri = ref ? resolveChatImageUrl(baseUrl, ref) : null;
     const isOwnMessage =
       item.role === 'user' && (!item.sender_user_id || item.sender_user_id === user?.id);
-    // Insert a TimeSeparator before the first message and whenever the date
-    // changes between consecutive messages.
-    const prevItem = index > 0 ? messages[index - 1] : null;
+    // FlatList `inverted` consumes `reversedMessages`: index 0 is the newest
+    // and `index + 1` is the message that came chronologically *just before*
+    // `item`. Insert a TimeSeparator at the visual top of each day's block,
+    // i.e. when the previous-in-time message is missing or on a different day.
+    const prevInTime =
+      index + 1 < reversedMessages.length ? reversedMessages[index + 1] : null;
     const showSeparator =
-      !prevItem ||
-      new Date(item.created_at).toDateString() !== new Date(prevItem.created_at).toDateString();
+      !prevInTime ||
+      new Date(item.created_at).toDateString() !==
+        new Date(prevInTime.created_at).toDateString();
     return (
       <>
-        {showSeparator && <TimeSeparator timestamp={item.created_at} />}
         <MessageBubble
           message={item}
           imageUri={uri}
@@ -354,6 +368,10 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
           senderRole={isOwnMessage ? meta.role : undefined}
           isStreaming={item.id === 'temp-assistant'}
         />
+        {/* In an inverted FlatList, JSX rendered AFTER the bubble visually
+            appears ABOVE it (column-reverse). Putting the separator here
+            anchors it at the visual top of each day's block. */}
+        {showSeparator && <TimeSeparator timestamp={item.created_at} />}
       </>
     );
   };
@@ -417,12 +435,12 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     <View style={[styles.canvas, hideHeader ? { paddingTop: insets.top } : undefined]}>
       {tabRoot ? (
         <TopBar
-          title={data?.conversation.summary ?? '管家'}
+          title={conversation?.summary ?? '管家'}
           onMenu={openDrawer}
         />
       ) : hideHeader ? null : (
         <TopBar
-          title={data?.conversation.summary ?? '管家'}
+          title={conversation?.summary ?? '管家'}
           onBack={onBack}
         />
       )}
@@ -443,23 +461,26 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
 
         {/* PORT DECISION: MessageList skipped — FlatList covers this RN-idiomatically. */}
         <FlatList
+          inverted
           ref={listRef}
-          data={messages}
+          data={reversedMessages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={[
             styles.listContent,
-            { paddingBottom: spacing['4'] },
+            { paddingTop: spacing['4'] },
           ]}
-          onContentSizeChange={() => {
-            if (isNearBottomRef.current) {
-              listRef.current?.scrollToEnd({ animated: false });
-            }
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
           }}
-          onScroll={handleScroll}
-          scrollEventThrottle={64}
-          refreshing={isFetching}
-          onRefresh={() => refetch()}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isFetchingNextPage ? (
+              <View style={styles.loadMore}>
+                <ActivityIndicator size="small" color={colors['fawn-amber']} />
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.emptyCard}>
               <Text style={styles.emptyTitle}>今天想先记录什么？</Text>
@@ -516,6 +537,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing['4'],
     paddingTop: spacing['3'],
     flexGrow: 1,
+  },
+  loadMore: {
+    paddingVertical: spacing['3'],
+    alignItems: 'center',
   },
   emptyCard: {
     marginTop: spacing['3'],

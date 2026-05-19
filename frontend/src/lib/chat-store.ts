@@ -21,9 +21,14 @@ interface ChatState {
   searchResults: MessageSearchResult[];
   error: string | null;
   dataCardDraft: DataCardDraft | null;
+  hasMore: boolean;
+  nextBefore: string | null;
+  isLoadingMore: boolean;
   reset: () => void;
   createConversation: () => Promise<Conversation>;
   loadConversation: (id: string) => Promise<void>;
+  loadOlder: () => Promise<void>;
+  refreshFirstPage: () => Promise<void>;
   loadConversations: (page?: number) => Promise<void>;
   sendMessage: (content: string, imageUrl?: string) => Promise<void>;
   uploadChatImage: (conversationId: string, file: File) => Promise<string>;
@@ -72,6 +77,9 @@ type ChatDataState = Pick<
   | 'searchResults'
   | 'error'
   | 'dataCardDraft'
+  | 'hasMore'
+  | 'nextBefore'
+  | 'isLoadingMore'
 >;
 
 type ActiveChatDataState = Pick<
@@ -83,6 +91,9 @@ type ActiveChatDataState = Pick<
   | 'pendingToolCalls'
   | 'error'
   | 'dataCardDraft'
+  | 'hasMore'
+  | 'nextBefore'
+  | 'isLoadingMore'
 >;
 
 function emptyActiveChatDataState(error: string | null = null): ActiveChatDataState {
@@ -94,6 +105,9 @@ function emptyActiveChatDataState(error: string | null = null): ActiveChatDataSt
     pendingToolCalls: [],
     error,
     dataCardDraft: null,
+    hasMore: false,
+    nextBefore: null,
+    isLoadingMore: false,
   };
 }
 
@@ -104,6 +118,24 @@ function emptyChatDataState(): ChatDataState {
     searchResults: [],
   };
 }
+
+function dedupById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
+}
+
+// Module-level mutex for `refreshFirstPage`. When a SSE done arrives while a
+// previous refresh is still in flight (e.g. two messages sent back to back),
+// the second refresh is skipped — the in-flight call will pull the same
+// canonical page 0 either way, so running twice would just splice the same
+// data twice.
+let refreshInFlight = false;
 
 export const useChatStore = create<ChatState>((set, get) => ({
   ...emptyChatDataState(),
@@ -118,6 +150,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentConversation: conversation,
       conversations: [conversation, ...state.conversations.filter((item) => item.id !== conversation.id)],
       messages: [],
+      hasMore: false,
+      nextBefore: null,
+      isLoadingMore: false,
       error: null,
     }));
     return conversation;
@@ -132,8 +167,61 @@ export const useChatStore = create<ChatState>((set, get) => ({
       streamingContent: '',
       pendingToolCalls: [],
       dataCardDraft: null,
+      hasMore: response.has_more,
+      nextBefore: response.next_before,
+      isLoadingMore: false,
       error: null,
     });
+  },
+
+  async loadOlder() {
+    const { hasMore, isLoadingMore, nextBefore, currentConversation } = get();
+    if (!hasMore || isLoadingMore || !nextBefore || !currentConversation) return;
+    set({ isLoadingMore: true });
+    try {
+      const response = await api.getConversation(currentConversation.id, nextBefore);
+      // The active conversation may have changed underneath us during the
+      // await; bail out if so to avoid prepending stale messages.
+      if (get().currentConversation?.id !== currentConversation.id) return;
+      set((state) => ({
+        messages: dedupById([...response.messages, ...state.messages]),
+        hasMore: response.has_more,
+        nextBefore: response.next_before,
+        isLoadingMore: false,
+      }));
+    } catch (error) {
+      set({
+        isLoadingMore: false,
+        error: error instanceof Error ? error.message : '加载更多消息失败',
+      });
+    }
+  },
+
+  async refreshFirstPage() {
+    const { currentConversation } = get();
+    if (!currentConversation) return;
+    // Mutex: if a previous refresh is still in flight (e.g. user sent a second
+    // message before the first done's refresh completed), let that one win and
+    // skip this one. The previous refresh already grabs the canonical page 0
+    // either way; running twice would just splice the same data twice.
+    if (refreshInFlight) return;
+    refreshInFlight = true;
+    try {
+      const response = await api.getConversation(currentConversation.id);
+      // Same active-conversation guard as loadOlder.
+      if (get().currentConversation?.id !== currentConversation.id) return;
+      set((state) => ({
+        // Page 0 in front; keep older pages (already loaded via loadOlder)
+        // behind. Dedup-by-id keeps the canonical server row instead of any
+        // locally-synthesized optimistic / streaming placeholder that shares
+        // the same id.
+        messages: dedupById([...response.messages, ...state.messages]),
+        // hasMore / nextBefore describe "where does page N+1 start"; refresh
+        // page 0 does not change that contract.
+      }));
+    } finally {
+      refreshInFlight = false;
+    }
   },
 
   async loadConversations(page = 1) {
@@ -262,6 +350,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           event.message_type,
           get().dataCardDraft,
         );
+        // Preserve the locally-synthesized assistant row so the user does not
+        // see a visual gap between the end of the typewriter and the API
+        // round-trip that reconciles cache to canonical state. dedupById in
+        // refreshFirstPage swaps it for the server row when both share the
+        // same id (server returns the canonical id in `event.message_id`).
         set((state) => ({
           messages: [...state.messages, message],
           isStreaming: false,
@@ -269,6 +362,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           pendingToolCalls: [],
           dataCardDraft: null,
         }));
+        // Fire-and-forget refresh of page 0 to reconcile with the server
+        // (e.g. the assistant message may include tool-driven metadata not
+        // present in our local synthesis). Errors here surface via the
+        // store's `error` slot but never block the visual completion.
+        void get()
+          .refreshFirstPage()
+          .catch(() => {
+            // Swallow — the locally-synthesized row remains visible.
+          });
         break;
       }
       case 'error':
