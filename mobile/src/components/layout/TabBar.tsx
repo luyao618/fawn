@@ -4,13 +4,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
+import { NAV_ITEMS } from '../../navigation/navItems';
 import { colors, layout, radii, shadows, spacing, typography } from '../../shared/theme';
 
 /**
- * Mobile TabBar — aligns with `frontend/src/components/layout/TabBar.tsx`.
+ * Mobile TabBar — DEPRECATED (kept temporarily during the drawer migration).
  *
- * Tab order, labels, and icons must mirror the Web TabBar so navigation
- * feels identical on both platforms: 管家 / 成长 / 记录 / 相册 / 家庭.
+ * The 5-tab bottom bar is being replaced by a left drawer
+ * (`DrawerContent.tsx`). This file will be deleted in Phase 6b of the
+ * drawer-nav refactor. Until then it re-exports the renamed `NAV_ITEMS`
+ * (sourced from `navItems.ts`) as `TAB_ITEMS` so the rest of the codebase
+ * keeps compiling.
  */
 
 type TabIconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -24,13 +28,15 @@ interface TabDef {
   icon: TabIconName;
 }
 
-export const TAB_ITEMS: TabDef[] = [
-  { route: 'Chat', label: '管家', icon: 'chatbubbles-outline' },
-  { route: 'Dashboard', label: '成长', icon: 'stats-chart-outline' },
-  { route: 'Record', label: '记录', icon: 'clipboard-outline' },
-  { route: 'Album', label: '相册', icon: 'image-outline' },
-  { route: 'Profile', label: '家庭', icon: 'people-outline' },
-];
+/**
+ * Legacy export — alias of `NAV_ITEMS` for backward compatibility while the
+ * drawer migration is in progress.
+ */
+export const TAB_ITEMS: TabDef[] = NAV_ITEMS.map((item) => ({
+  route: item.route,
+  label: item.label,
+  icon: item.icon,
+}));
 
 export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
