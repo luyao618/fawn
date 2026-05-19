@@ -112,6 +112,11 @@ export function MessageBubble({
         ) : null}
         {message.content ? (
           <Text style={styles.userBubbleText}>{message.content}</Text>
+        ) : !imageUri ? (
+          // Empty user bubble = voice ASR placeholder during the upload
+          // roundtrip. Use the same ThinkingDots animation as the assistant
+          // streaming wait, tinted white to read on the amber bubble.
+          <ThinkingDots color={colors['on-brand']} />
         ) : null}
       </View>
     </View>

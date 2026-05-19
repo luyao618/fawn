@@ -10,7 +10,7 @@ import { colors, spacing } from '../../shared/theme';
  * Three dots animate opacity 0.3 → 1 → 0.3 in a staggered loop (200 ms phase
  * offset each), giving a left-to-right wave. Full cycle: ~1200 ms.
  */
-export function ThinkingDots() {
+export function ThinkingDots({ color }: { color?: string } = {}) {
   const dots = [useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current];
 
   useEffect(() => {
@@ -42,7 +42,10 @@ export function ThinkingDots() {
   return (
     <View style={styles.row}>
       {dots.map((anim, i) => (
-        <Animated.View key={i} style={[styles.dot, { opacity: anim }]} />
+        <Animated.View
+          key={i}
+          style={[styles.dot, { opacity: anim }, color ? { backgroundColor: color } : null]}
+        />
       ))}
     </View>
   );

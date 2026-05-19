@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   Pressable,
   StyleSheet,
   Text,
@@ -10,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { MicButton } from './MicButton';
+import { VoiceHoldButton } from './VoiceHoldButton';
 import {
   colors,
   iconButtonRadius,
@@ -55,6 +56,13 @@ interface Props {
   onOpenHistory?: () => void;
   /** When provided, the mic button is rendered to the left of the send button. */
   onVoiceTranscribed?: (text: string) => void;
+  /** Called the moment a voice recording finishes recording and starts
+   * uploading. Lets the parent paint a placeholder user bubble during the
+   * ASR roundtrip. */
+  onVoiceUploadStart?: () => void;
+  /** Called when the upload roundtrip ends. `success=false` means the
+   * placeholder bubble should be removed (no text was recognized / error). */
+  onVoiceUploadEnd?: (success: boolean) => void;
 }
 
 export function ChatInput({
@@ -69,11 +77,32 @@ export function ChatInput({
   placeholder,
   onOpenHistory,
   onVoiceTranscribed,
+  onVoiceUploadStart,
+  onVoiceUploadEnd,
 }: Props) {
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [mode, setMode] = useState<'keyboard' | 'voice'>('keyboard');
+  const inputRef = useRef<TextInput>(null);
   const canSend = (value.trim().length > 0 || !!attachedImageUri) && !sending && !uploading;
   const canUpload = !uploading && !sending;
   const canOpenActions = canUpload || Boolean(onOpenHistory);
+
+  function switchToVoice() {
+    // Blur synchronously THEN dismiss the IME — order matters on Vivo/OPPO
+    // where the IME re-attaches to the next focusable view after blur if
+    // dismiss isn't queued behind it.
+    inputRef.current?.blur();
+    Keyboard.dismiss();
+    setActionMenuOpen(false);
+    setMode('voice');
+  }
+
+  function switchToKeyboard() {
+    setMode('keyboard');
+    // Intentionally do NOT autofocus — the user taps the input to bring
+    // the keyboard back, which avoids surprise IME pop on a "back to text"
+    // tap when they only wanted to see the field again.
+  }
 
   function handleAttachPress() {
     if (!canOpenActions) return;
@@ -164,43 +193,74 @@ export function ChatInput({
           )}
         </Pressable>
 
-        <TextInput
-          style={styles.input}
-          value={value}
-          onChangeText={onChangeText}
-          onFocus={() => setActionMenuOpen(false)}
-          placeholder={uploading ? '图片上传中...' : placeholder ?? '输入消息...'}
-          placeholderTextColor={colors['mid-gray']}
-          multiline
-          editable={!sending}
-        />
-
-        <Pressable
-          onPress={onSend}
-          disabled={!canSend}
-          accessibilityRole="button"
-          accessibilityLabel="发送"
-          style={[
-            styles.sendButton,
-            canSend ? styles.sendButtonActive : styles.sendButtonDisabled,
-          ]}
-        >
-          {sending ? (
-            <ActivityIndicator size="small" color={colors['on-brand']} />
-          ) : (
-            <Ionicons
-              name="send"
-              size={18}
-              color={canSend ? colors['on-brand'] : colors['mid-gray']}
+        {mode === 'keyboard' ? (
+          <>
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              value={value}
+              onChangeText={onChangeText}
+              onFocus={() => setActionMenuOpen(false)}
+              placeholder={uploading ? '图片上传中...' : placeholder ?? '输入消息...'}
+              placeholderTextColor={colors['mid-gray']}
+              multiline
+              editable={!sending}
             />
-          )}
-        </Pressable>
+
+            {onVoiceTranscribed ? (
+              <Pressable
+                onPress={switchToVoice}
+                accessibilityRole="button"
+                accessibilityLabel="切换到语音输入"
+                style={styles.modeToggleButton}
+              >
+                <Ionicons name="mic-outline" size={22} color={colors['dark-gray']} />
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              onPress={onSend}
+              disabled={!canSend}
+              accessibilityRole="button"
+              accessibilityLabel="发送"
+              style={[
+                styles.sendButton,
+                canSend ? styles.sendButtonActive : styles.sendButtonDisabled,
+              ]}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color={colors['on-brand']} />
+              ) : (
+                <Ionicons
+                  name="send"
+                  size={18}
+                  color={canSend ? colors['on-brand'] : colors['mid-gray']}
+                />
+              )}
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <VoiceHoldButton
+              disabled={sending || uploading}
+              onTranscribed={(text) => {
+                onVoiceTranscribed?.(text);
+                // 保持 voice 模式 —— 与豆包一致，连续语音输入更顺手
+              }}
+              onUploadStart={onVoiceUploadStart}
+              onUploadEnd={onVoiceUploadEnd}
+            />
+            <Pressable
+              onPress={switchToKeyboard}
+              accessibilityRole="button"
+              accessibilityLabel="切换到文字输入"
+              style={styles.modeToggleButton}
+            >
+              <Ionicons name="keypad-outline" size={22} color={colors['dark-gray']} />
+            </Pressable>
+          </>
+        )}
       </View>
-      {onVoiceTranscribed ? (
-        <View style={styles.micRow}>
-          <MicButton onTranscribed={onVoiceTranscribed} disabled={sending || uploading} />
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -322,9 +382,12 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: colors['oat-border'],
   },
-  micRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingTop: spacing['2'],
+  modeToggleButton: {
+    width: layout.iconButton,
+    height: layout.iconButton,
+    borderRadius: iconButtonRadius,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors['warm-gray'],
   },
 });

@@ -278,9 +278,11 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     }
   };
 
-  const handleSend = async () => {
+  const handleSend = async (overrideContent?: string) => {
     if (!resolvedId) return;
-    const content = text.trim();
+    // Voice path passes recognized text directly so we don't race the
+    // setText() that the keyboard path relies on.
+    const content = (overrideContent ?? text).trim();
     if (!content && !pendingImage) return;
     const sentContent = content || (pendingImage ? '[图片]' : '');
     const sentImageUrl = pendingImage?.imageUrl ?? null;
@@ -500,9 +502,24 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
           onRemoveImage={() => setPendingImage(null)}
           sending={sending}
           uploading={uploading}
-          onVoiceTranscribed={(voiceText) =>
-            setText((prev) => (prev ? `${prev}${voiceText}` : voiceText))
-          }
+          onVoiceTranscribed={(voiceText) => {
+            // Send directly (skip draft step). handleSend takes the recognized
+            // text as an override so it sends regardless of the text state.
+            void handleSend(voiceText);
+          }}
+          onVoiceUploadStart={() => {
+            // Paint an empty user bubble — MessageBubble renders ThinkingDots
+            // (same animation as the assistant streaming wait) when content
+            // is empty. Cleared on success (handleSend overwrites with real
+            // content) or failure (onVoiceUploadEnd below).
+            setOptimisticUser({ content: '', imageUrl: null });
+          }}
+          onVoiceUploadEnd={(success) => {
+            // On failure / empty result: drop the placeholder. On success
+            // handleSend below will overwrite optimisticUser with the real
+            // content, so we only clear on the failure path.
+            if (!success) setOptimisticUser(null);
+          }}
         />
       </KeyboardAvoidingView>
     </View>
