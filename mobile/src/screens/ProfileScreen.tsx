@@ -328,7 +328,7 @@ export function ProfileScreen({ navigation }: ProfileScreenProps) {
 
   return (
     <View style={styles.root}>
-      <TopBar title="家庭" onMenu={openDrawer} />
+      <TopBar title="" onMenu={openDrawer} />
       <ScrollView
         contentContainerStyle={[
           styles.scroll,

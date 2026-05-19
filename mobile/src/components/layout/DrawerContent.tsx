@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
   },
   rowActive: {
-    backgroundColor: colors['nursery-mint'],
+    backgroundColor: colors['fawn-amber-light'],
   },
   rowPressed: {
     backgroundColor: colors['warm-gray'],

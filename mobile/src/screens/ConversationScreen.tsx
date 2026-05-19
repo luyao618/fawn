@@ -404,9 +404,9 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     return (
       <View style={[styles.canvas, hideHeader ? { paddingTop: insets.top } : undefined]}>
         {tabRoot ? (
-          <TopBar title="管家" onMenu={openDrawer} />
+          <TopBar title="" onMenu={openDrawer} />
         ) : hideHeader ? null : (
-          <TopBar title="管家" onBack={onBack} />
+          <TopBar title="" onBack={onBack} />
         )}
         <View style={styles.center}>
           <View style={styles.emptyCard}>
@@ -437,21 +437,23 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     <View style={[styles.canvas, hideHeader ? { paddingTop: insets.top } : undefined]}>
       {tabRoot ? (
         <TopBar
-          title={conversation?.summary ?? '管家'}
+          title={conversation?.summary ?? ''}
           onMenu={openDrawer}
         />
       ) : hideHeader ? null : (
         <TopBar
-          title={conversation?.summary ?? '管家'}
+          title={conversation?.summary ?? ''}
           onBack={onBack}
         />
       )}
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
-      >
+      {/* No KeyboardAvoidingView — relies on android:windowSoftInputMode=adjustResize
+          (already set in AndroidManifest) so the root view shrinks when the
+          keyboard appears and the composer naturally follows the new bottom edge.
+          KAV's padding/height behaviors miscalculate the available area on cold
+          start under edge-to-edge mode, leaving the composer floating ~660dp
+          above the gesture bar until the first IME open. */}
+      <View style={styles.flex}>
         {isError ? (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>
@@ -521,7 +523,7 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
             if (!success) setOptimisticUser(null);
           }}
         />
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 }

@@ -376,7 +376,7 @@ export function RecordsScreen() {
 
   return (
     <View style={styles.root}>
-      <TopBar title="记录" onMenu={openDrawer} />
+      <TopBar title="" onMenu={openDrawer} />
       <KeyboardAvoidingView
         style={styles.kav}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

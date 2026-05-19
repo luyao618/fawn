@@ -137,7 +137,7 @@ export function AlbumScreen() {
 
   return (
     <View style={styles.root}>
-      <TopBar title="相册" onMenu={openDrawer} />
+      <TopBar title="" onMenu={openDrawer} />
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,

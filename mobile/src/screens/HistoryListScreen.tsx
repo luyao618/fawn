@@ -63,7 +63,7 @@ export function HistoryListScreen({ onOpenConversation }: Props) {
   if (isPending && !data) {
     return (
       <View style={styles.root}>
-        <TopBar title="历史" />
+        <TopBar title="" />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors['fawn-amber']} />
         </View>
@@ -73,7 +73,7 @@ export function HistoryListScreen({ onOpenConversation }: Props) {
 
   return (
     <View style={styles.root}>
-      <TopBar title="历史" />
+      <TopBar title="" />
       {isError && (
         <View style={styles.banner}>
           <Text style={styles.bannerText}>

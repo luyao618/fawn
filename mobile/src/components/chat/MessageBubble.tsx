@@ -84,40 +84,42 @@ export function MessageBubble({
   }
 
   return (
-    <View style={styles.rowRight}>
-      <View style={styles.userBubble}>
-        {(senderName || senderRole) ? (
-          <View style={styles.senderRow}>
-            {senderName ? (
-              <Text style={styles.senderName} numberOfLines={1}>
-                {senderName}
-              </Text>
-            ) : null}
-            {senderRole ? (
-              <View style={styles.roleChip}>
-                <Text style={styles.roleChipText}>{senderRole}</Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-        {imageUri ? (
-          <ExpoImage
-            source={imageHeaders ? { uri: imageUri, headers: imageHeaders } : { uri: imageUri }}
-            style={styles.image}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            transition={150}
-            accessibilityLabel="聊天图片"
-          />
-        ) : null}
-        {message.content ? (
-          <Text style={styles.userBubbleText}>{message.content}</Text>
-        ) : !imageUri ? (
-          // Empty user bubble = voice ASR placeholder during the upload
-          // roundtrip. Use the same ThinkingDots animation as the assistant
-          // streaming wait, tinted white to read on the amber bubble.
-          <ThinkingDots color={colors['on-brand']} />
-        ) : null}
+    <View style={styles.columnRight}>
+      {(senderName || senderRole) ? (
+        <View style={styles.senderRow}>
+          {senderName ? (
+            <Text style={styles.senderName} numberOfLines={1}>
+              {senderName}
+            </Text>
+          ) : null}
+          {senderRole ? (
+            <View style={styles.roleChip}>
+              <Text style={styles.roleChipText}>{senderRole}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+      <View style={styles.rowRight}>
+        <View style={styles.userBubble}>
+          {imageUri ? (
+            <ExpoImage
+              source={imageHeaders ? { uri: imageUri, headers: imageHeaders } : { uri: imageUri }}
+              style={styles.image}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={150}
+              accessibilityLabel="聊天图片"
+            />
+          ) : null}
+          {message.content ? (
+            <Text style={styles.userBubbleText}>{message.content}</Text>
+          ) : !imageUri ? (
+            // Empty user bubble = voice ASR placeholder during the upload
+            // roundtrip. Use the same ThinkingDots animation as the assistant
+            // streaming wait, tinted white to read on the amber bubble.
+            <ThinkingDots color={colors['on-brand']} />
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -132,7 +134,12 @@ const styles = StyleSheet.create({
   rowRight: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+  },
+  columnRight: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
     marginVertical: spacing['1'],
+    gap: spacing['1'],
   },
   assistantBubble: {
     maxWidth: '92%',
@@ -161,21 +168,22 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     flexWrap: 'wrap',
     gap: spacing['1'],
+    paddingHorizontal: spacing['1'],
   },
   senderName: {
     ...typography.metaSm,
-    color: colors['on-brand-soft'],
+    color: colors['dark-gray'],
     maxWidth: 140,
   },
   roleChip: {
-    backgroundColor: colors['on-brand-chip'],
+    backgroundColor: colors['fawn-amber-light'],
     paddingHorizontal: spacing['2'],
     paddingVertical: 2,
     borderRadius: radii.full,
   },
   roleChipText: {
     ...typography.metaXs,
-    color: colors['on-brand-muted'],
+    color: colors['brand-strong'],
   },
   image: {
     width: 220,

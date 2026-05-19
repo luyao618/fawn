@@ -20,6 +20,8 @@ import { colors, iconButtonRadius, layout, spacing, typography } from '../../sha
  */
 
 interface BaseTopBarProps {
+  /** Page title. Pass an empty string to render only the leading icon
+   * (used by top-level tab screens that don't need a redundant title). */
   title: string;
   /** Optional right-aligned slot for icons / actions. */
   rightAction?: React.ReactNode;
@@ -80,12 +82,14 @@ export function TopBar(props: TopBarProps) {
               />
             </Pressable>
           ) : null}
-          <Text
-            style={[typography.title, styles.title]}
-            numberOfLines={1}
-          >
-            {title}
-          </Text>
+          {title ? (
+            <Text
+              style={[typography.title, styles.title]}
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+          ) : null}
         </View>
         <View style={styles.right}>{rightAction}</View>
       </View>

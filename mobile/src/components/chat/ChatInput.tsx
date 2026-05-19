@@ -229,12 +229,12 @@ export function ChatInput({
               ]}
             >
               {sending ? (
-                <ActivityIndicator size="small" color={colors['on-brand']} />
+                <ActivityIndicator size="small" color={colors['brand-strong']} />
               ) : (
                 <Ionicons
                   name="send"
                   size={18}
-                  color={canSend ? colors['on-brand'] : colors['mid-gray']}
+                  color={canSend ? colors['brand-strong'] : colors['mid-gray']}
                 />
               )}
             </Pressable>
@@ -376,11 +376,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendButtonActive: {
-    backgroundColor: colors['fawn-amber'],
+    backgroundColor: colors['fawn-amber-light'],
     ...shadows.card,
   },
   sendButtonDisabled: {
-    backgroundColor: colors['oat-border'],
+    backgroundColor: colors['warm-gray'],
   },
   modeToggleButton: {
     width: layout.iconButton,

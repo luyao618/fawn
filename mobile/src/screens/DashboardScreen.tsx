@@ -119,7 +119,7 @@ export function DashboardScreen() {
 
   return (
     <View style={styles.root}>
-      <TopBar title="成长" onMenu={openDrawer} />
+      <TopBar title="" onMenu={openDrawer} />
       <ScrollView
         contentContainerStyle={[
           styles.container,
