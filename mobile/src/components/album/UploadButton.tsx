@@ -114,8 +114,9 @@ export function UploadButton({ onPicked, isUploading }: UploadButtonProps) {
       pointerEvents="box-none"
       style={[
         styles.wrapper,
-        // Float above the TabBar (mirrors Web `bottom-[calc(106px+safe-area)]`).
-        { bottom: insets.bottom + layout.tabbarHeight + spacing['3'] },
+        // Float above the bottom system inset. No bottom tab bar anymore
+        // (drawer replaces it), so spacing['6'] is enough clearance.
+        { bottom: insets.bottom + spacing['6'] },
       ]}
     >
       <Pressable

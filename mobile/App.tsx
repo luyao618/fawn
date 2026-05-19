@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   Nunito_400Regular,
@@ -75,20 +76,25 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <QueryProvider>
-        <NotificationsBridge>
-          <AuthProvider>
-            <Root />
-            <StatusBar style="auto" />
-          </AuthProvider>
-        </NotificationsBridge>
-      </QueryProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <QueryProvider>
+          <NotificationsBridge>
+            <AuthProvider>
+              <Root />
+              <StatusBar style="auto" />
+            </AuthProvider>
+          </NotificationsBridge>
+        </QueryProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   loading: {
     flex: 1,
     backgroundColor: colors['warm-cream'],

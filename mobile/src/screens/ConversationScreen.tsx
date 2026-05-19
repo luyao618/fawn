@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 
 import {
   chatImageUrl,
@@ -48,8 +49,26 @@ import { TimeSeparator } from '../components/chat/TimeSeparator';
 
 interface Props {
   conversationId?: string;
+  /**
+   * Pushed-context back handler. Mutually exclusive with `tabRoot` and
+   * `hideHeader` in practice — RootNavigator only passes `onBack` for
+   * non-tab-root entries.
+   */
   onBack?: () => void;
+  /**
+   * Legacy: when true, suppress the default TopBar entirely (no header,
+   * no hamburger, no back). Kept for backward compatibility with any future
+   * caller that wants a header-less chat surface. RootNavigator no longer
+   * sets this; use `tabRoot` instead for the drawer-root entry.
+   */
   hideHeader?: boolean;
+  /**
+   * When true, render a minimal TopBar containing only the ☰ (open-drawer)
+   * button — used by RootNavigator's ChatStack root so the user can open
+   * the side drawer from the chat surface. Mutually exclusive with
+   * `onBack` and `hideHeader`.
+   */
+  tabRoot?: boolean;
 }
 
 interface PendingImage {
@@ -64,11 +83,16 @@ function senderMeta(user: { display_name?: string | null; role?: string | null }
   };
 }
 
-export function ConversationScreen({ conversationId, onBack, hideHeader }: Props) {
+export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot }: Props) {
   const queryClient = useQueryClient();
   const baseUrl = getApiBaseUrl();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const openDrawer = useCallback(
+    () => navigation.dispatch(DrawerActions.openDrawer()),
+    [navigation],
+  );
 
   // When no id is provided (tab root entry), pick the active conversation or
   // fall back to the most recent one. If the user has no conversations yet,
@@ -359,7 +383,11 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
     };
     return (
       <View style={[styles.canvas, hideHeader ? { paddingTop: insets.top } : undefined]}>
-        {hideHeader ? null : <TopBar title="管家" onBack={onBack} />}
+        {tabRoot ? (
+          <TopBar title="管家" onMenu={openDrawer} />
+        ) : hideHeader ? null : (
+          <TopBar title="管家" onBack={onBack} />
+        )}
         <View style={styles.center}>
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>还没有任何会话</Text>
@@ -387,7 +415,12 @@ export function ConversationScreen({ conversationId, onBack, hideHeader }: Props
 
   return (
     <View style={[styles.canvas, hideHeader ? { paddingTop: insets.top } : undefined]}>
-      {hideHeader ? null : (
+      {tabRoot ? (
+        <TopBar
+          title={data?.conversation.summary ?? '管家'}
+          onMenu={openDrawer}
+        />
+      ) : hideHeader ? null : (
         <TopBar
           title={data?.conversation.summary ?? '管家'}
           onBack={onBack}

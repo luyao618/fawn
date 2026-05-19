@@ -1,5 +1,6 @@
 import { useQueries } from '@tanstack/react-query';
-import React, { useMemo } from 'react';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
+import React, { useCallback, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
@@ -19,6 +20,7 @@ import {
   RecentRecords,
   buildRecentRecords,
 } from '../components/dashboard/RecentRecords';
+import { TopBar } from '../components/layout/TopBar';
 import {
   dashboardQueries,
   growthQueries,
@@ -50,6 +52,11 @@ const STATS_HISTORY_DAYS = 90;
  */
 export function DashboardScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const openDrawer = useCallback(
+    () => navigation.dispatch(DrawerActions.openDrawer()),
+    [navigation],
+  );
   const results = useQueries({
     queries: [
       dashboardQueries.summary(),
@@ -111,9 +118,13 @@ export function DashboardScreen() {
   }
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={styles.root}>
+      <TopBar title="成长" onMenu={openDrawer} />
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[
+          styles.container,
+          { paddingBottom: insets.bottom + spacing['6'] },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={isFetching}
@@ -171,7 +182,6 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing['4'],
     paddingTop: spacing['4'],
-    paddingBottom: layout.tabbarHeight + spacing['4'],
     gap: spacing['4'],
   },
   center: {

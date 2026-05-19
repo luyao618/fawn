@@ -1,11 +1,9 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import {
-  createBottomTabNavigator,
-} from '@react-navigation/bottom-tabs';
+import { DrawerActions, NavigationContainer } from '@react-navigation/native';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { TabBar } from '../components/layout/TabBar';
+import { DrawerContent } from '../components/layout/DrawerContent';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { ConversationListScreen } from '../screens/ConversationListScreen';
 import { ConversationScreen } from '../screens/ConversationScreen';
@@ -17,17 +15,22 @@ import { RecordsScreen } from '../screens/RecordsScreen';
 import { AlbumScreen } from '../screens/AlbumScreen';
 import { MemoryFileListScreen } from '../screens/MemoryFileListScreen';
 import { MemoryFileEditorScreen } from '../screens/MemoryFileEditorScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 import { colors } from '../shared/theme';
+import { DRAWER_ROUTES } from './navItems';
 import { ROUTES } from './routeNames';
 
 /**
- * Root navigation skeleton: Bottom Tabs hosting 5 tabs (管家 / 成长 / 记录 /
- * 相册 / 家庭). Each tab is wrapped in its own native stack so child screens
+ * Root navigation skeleton: left Drawer hosting 6 entries (5 main +
+ * Settings). Each entry is wrapped in its own native stack so child screens
  * (e.g. chat → history conversation, profile → agent tasks) can be pushed
- * without disturbing the global tab bar.
+ * without disturbing the drawer.
+ *
+ * Drawer replaces the previous bottom-tabs layout — see
+ * `.omc/plans/mobile-drawer-nav.md` ADR for rationale.
  */
 
-const Tab = createBottomTabNavigator();
+const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator;
 
 // ----- Per-tab stacks -------------------------------------------------------
@@ -55,14 +58,14 @@ function ChatStack() {
         {({ navigation, route }) => {
           const params = (route.params ?? {}) as { id?: string };
           // No id == tab root entry: ConversationScreen resolves the active
-          // conversation internally and renders without its own TopBar so the
-          // user sees the chat surface immediately.
+          // conversation internally and renders a minimal TopBar with the
+          // hamburger button so the user can open the drawer from chat.
           const isTabRoot = !params.id;
           return (
             <ConversationScreen
               conversationId={params.id}
               onBack={isTabRoot ? undefined : () => navigation.goBack()}
-              hideHeader={isTabRoot}
+              tabRoot={isTabRoot}
             />
           );
         }}
@@ -150,7 +153,25 @@ function ProfileStack() {
   );
 }
 
-// ----- Root tab navigator ---------------------------------------------------
+function SettingsStack() {
+  const SettingsNav = Stack();
+  return (
+    <SettingsNav.Navigator screenOptions={{ headerShown: false }}>
+      <SettingsNav.Screen name="SettingsHome">
+        {({ navigation }) => (
+          <SettingsScreen
+            // Re-open the drawer when the user taps the in-page "‹ 返回"
+            // button — the most intuitive contract since the user arrived
+            // here from the drawer.
+            onClose={() => navigation.dispatch(DrawerActions.openDrawer())}
+          />
+        )}
+      </SettingsNav.Screen>
+    </SettingsNav.Navigator>
+  );
+}
+
+// ----- Root drawer navigator -----------------------------------------------
 
 export function RootNavigator() {
   return (
@@ -175,17 +196,24 @@ export function RootNavigator() {
         },
       }}
     >
-      <Tab.Navigator
-        // Hide the default header — every screen renders its own TopBar.
-        screenOptions={{ headerShown: false }}
-        tabBar={(props) => <TabBar {...props} />}
+      <Drawer.Navigator
+        id={'DrawerNav' as never}
+        screenOptions={{
+          headerShown: false,
+          drawerType: 'front',
+          drawerStyle: { width: '78%', backgroundColor: colors['warm-cream'] },
+          swipeEdgeWidth: 32,
+          overlayColor: colors['modal-backdrop'],
+        }}
+        drawerContent={(props) => <DrawerContent {...props} />}
       >
-        <Tab.Screen name="Chat" component={ChatStack} />
-        <Tab.Screen name="Dashboard" component={DashboardStack} />
-        <Tab.Screen name="Record" component={RecordStack} />
-        <Tab.Screen name="Album" component={AlbumStack} />
-        <Tab.Screen name="Profile" component={ProfileStack} />
-      </Tab.Navigator>
+        <Drawer.Screen name={DRAWER_ROUTES.CHAT} component={ChatStack} />
+        <Drawer.Screen name={DRAWER_ROUTES.DASHBOARD} component={DashboardStack} />
+        <Drawer.Screen name={DRAWER_ROUTES.RECORD} component={RecordStack} />
+        <Drawer.Screen name={DRAWER_ROUTES.ALBUM} component={AlbumStack} />
+        <Drawer.Screen name={DRAWER_ROUTES.PROFILE} component={ProfileStack} />
+        <Drawer.Screen name={DRAWER_ROUTES.SETTINGS} component={SettingsStack} />
+      </Drawer.Navigator>
     </NavigationContainer>
   );
 }
