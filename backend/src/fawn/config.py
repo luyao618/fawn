@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     memory_root: Path = Path("./memory")
     memory_curator_timeout_seconds: float = 8.0
 
+    doubao_api_key: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

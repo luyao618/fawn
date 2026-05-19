@@ -153,6 +153,10 @@ class ChatImageResponse(BaseModel):
     mime_type: str
 
 
+class VoiceTranscriptionResponse(BaseModel):
+    text: str
+
+
 class MessageSearchResult(MessageRead):
     conversation_started_at: datetime
 
