@@ -389,12 +389,7 @@ export const typography = {
 
 export const layout = {
   topbarHeight: 80,
-  tabbarHeight: 92,
   maxMobileWidth: 428,
-  /** TabBar pill bar height (mirrors Web `h-[78px]`). */
-  tabbarBar: 78,
-  /** Per-tab minimum tap area inside the TabBar. */
-  tabItemMinHeight: 58,
   /** TopBar inner row minimum height (mirrors Web `min-h-[68px]`). */
   topbarBar: 68,
   /** Circular tap target (TopBar back button, future icon buttons). */
