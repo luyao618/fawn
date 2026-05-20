@@ -96,6 +96,13 @@ export function VoiceHoldButton({ onTranscribed, onUploadStart, onUploadEnd, dis
   const disabledRef = useRef(disabled);
   disabledRef.current = disabled;
   const finishingRef = useRef(false); // synchronous idempotency guard
+  // Tracks whether the finger is still on the button at any given moment.
+  // Set to true on LongPress.onStart, flipped to false in onEnd/onFinalize.
+  // We read this AFTER the OS permission dialog resolves — if the dialog
+  // intercepted the touch (user lifted finger to tap "Allow") we must NOT
+  // start recording, otherwise the recording sticks because the gesture has
+  // already terminated and no release callback will ever fire.
+  const fingerDownRef = useRef(false);
 
   const autoStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -117,6 +124,7 @@ export function VoiceHoldButton({ onTranscribed, onUploadStart, onUploadEnd, dis
       .shouldCancelWhenOutside(false)
       .onStart(() => {
         if (disabledRef.current) return;
+        fingerDownRef.current = true;
         beginRecording();
       });
 
@@ -127,9 +135,11 @@ export function VoiceHoldButton({ onTranscribed, onUploadStart, onUploadEnd, dis
         updateCancelArmed(e.translationY);
       })
       .onEnd(() => {
+        fingerDownRef.current = false;
         handleRelease();
       })
       .onFinalize((_, success) => {
+        fingerDownRef.current = false;
         // Covers OS interrupt / cancel where onEnd did not fire.
         // handleRelease is idempotent via finishingRef so a duplicate call
         // on success paths is a no-op.
@@ -179,8 +189,13 @@ export function VoiceHoldButton({ onTranscribed, onUploadStart, onUploadEnd, dis
   async function beginRecording() {
     if (stageRef.current !== 'idle') return;
     const ok = await ensurePermission();
-    // Re-check stage — user may have lifted finger during the permission dialog.
-    if (!ok || stageRef.current !== 'idle') return;
+    // Re-check stage AND finger state — the OS permission dialog steals
+    // touch so the user has almost certainly lifted their finger to tap
+    // "Allow". If we proceed to start recording the gesture is already
+    // terminated and no release callback will ever come, leaving the
+    // recording stuck. Bail out and let the user long-press again now
+    // that permission is granted.
+    if (!ok || stageRef.current !== 'idle' || !fingerDownRef.current) return;
     try {
       await recorder.prepareToRecordAsync();
       recorder.record();

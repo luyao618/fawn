@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fawn",
     "slug": "fawn",
-    "version": "2.2.3",
+    "version": "2.2.4",
     "orientation": "portrait",
     "icon": "./assets/fawn-icon.png",
     "userInterfaceStyle": "light",
@@ -14,8 +14,7 @@
     },
     "android": {
       "package": "com.luyao618.fawn",
-      "versionCode": 5,
-      "minSdkVersion": 26,
+      "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/fawn-adaptive-foreground.png",
         "backgroundColor": "#6B3E1F",
