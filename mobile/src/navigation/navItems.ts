@@ -11,6 +11,7 @@ import type { Ionicons } from '@expo/vector-icons';
  */
 export const DRAWER_ROUTES = {
   CHAT: 'Chat',
+  HISTORY: 'History',
   DASHBOARD: 'Dashboard',
   RECORD: 'Record',
   ALBUM: 'Album',
@@ -42,6 +43,7 @@ export interface NavItem {
  */
 export const NAV_ITEMS: readonly NavItem[] = [
   { route: DRAWER_ROUTES.CHAT, label: '管家', icon: 'chatbubbles-outline' },
+  { route: DRAWER_ROUTES.HISTORY, label: '历史', icon: 'time-outline' },
   { route: DRAWER_ROUTES.DASHBOARD, label: '成长', icon: 'stats-chart-outline' },
   { route: DRAWER_ROUTES.RECORD, label: '记录', icon: 'clipboard-outline' },
   { route: DRAWER_ROUTES.ALBUM, label: '相册', icon: 'image-outline' },
