@@ -109,7 +109,8 @@ def gold_deer(size: int, padding_ratio: float = 0.18) -> Image.Image:
 # ---- composers -------------------------------------------------------------
 def build_icon(size: int = 1024) -> Image.Image:
     bg = Image.new("RGBA", (size, size), BROWN)
-    deer = gold_deer(size, padding_ratio=0.18)
+    # Reduced padding (was 0.18) to enlarge the deer in the square/round icon.
+    deer = gold_deer(size, padding_ratio=0.10)
     return Image.alpha_composite(bg, deer)
 
 
@@ -117,7 +118,8 @@ def build_adaptive_foreground(size: int = 432) -> Image.Image:
     """Adaptive foreground: gold deer only on transparent, sized for the
     Android adaptive-icon safe zone (~66% of 108dp)."""
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    deer = gold_deer(size, padding_ratio=0.22)
+    # Reduced padding (was 0.22) so the deer fills more of the safe zone.
+    deer = gold_deer(size, padding_ratio=0.14)
     canvas = Image.alpha_composite(canvas, deer)
     return canvas
 
