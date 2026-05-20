@@ -2,7 +2,7 @@
   "expo": {
     "name": "鹿小宝",
     "slug": "fawn",
-    "version": "2.2.4",
+    "version": "2.2.5",
     "orientation": "portrait",
     "icon": "./assets/fawn-icon.png",
     "userInterfaceStyle": "light",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.luyao618.fawn",
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/fawn-adaptive-foreground.png",
         "backgroundImage": "./assets/fawn-adaptive-background.png",
