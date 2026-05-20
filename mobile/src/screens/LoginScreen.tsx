@@ -82,7 +82,7 @@ export function LoginScreen() {
         <View style={styles.card}>
           <View style={styles.header}>
             <Text style={styles.welcome}>欢迎回来</Text>
-            <Text style={[typography.title, styles.brand]}>Fawn</Text>
+            <Text style={[typography.title, styles.brand]}>鹿小宝</Text>
           </View>
 
           <View style={styles.field}>

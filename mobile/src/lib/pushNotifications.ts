@@ -46,7 +46,7 @@ let configuredAndroidChannel = false;
 async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS !== 'android' || configuredAndroidChannel) return;
   await Notifications.setNotificationChannelAsync('default', {
-    name: 'Fawn 通知',
+    name: '鹿小宝 通知',
     importance: Notifications.AndroidImportance.HIGH,
     sound: 'default',
     lightColor: '#2c7a4b',
