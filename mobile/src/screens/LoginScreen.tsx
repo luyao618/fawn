@@ -4,6 +4,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
 import {
   colors,
@@ -21,21 +23,28 @@ import {
   typography,
 } from '../shared/theme';
 import { useAuth } from '../auth/AuthContext';
-import { getApiBaseUrl } from '../lib/api';
+import { registerFamily, type RegistrationRequest } from '../lib/auth';
 import { Button } from '../components/ui/Button';
 
 /**
- * Login screen — Android equivalent of `frontend/src/app/login/LoginClient.tsx`
- * (login form only; family registration is out of scope for this issue).
+ * Login screen — Android equivalent of `frontend/src/app/login/LoginClient.tsx`.
  *
- * Visual rules — every color / radius / shadow / font from `shared/theme.ts`:
- *   - Warm-cream canvas, card has `radii.card` (28) + `shadows.card`.
- *   - Field labels in `dark-gray`, inputs are pill-shaped `radii.input` with
- *     `warm-gray` fill on `oat-border`.
- *   - Primary button: `fawn-amber` background, white SemiBold label, pill.
- *   - Brand title in Nunito SemiBold (`typography.title`).
- *   - API endpoint footer in `caption` token.
+ * Mirrors the web flow: login form on top with a "注册账号" entry that toggles
+ * an inline registration form (invite code, family name, display name, role,
+ * username, password). Welcome heading is "欢迎回来" only (no brand line) and
+ * the API endpoint footer is intentionally hidden from end users.
  */
+
+const ROLE_OPTIONS: Array<RegistrationRequest['role']> = ['爸爸', '妈妈'];
+
+const emptyRegistration: RegistrationRequest = {
+  invite_code: '',
+  family_name: '',
+  username: '',
+  password: '',
+  display_name: '',
+  role: '爸爸',
+};
 
 export function LoginScreen() {
   const { signIn } = useAuth();
@@ -45,6 +54,11 @@ export function LoginScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [usernameFocused, setUsernameFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [registerDraft, setRegisterDraft] = useState<RegistrationRequest>(emptyRegistration);
+  const [registering, setRegistering] = useState(false);
+  const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
 
   const onSubmit = async () => {
     if (!username.trim() || !password) {
@@ -61,6 +75,57 @@ export function LoginScreen() {
       Alert.alert('登录失败', String(detail));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const updateDraft = <K extends keyof RegistrationRequest>(
+    key: K,
+    value: RegistrationRequest[K],
+  ) => {
+    setRegisterDraft((state) => ({ ...state, [key]: value }));
+  };
+
+  const onRegister = async () => {
+    const invite = registerDraft.invite_code.trim();
+    const familyName = registerDraft.family_name.trim();
+    const displayName = registerDraft.display_name.trim();
+    const registerUsername = registerDraft.username.trim();
+    if (
+      !invite ||
+      !familyName ||
+      !displayName ||
+      !registerUsername ||
+      !registerDraft.password
+    ) {
+      Alert.alert('请填写完整', '请补全所有注册信息');
+      return;
+    }
+    if (registerDraft.password.length < 6) {
+      Alert.alert('密码太短', '密码至少需要 6 位');
+      return;
+    }
+    setRegistering(true);
+    try {
+      await registerFamily({
+        invite_code: invite,
+        family_name: familyName,
+        username: registerUsername,
+        password: registerDraft.password,
+        display_name: displayName,
+        role: registerDraft.role,
+      });
+      setUsername(registerUsername);
+      setPassword('');
+      setRegisterDraft(emptyRegistration);
+      setRegisterOpen(false);
+      setRegisterSuccess('注册成功，请使用新账号登录。');
+    } catch (err) {
+      const detail =
+        (err as AxiosError<{ detail?: string }>).response?.data?.detail ??
+        '注册失败，请稍后再试';
+      Alert.alert('注册失败', String(detail));
+    } finally {
+      setRegistering(false);
     }
   };
 
@@ -82,8 +147,29 @@ export function LoginScreen() {
         <View style={styles.card}>
           <View style={styles.header}>
             <Text style={styles.welcome}>欢迎回来</Text>
-            <Text style={[typography.title, styles.brand]}>鹿小宝</Text>
+            <Pressable
+              onPress={() => {
+                setRegisterOpen((value) => !value);
+                setRegisterSuccess(null);
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: registerOpen }}
+              style={({ pressed }) => [
+                styles.registerToggle,
+                pressed && styles.registerTogglePressed,
+              ]}
+            >
+              <Ionicons name="person-add-outline" size={14} color={colors['fawn-amber']} />
+              <Text style={styles.registerToggleText}>注册账号</Text>
+            </Pressable>
           </View>
+
+          {registerSuccess ? (
+            <View style={styles.successBanner}>
+              <Ionicons name="checkmark-circle" size={16} color={colors['brand-strong']} />
+              <Text style={styles.successText}>{registerSuccess}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.field}>
             <Text style={styles.label}>用户名</Text>
@@ -127,9 +213,121 @@ export function LoginScreen() {
           >
             登录
           </Button>
-
-          <Text style={styles.footer}>API: {getApiBaseUrl()}</Text>
         </View>
+
+        {registerOpen ? (
+          <View style={[styles.card, styles.registerCard]}>
+            <View style={styles.registerHeader}>
+              <Text style={styles.registerEyebrow}>邀请注册</Text>
+              <Text style={styles.registerTitle}>创建家庭管理员</Text>
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.labelSm}>邀请码</Text>
+              <TextInput
+                value={registerDraft.invite_code}
+                onChangeText={(text) => updateDraft('invite_code', text)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.input}
+                editable={!registering}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.labelSm}>家庭名称</Text>
+              <TextInput
+                value={registerDraft.family_name}
+                onChangeText={(text) => updateDraft('family_name', text)}
+                style={styles.input}
+                editable={!registering}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.labelSm}>昵称</Text>
+              <TextInput
+                value={registerDraft.display_name}
+                onChangeText={(text) => updateDraft('display_name', text)}
+                style={styles.input}
+                editable={!registering}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.labelSm}>身份</Text>
+              <View style={styles.roleRow}>
+                {ROLE_OPTIONS.map((role) => {
+                  const selected = registerDraft.role === role;
+                  return (
+                    <Pressable
+                      key={role}
+                      onPress={() => updateDraft('role', role)}
+                      disabled={registering}
+                      style={[styles.roleOption, selected && styles.roleOptionSelected]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                    >
+                      <Text
+                        style={[
+                          styles.roleOptionText,
+                          selected && styles.roleOptionTextSelected,
+                        ]}
+                      >
+                        {role}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.labelSm}>账号名</Text>
+              <TextInput
+                value={registerDraft.username}
+                onChangeText={(text) => updateDraft('username', text)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="username"
+                style={styles.input}
+                editable={!registering}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.labelSm}>密码</Text>
+              <TextInput
+                value={registerDraft.password}
+                onChangeText={(text) => updateDraft('password', text)}
+                secureTextEntry
+                autoComplete="new-password"
+                style={styles.input}
+                editable={!registering}
+              />
+            </View>
+
+            <View style={styles.registerActions}>
+              <Button
+                variant="secondary"
+                onPress={() => setRegisterOpen(false)}
+                disabled={registering}
+                style={styles.registerActionButton}
+              >
+                取消
+              </Button>
+              <Button
+                variant="primary"
+                onPress={onRegister}
+                disabled={registering}
+                loading={registering}
+                style={styles.registerActionButton}
+              >
+                创建
+              </Button>
+            </View>
+          </View>
+        ) : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -158,13 +356,45 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: spacing['8'],
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing['3'],
   },
   welcome: {
-    ...typography.bodySmall,
-    color: colors['dark-gray'],
+    ...typography.heading,
+    color: colors['soft-charcoal'],
   },
-  brand: {
-    marginTop: spacing['1'],
+  registerToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing['1'],
+    backgroundColor: colors['warm-gray'],
+    paddingHorizontal: spacing['3'],
+    paddingVertical: spacing['2'],
+    borderRadius: radii.chip,
+    minHeight: 36,
+  },
+  registerTogglePressed: {
+    backgroundColor: colors['nursery-mint'],
+  },
+  registerToggleText: {
+    ...typography.metaXs,
+    color: colors['fawn-amber'],
+  },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing['2'],
+    backgroundColor: colors['nursery-mint'],
+    borderRadius: radii.md,
+    paddingHorizontal: spacing['3'],
+    paddingVertical: spacing['2'],
+    marginBottom: spacing['4'],
+  },
+  successText: {
+    ...typography.bodySmall,
+    color: colors['brand-strong'],
   },
   field: {
     marginBottom: spacing['4'],
@@ -173,6 +403,11 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors['dark-gray'],
     marginBottom: spacing['2'],
+  },
+  labelSm: {
+    ...typography.caption,
+    color: colors['dark-gray'],
+    marginBottom: spacing['1'],
   },
   input: {
     minHeight: layout.iconButton,
@@ -196,20 +431,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing['5'],
     ...shadows.card,
   },
-  buttonPressed: {
-    backgroundColor: colors['brand-strong'],
+  registerCard: {
+    marginTop: spacing['3'],
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  registerHeader: {
+    marginBottom: spacing['4'],
   },
-  buttonText: {
+  registerEyebrow: {
+    ...typography.bodySmall,
+    color: colors['dark-gray'],
+  },
+  registerTitle: {
+    ...typography.heading,
+    color: colors['soft-charcoal'],
+    marginTop: spacing['1'],
+  },
+  roleRow: {
+    flexDirection: 'row',
+    gap: spacing['2'],
+    backgroundColor: colors['warm-gray'],
+    borderRadius: radii.input,
+    borderWidth: 1,
+    borderColor: colors['oat-border'],
+    padding: spacing['1'],
+  },
+  roleOption: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: radii.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roleOptionSelected: {
+    backgroundColor: colors.card,
+    ...shadows.card,
+  },
+  roleOptionText: {
     ...typography.button,
-    color: colors['on-brand'],
+    color: colors['dark-gray'],
   },
-  footer: {
-    ...typography.caption,
-    color: colors['mid-gray'],
-    textAlign: 'center',
-    marginTop: spacing['5'],
+  roleOptionTextSelected: {
+    color: colors['fawn-amber'],
+  },
+  registerActions: {
+    marginTop: spacing['2'],
+    flexDirection: 'row',
+    gap: spacing['2'],
+  },
+  registerActionButton: {
+    flex: 1,
   },
 });
