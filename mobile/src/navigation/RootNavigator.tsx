@@ -70,12 +70,15 @@ function ChatStack() {
           );
         }}
       </ChatNav.Screen>
-      {/*
-        History screens live in ChatStack so the two-screen history surface
-        shares the 管家 tab's back stack and does not inflate the bottom bar
-        with a dedicated tab (per YAO-36 IA alignment decision).
-      */}
-      <ChatNav.Screen name={ROUTES.HISTORY_LIST}>
+    </ChatNav.Navigator>
+  );
+}
+
+function HistoryStack() {
+  const HistoryNav = Stack();
+  return (
+    <HistoryNav.Navigator screenOptions={{ headerShown: false }}>
+      <HistoryNav.Screen name={ROUTES.HISTORY_LIST}>
         {({ navigation }) => (
           <HistoryListScreen
             onOpenConversation={(id) =>
@@ -83,8 +86,8 @@ function ChatStack() {
             }
           />
         )}
-      </ChatNav.Screen>
-      <ChatNav.Screen name={ROUTES.HISTORY_CONVERSATION}>
+      </HistoryNav.Screen>
+      <HistoryNav.Screen name={ROUTES.HISTORY_CONVERSATION}>
         {({ route, navigation }) => {
           const params = (route.params ?? {}) as { id?: string };
           return (
@@ -94,8 +97,8 @@ function ChatStack() {
             />
           );
         }}
-      </ChatNav.Screen>
-    </ChatNav.Navigator>
+      </HistoryNav.Screen>
+    </HistoryNav.Navigator>
   );
 }
 
@@ -208,6 +211,7 @@ export function RootNavigator() {
         drawerContent={(props) => <DrawerContent {...props} />}
       >
         <Drawer.Screen name={DRAWER_ROUTES.CHAT} component={ChatStack} />
+        <Drawer.Screen name={DRAWER_ROUTES.HISTORY} component={HistoryStack} />
         <Drawer.Screen name={DRAWER_ROUTES.DASHBOARD} component={DashboardStack} />
         <Drawer.Screen name={DRAWER_ROUTES.RECORD} component={RecordStack} />
         <Drawer.Screen name={DRAWER_ROUTES.ALBUM} component={AlbumStack} />

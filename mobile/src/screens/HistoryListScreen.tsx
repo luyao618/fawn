@@ -4,7 +4,7 @@
 // logic (infinite query backed by `chatQueries.history`) is unchanged.
 
 import { useInfiniteQuery } from '@tanstack/react-query';
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 
 import { chatQueries, type ConversationSummary } from '../shared/api';
 import { TopBar } from '../components/layout/TopBar';
@@ -43,6 +44,11 @@ function summaryFor(c: ConversationSummary): string {
 }
 
 export function HistoryListScreen({ onOpenConversation }: Props) {
+  const navigation = useNavigation();
+  const openDrawer = useCallback(
+    () => navigation.dispatch(DrawerActions.openDrawer()),
+    [navigation],
+  );
   const {
     data,
     isPending,
@@ -63,7 +69,7 @@ export function HistoryListScreen({ onOpenConversation }: Props) {
   if (isPending && !data) {
     return (
       <View style={styles.root}>
-        <TopBar title="" />
+        <TopBar title="" onMenu={openDrawer} />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors['fawn-amber']} />
         </View>
@@ -73,7 +79,7 @@ export function HistoryListScreen({ onOpenConversation }: Props) {
 
   return (
     <View style={styles.root}>
-      <TopBar title="" />
+      <TopBar title="" onMenu={openDrawer} />
       {isError && (
         <View style={styles.banner}>
           <Text style={styles.bannerText}>
