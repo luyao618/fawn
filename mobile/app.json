@@ -10,14 +10,14 @@
     "splash": {
       "image": "./assets/fawn-splash.png",
       "resizeMode": "cover",
-      "backgroundColor": "#3A2415"
+      "backgroundColor": "#6B3E1F"
     },
     "android": {
       "package": "com.luyao618.fawn",
       "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/fawn-adaptive-foreground.png",
-        "backgroundColor": "#3A2415",
+        "backgroundColor": "#6B3E1F",
         "monochromeImage": "./assets/fawn-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
