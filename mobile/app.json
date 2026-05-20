@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Fawn",
+    "name": "鹿小宝",
     "slug": "fawn",
     "version": "2.2.4",
     "orientation": "portrait",
@@ -9,15 +9,15 @@
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/fawn-splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "resizeMode": "cover",
+      "backgroundColor": "#3A2415"
     },
     "android": {
       "package": "com.luyao618.fawn",
       "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/fawn-adaptive-foreground.png",
-        "backgroundColor": "#6B3E1F",
+        "backgroundColor": "#3A2415",
         "monochromeImage": "./assets/fawn-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
