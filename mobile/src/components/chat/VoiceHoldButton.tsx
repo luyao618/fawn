@@ -166,7 +166,7 @@ export function VoiceHoldButton({ onTranscribed, onUploadStart, onUploadEnd, dis
     if (result.status === 'granted') return true;
     Alert.alert(
       '需要麦克风权限',
-      '请在系统设置中允许 Fawn 使用麦克风后再试。',
+      '请在系统设置中允许 鹿小宝 使用麦克风后再试。',
       [
         { text: '取消', style: 'cancel' },
         { text: '去设置', onPress: () => Linking.openSettings() },

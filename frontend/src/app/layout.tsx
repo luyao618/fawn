@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Fawn',
+  title: '鹿小宝',
   description: '私有化家庭育儿 Agent',
 };
 

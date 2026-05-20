@@ -89,7 +89,7 @@ export function LoginClient() {
           <div className="mb-8 flex items-start justify-between gap-3">
             <div>
               <p className="text-sm text-dark-gray">欢迎回来</p>
-              <h1 className="mt-1 text-2xl font-semibold text-soft-charcoal">Fawn</h1>
+              <h1 className="mt-1 text-2xl font-semibold text-soft-charcoal">鹿小宝</h1>
             </div>
             <button
               type="button"
