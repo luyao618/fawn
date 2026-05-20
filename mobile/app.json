@@ -8,15 +8,16 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/fawn-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "image": "./assets/fawn-splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#6B3E1F"
     },
     "android": {
       "package": "com.luyao618.fawn",
       "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/fawn-adaptive-foreground.png",
+        "backgroundImage": "./assets/fawn-adaptive-background.png",
         "backgroundColor": "#6B3E1F",
         "monochromeImage": "./assets/fawn-monochrome.png"
       },
