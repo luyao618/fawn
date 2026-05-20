@@ -1,5 +1,6 @@
 import { api } from './api';
 import { StoredUser } from './tokenStorage';
+import type { Family } from './types';
 
 export interface LoginResponse {
   access_token: string;
@@ -7,8 +8,27 @@ export interface LoginResponse {
   user: StoredUser;
 }
 
+export interface RegistrationRequest {
+  invite_code: string;
+  family_name: string;
+  username: string;
+  password: string;
+  display_name: string;
+  role: '爸爸' | '妈妈';
+}
+
+export interface RegistrationResponse {
+  family: Family;
+  user: StoredUser;
+}
+
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>('/auth/login', { username, password });
+  return data;
+}
+
+export async function registerFamily(payload: RegistrationRequest): Promise<RegistrationResponse> {
+  const { data } = await api.post<RegistrationResponse>('/auth/register', payload);
   return data;
 }
 
