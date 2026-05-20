@@ -1,35 +1,30 @@
 #!/usr/bin/env python3
 """Generate icon + splash assets for Fawn: plain brown background, gold deer.
 
-Per user clarification on YAO-56: revert to the previous plain brown
-background (no LV monogram / no pattern / no texture), and recolour the
-existing deer head from brown to gold. Keep adaptive-icon safe inset and
-splash framing from the prior pass.
-
-Source of truth for the deer silhouette: the brown deer in the previous
-adaptive foreground (commit f79071a) — we extract its alpha mask and
-re-render in gold here so the antler shape stays identical.
+The deer silhouette source is a committed, read-only asset at
+``mobile/assets/sources/fawn-deer-source.png``. This script only reads from
+that path and writes its outputs to disjoint paths under ``mobile/assets/``,
+so re-running it from committed inputs produces byte-stable artifacts.
 
 Output:
   assets/fawn-icon.png                 (1024x1024, square legacy icon)
-  assets/fawn-adaptive-foreground.png  (432x432, deer on transparent)
+  assets/fawn-adaptive-foreground.png  (432x432, gold deer on transparent)
   assets/fawn-adaptive-background.png  (432x432, solid brown plate)
-  assets/fawn-splash.png               (1242x2436, brown + centred deer)
+  assets/fawn-splash.png               (1242x2436, brown + centred gold deer)
   assets/fawn-monochrome.png           (432x432, silhouette for themed icon)
 """
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
+SOURCES = ASSETS / "sources"
+DEER_SOURCE = SOURCES / "fawn-deer-source.png"
 
 # ---- palette ---------------------------------------------------------------
-# Matches the previously approved plain-brown icon (commit f79071a) and
-# the adaptive background colour in app.json before the LV pass.
 BROWN      = (107, 62, 31, 255)         # #6B3E1F  background
 GOLD       = (212, 168, 80, 255)        # #D4A850  deer strokes
 GOLD_HI    = (240, 205, 120, 255)       # highlight gold
@@ -40,28 +35,24 @@ _DEER_MASK_CACHE: Image.Image | None = None
 
 
 def load_deer_mask() -> Image.Image:
-    """Pull the deer alpha mask from the previous brown-deer asset.
+    """Return the deer alpha mask from the committed read-only source asset.
 
-    The asset committed at f79071a has a transparent background with brown
-    strokes, so its own alpha channel is the cleanest source of the shape.
-    Cached so we are not affected when we later overwrite the foreground on
-    disk.
+    ``assets/sources/fawn-deer-source.png`` is the canonical input. The
+    script never writes to that path, so producing outputs cannot mutate
+    the source — re-running the generator from committed inputs yields
+    byte-stable artifacts.
     """
     global _DEER_MASK_CACHE
     if _DEER_MASK_CACHE is not None:
         return _DEER_MASK_CACHE
 
-    # Always re-derive from the f79071a snapshot, not the current on-disk
-    # asset (which may already have been overwritten).
-    tmp = ROOT / "scripts" / "_prev-fg.png"
-    if not tmp.exists():
-        subprocess.check_call(
-            ["git", "show", "f79071a:mobile/assets/fawn-adaptive-foreground.png"],
-            stdout=open(tmp, "wb"),
-            cwd=ROOT,
+    if not DEER_SOURCE.exists():
+        raise FileNotFoundError(
+            f"Missing deer source asset: {DEER_SOURCE}. "
+            "Commit the source PNG before running this generator."
         )
 
-    src = Image.open(tmp).convert("RGBA")
+    src = Image.open(DEER_SOURCE).convert("RGBA")
     r, g, b, a = src.split()
     a_min, a_max = a.getextrema()
     if a_max - a_min > 32:
@@ -169,7 +160,9 @@ def round_preview(icon: Image.Image, out: Path):
 
 # ---- main ------------------------------------------------------------------
 def main():
+    print(f"reading source from {DEER_SOURCE}")
     print(f"writing assets into {ASSETS}")
+
     icon = build_icon(1024)
     icon.save(ASSETS / "fawn-icon.png", optimize=True)
 

@@ -15,3 +15,4 @@ backend/.env.production
 docker-compose.override.yml
 backups/
 docs/deployment.local.md
+mobile/scripts/_preview/
