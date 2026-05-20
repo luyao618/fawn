@@ -61,19 +61,20 @@ function NotificationsBridge({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  // Load Nunito once at the root so the design-token typography renders with
-  // the correct face on Android. While the font is loading we return null
-  // and let the Expo splash stay visible.
-  const [fontsLoaded] = useFonts({
+  // NOTE: @expo-google-fonts/nunito fetches the TTF from fonts.gstatic.com at
+  // runtime (the font is NOT bundled into the APK). On Android networks that
+  // cannot reach Google Fonts (e.g. CN without VPN, flaky DNS, captive
+  // portals) the loader promise never resolves, which used to leave the app
+  // on a permanent white screen because we returned null until fontsLoaded.
+  // Fire-and-forget instead — design-token typography upgrades to Nunito if
+  // and when the download succeeds, otherwise we fall back to the system
+  // font and ship a usable UI on first paint.
+  useFonts({
     Nunito_400Regular,
     Nunito_600SemiBold,
     Nunito_700Bold,
     Nunito_800ExtraBold,
   });
-
-  if (!fontsLoaded) {
-    return null;
-  }
 
   return (
     <GestureHandlerRootView style={styles.root}>
