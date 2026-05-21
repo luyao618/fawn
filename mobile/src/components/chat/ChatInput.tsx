@@ -243,7 +243,7 @@ export function ChatInput({
             ) : null}
 
             <Pressable
-              onPress={onSend}
+              onPress={() => onSend()}
               disabled={!canSend}
               accessibilityRole="button"
               accessibilityLabel="发送"

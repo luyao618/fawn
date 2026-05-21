@@ -1,40 +1,43 @@
 # Android native build (local, no EAS)
 
 This doc describes how to build the Fawn Android app locally from source on
-macOS (Apple Silicon) without going through Expo EAS. The default local flow
-produces a **debug APK** you can install on a real device (verified target:
-Vivo X90, Android 13 / API 33). Release builds live in Expo EAS — see the
-signing policy below.
+macOS (Apple Silicon) without going through Expo EAS. There are two normal
+local flows:
 
-> Sibling docs: see `mobile/README.md` for the EAS-based flow. Local builds and
-> EAS builds can coexist — the `android/` directory is generated on demand and
-> git-ignored.
+- **Debug APK** for investigating bugs while Metro is running.
+- **Gradle release APK** for installing a standalone build on a test phone
+  (verified target: Vivo X90, Android 13 / API 33).
 
-## Signing policy (read this first)
+EAS is optional for cloud/production distribution. Do not spend EAS quota just
+to put a test build on a local device.
 
-The release keystore is the source of truth for app identity on the Play
-Store, so we keep it in **one place only — Expo EAS**. Locally we never need
-(or want) the release keystore on disk.
+> Sibling docs: see `mobile/README.md` for the mobile overview. Local Gradle
+> builds and EAS builds can coexist — the `android/` directory is generated on
+> demand and git-ignored.
+
+## Build policy (read this first)
+
+Use the lightest build that matches the test you are doing:
 
 | Build type | Where it runs | Signing key | When to use |
 |------------|---------------|-------------|-------------|
-| **Debug**   | Local Gradle (`assembleDebug` / `installDebug`) | Local auto-generated debug keystore (shipped with Android SDK; not the release key) | Day-to-day iteration on Vivo X90 / emulator. **This is the default local flow.** |
-| **Release** | Expo EAS (cloud) | Release keystore managed by EAS | Anything you intend to ship, sideload to testers, or upload to the Play Store. |
+| **Debug** | Local Gradle (`assembleDebug` / `installDebug`) | Local debug keystore | Bug investigation, native logs, emulator work, and fast iteration. Debug builds do **not** embed the JS bundle, so keep Metro running. |
+| **Release-test APK** | Local Gradle (`assembleRelease`) | Configured local/test keystore via `FAWN_ANDROID_*` | Installing a standalone build on a test phone such as the Vivo X90. This is the default path for handing a build to a tester or reproducing a phone-only issue. |
+| **Production / store** | EAS or another deliberate production signing pipeline | Production release/upload key | Only when intentionally producing a production artifact or store upload. |
 
 What this means in practice:
 
-- **Do not** keep `~/.fawn/fawn-release.jks` or `FAWN_ANDROID_*` env vars on
-  your dev machine for normal work. The local `assembleRelease` path is
-  retained only as an **optional / troubleshooting** escape hatch (e.g. you
-  need to reproduce an EAS signing bug offline). Treat it as a power-user
-  tool, not part of the regular loop.
-- **Do not** use a locally-built unsigned (or debug-signed) release APK as if
-  it were a real release. It will not be upgrade-compatible with EAS-signed
-  installs and it bypasses the only keystore we trust.
-- Release builds, including any APK/AAB you hand to a tester or upload to a
-  store, must come from EAS. See `mobile/README.md` for the EAS flow.
+- For local debugging, use `npm run android:debug` or
+  `npm run android:install` plus Metro.
+- For a test phone, use `npm run android:release` and install
+  `android/app/build/outputs/apk/release/app-release.apk` with `adb install -r`.
+- A release-test APK is standalone and bundles JS; it should not require Metro.
+- Signing identity still matters. `adb install -r` only upgrades an existing app
+  when the new APK is signed with the same certificate as the installed one.
+- Do not treat a debug-signed/test-signed APK as a production/store artifact.
+  Use the production signing path only when that is the explicit goal.
 
-If you only need a debug build, you can skip the entire "Release signing"
+If you only need a debug build, you can skip the entire "Release-test signing"
 section below.
 
 ## TL;DR (after the one-time setup below)
@@ -44,9 +47,8 @@ cd mobile
 npm install
 npm run android:debug      # → android/app/build/outputs/apk/debug/app-debug.apk
 npm run android:install    # build debug APK + install on connected device
-# Release builds go through Expo EAS — see mobile/README.md.
-# (npm run android:release exists but is optional / troubleshooting only;
-#  see "Release signing" below.)
+npm run android:release    # → android/app/build/outputs/apk/release/app-release.apk
+adb install -r android/app/build/outputs/apk/release/app-release.apk
 ```
 
 ## Expo workflow selection: prebuild (not eject)
@@ -76,8 +78,8 @@ You need the following installed and on `PATH`:
 |------|---------------------|-------|
 | Node.js | ≥ 20 LTS | matches `mobile/README.md` |
 | JDK | 17 (Temurin) | RN 0.81 / Gradle 8.x requires JDK 17 |
-| Android SDK Platform | 35 (compile) + 33 (target device) | Expo SDK 54 compiles against 35 |
-| Android Build-Tools | 35.0.0 | installed via SDK Manager |
+| Android SDK Platform | 36 (compile) + 33 (target device) | current generated Gradle config compiles against API 36 |
+| Android Build-Tools | 36.0.0 or newer | installed via SDK Manager; `apksigner` is used for release-test verification |
 | Android NDK | matches Expo SDK 54 default (currently 27.x) | installed via SDK Manager |
 | Android Platform-Tools | latest | for `adb` |
 | Android cmdline-tools | latest | for `sdkmanager` |
@@ -92,8 +94,8 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 17)"
 # Android Studio (ships SDK + cmdline-tools + emulator)
 brew install --cask android-studio
 # Open Android Studio → More Actions → SDK Manager and install:
-#   - SDK Platforms: Android 15 (API 35), Android 13 (API 33)
-#   - SDK Tools: Android SDK Build-Tools 35.0.0, Platform-Tools,
+#   - SDK Platforms: Android API 36, Android 13 (API 33)
+#   - SDK Tools: Android SDK Build-Tools 36.0.0 or newer, Platform-Tools,
 #                NDK (Side by side) 27.x, CMake, cmdline-tools (latest)
 
 export ANDROID_HOME="$HOME/Library/Android/sdk"
@@ -120,30 +122,27 @@ This file is git-ignored (it's inside `android/`, which is itself ignored).
 ```bash
 java -version           # → openjdk 17.x
 adb --version           # → Android Debug Bridge 35.x
-sdkmanager --list_installed | grep -E 'build-tools|platforms;android-(33|35)|ndk'
+sdkmanager --list_installed | grep -E 'build-tools|platforms;android-(33|36)|ndk'
 ```
 
-## Release signing (optional / troubleshooting only)
+## Release-test signing
 
-> **Reminder:** Per the signing policy at the top of this doc, real release
-> builds go through Expo EAS. The local `assembleRelease` path described in
-> this section exists only as an offline / troubleshooting escape hatch (e.g.
-> reproducing an EAS signing issue without network access). Do **not** use a
-> locally-produced release APK as a shippable artifact, and do **not** keep
-> the release keystore on your dev machine for normal work.
+`npm run android:release` is the normal way to produce a standalone APK for a
+test phone. It runs local Gradle `assembleRelease`; it does not call EAS and
+does not consume Expo build quota.
 
-If you do need a local signed release build, the wiring below is what the
-optional `npm run android:release` script uses. Release builds require a Java
-keystore. **Never commit the keystore or its passwords.** All credentials are
-passed via environment variables prefixed `FAWN_ANDROID_*`.
+Release-test builds require a Java keystore. Use a stable test keystore if you
+want `adb install -r` upgrades to preserve app data across builds. **Never
+commit the keystore or its passwords.** All credentials are passed via
+environment variables prefixed `FAWN_ANDROID_*`.
 
-### Generate your personal release keystore (one time)
+### Generate your personal/test keystore (one time)
 
 ```bash
 mkdir -p ~/.fawn
 keytool -genkeypair -v -storetype JKS \
-  -keystore ~/.fawn/fawn-release.jks \
-  -alias fawn-release -keyalg RSA -keysize 2048 -validity 10000
+  -keystore ~/.fawn/fawn-test.jks \
+  -alias fawn-test -keyalg RSA -keysize 2048 -validity 10000
 # Pick a store password and key password. Record them in your password manager.
 ```
 
@@ -155,15 +154,30 @@ keytool -genkeypair -v -storetype JKS \
 Copy `.env.example` → `.env` (inside `mobile/`) and fill in:
 
 ```env
-FAWN_ANDROID_KEYSTORE_PATH=/Users/<you>/.fawn/fawn-release.jks
+FAWN_ANDROID_KEYSTORE_PATH=/Users/<you>/.fawn/fawn-test.jks
 FAWN_ANDROID_KEYSTORE_PASSWORD=...
-FAWN_ANDROID_KEY_ALIAS=fawn-release
+FAWN_ANDROID_KEY_ALIAS=fawn-test
 FAWN_ANDROID_KEY_PASSWORD=...
 ```
 
 `mobile/.env` is git-ignored. The release script also writes
 `android/keystore.properties` from these env vars at build time — that file is
 git-ignored as well (`mobile/.gitignore`).
+
+For a one-off local test build that only needs to install over an existing
+debug-signed install, you can point the release script at the generated debug
+keystore instead of creating a separate test key:
+
+```bash
+FAWN_ANDROID_KEYSTORE_PATH=android/app/debug.keystore \
+FAWN_ANDROID_KEYSTORE_PASSWORD=android \
+FAWN_ANDROID_KEY_ALIAS=androiddebugkey \
+FAWN_ANDROID_KEY_PASSWORD=android \
+npm run android:release
+```
+
+That produces a standalone release APK, but it is still debug-key signed. Use
+it for local/test-device verification only.
 
 ### How the keystore is wired into Gradle (repeatable, no manual patch)
 
@@ -187,7 +201,7 @@ Secrets are never passed on the Gradle command line; they live in
 `android/keystore.properties` (mode 600, git-ignored) so they do not appear in
 `ps` output.
 
-### Verifying the release APK is signed with the right keystore
+### Verifying the release-test APK is signed with the right keystore
 
 `npm run android:release` runs `assembleRelease` and then compares the
 SHA-256 of the APK's signing certificate to the SHA-256 of
@@ -221,9 +235,9 @@ and the shell helpers in `mobile/scripts/`.
 | Command | What it does |
 |---------|--------------|
 | `npm run android:prebuild` | Regenerate `android/` from `app.json` (no install). |
-| `npm run android:debug` | Build a debug APK via `./gradlew assembleDebug`. |
+| `npm run android:debug` | Build a debug APK via `./gradlew assembleDebug`. Use for bug investigation with Metro. |
 | `npm run android:install` | Build + install the debug APK on the connected adb device (`./gradlew installDebug`). |
-| `npm run android:release` | **Optional / troubleshooting only.** Build a locally-signed release APK via `./gradlew assembleRelease`, using `FAWN_ANDROID_*` env vars. Do not ship this artifact — release builds go through Expo EAS. |
+| `npm run android:release` | Build a locally-signed, standalone release APK via `./gradlew assembleRelease`, using `FAWN_ANDROID_*` env vars. Use this for test-machine installs. |
 
 Each script auto-runs `expo prebuild --platform android --no-install` if
 `android/` is missing.
@@ -234,14 +248,17 @@ Each script auto-runs `expo prebuild --platform android --no-install` if
 # 1. Enable Developer Options + USB debugging on the phone, then connect USB.
 adb devices                  # should list the X90 as "device"
 
-# 2. Debug install (fast iteration loop — the default local flow):
+# 2. Debug install (bug investigation / fast iteration):
+npm run start -- --localhost --dev-client
+adb reverse tcp:8081 tcp:8081
 npm run android:install
 
-# 3. Release APKs come from Expo EAS, not from local builds.
-#    Download the EAS-built APK and sideload it:
-#      adb install -r path/to/eas-build.apk
-#    (The local `npm run android:release` path is troubleshooting-only —
-#    see the "Release signing" section.)
+# 3. Standalone test-machine install (preferred for a test phone):
+npm run android:release
+adb install -r android/app/build/outputs/apk/release/app-release.apk
+
+# 4. Confirm the installed version/signature state if needed:
+adb shell dumpsys package com.luyao618.fawn | grep -E 'versionName|versionCode|lastUpdateTime|signatures'
 ```
 
 The app launches as `com.luyao618.fawn` (see `app.json` → `android.package`).
@@ -254,9 +271,16 @@ The app launches as `com.luyao618.fawn` (see `app.json` → `android.package`).
   `java -version` reports 17, not 11 or 21.
 - **`./gradlew` hangs on first run** → it is downloading the Gradle
   distribution and NDK. Subsequent builds are incremental.
-- **Release APK installs but won't open** → confirm the keystore alias
-  matches the one used for the previous install, or `adb uninstall
-  com.luyao618.fawn` first (signature changes are not upgrade-compatible).
+- **`npm run android:release` builds the APK but fails signature verification**
+  → make sure `ANDROID_HOME` is exported so the script can find
+  `$ANDROID_HOME/build-tools/*/apksigner`, or add the latest Android
+  Build-Tools directory to `PATH`.
+- **`adb install -r` fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`** → the
+  installed app and new APK are signed by different keys. Rebuild with the same
+  test keystore, or uninstall first only if losing local app data is acceptable.
+- **Release APK installs but won't open** → confirm the keystore alias matches
+  the one used for the previous install, then check `adb logcat` for native
+  crash details.
 - **Want to nuke the native folder** → `rm -rf mobile/android` then re-run
   `npm run android:prebuild`. Safe because we regenerate from `app.json`.
 
@@ -264,4 +288,4 @@ The app launches as `com.luyao618.fawn` (see `app.json` → `android.package`).
 
 - iOS local builds.
 - CI cloud builds (will reuse these scripts but live in a separate workflow).
-- Play Store upload signing (we still use EAS for that today).
+- Play Store upload signing / production release policy.

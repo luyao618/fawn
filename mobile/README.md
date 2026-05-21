@@ -12,7 +12,7 @@ React Native + Expo app for the Fawn family parenting agent system.
 - **Stack**: Expo (managed workflow) + TypeScript + React Native
 - **Target**: Android only in v1, `minSdkVersion = 26` (Android 8.0+)
 - **Backend**: reuses the existing FastAPI backend in `../backend`
-- **Distribution (v1)**: EAS internal distribution APK (sideload), no Play Store
+- **Distribution (v1)**: local Gradle APK for test-device sideloads; no Play Store
 
 ## Layout in the monorepo
 
@@ -36,7 +36,7 @@ You need:
 
 - Node ≥ 20
 - Android Studio with an emulator, or a real Android 8.0+ device with USB debugging
-- For native builds: an [Expo account](https://expo.dev) and `npm i -g eas-cli`
+- Optional only for cloud builds: an [Expo account](https://expo.dev) and `npm i -g eas-cli`
 
 ## Building locally (no EAS)
 
@@ -49,23 +49,28 @@ Quick commands (run from `mobile/`):
 ```bash
 npm run android:debug      # build debug APK via ./gradlew assembleDebug
 npm run android:install    # build + adb install on connected device
-# npm run android:release  # troubleshooting only — do NOT ship this artifact.
-#                          # Release builds go through Expo EAS (see below).
+npm run android:release    # build standalone APK via ./gradlew assembleRelease
+adb install -r android/app/build/outputs/apk/release/app-release.apk
 ```
 
-Release APKs/AABs that you ship, sideload to testers, or upload to the Play
-Store must come from **Expo EAS** — see the [Signing policy in
-`../docs/android-native-build.md`](../docs/android-native-build.md#signing-policy-read-this-first).
-The local `npm run android:release` path is retained only as an offline /
-troubleshooting escape hatch.
+Use `android:debug` / `android:install` when you are actively debugging and can
+keep Metro running. Use `android:release` when you need to install a
+standalone APK on a test phone such as the Vivo X90. This Gradle path is local
+and does not consume Expo/EAS build quota.
+
+See the [build policy in
+`../docs/android-native-build.md`](../docs/android-native-build.md#build-policy-read-this-first)
+for signing details and the difference between debug, release-test, and
+production/store artifacts.
 
 `android/` is generated on demand via `expo prebuild` and is git-ignored.
 
-## Building the internal-distribution APK (EAS)
+## Building with EAS (optional)
 
-The first internal-distribution APK is built remotely via EAS so we don't need a
-local Android SDK. The `preview` profile in `eas.json` produces a sideloadable
-`.apk` file (not an `.aab`).
+EAS is optional and should not be the default way to install builds on local
+test devices. Use it only when you intentionally need Expo's cloud build
+environment or a production distribution pipeline. The `preview` profile in
+`eas.json` produces a sideloadable `.apk` file (not an `.aab`).
 
 ```bash
 cd mobile
@@ -74,20 +79,19 @@ npx eas-cli init                       # one-time: links the project to EAS
 npx eas-cli build --platform android --profile preview
 ```
 
-When the build finishes, EAS prints an install URL — open it on the Android
-device, download the APK, install, and you should land on the placeholder home
-screen showing the app version.
+When the build finishes, EAS prints an install URL. For ordinary X90/tester
+verification, prefer the local Gradle release APK described above.
 
 ## Acceptance criteria for this slice (YAO-14)
 
 - [x] `mobile/` exists alongside `backend/` and `frontend/`
 - [x] Expo + TypeScript, `minSdkVersion = 26`
-- [x] EAS build profile (`preview`) configured for internal-distribution APK
+- [x] Local Gradle build scripts configured for debug and release-test APKs
 - [x] Placeholder home screen rendering the app name + version
-- [ ] APK produced by EAS, installed on a real Android 8.0+ device
+- [ ] Gradle release APK installed on a real Android 8.0+ device
 
-The last box requires an EAS account and an Android device, so it has to be
-ticked off by a human running the `eas build` command above.
+The last box requires an Android device and USB debugging, so it has to be
+ticked off by a human running the local Gradle build/install flow above.
 
 ## Chat module v1 (YAO-18)
 
