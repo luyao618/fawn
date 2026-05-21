@@ -111,9 +111,9 @@ Agent 可以调用记录、查询、知识检索、相册浏览和用户画像�
 
 `mobile/` 是一个 Expo (managed workflow) + React Native + TypeScript 的原生 Android 客户端，复用 `backend/` 提供的 FastAPI 接口。
 
-- 当前发布形态：v1 仅支持 Android，`minSdkVersion = 26`（Android 8.0+），通过 EAS internal distribution 以 APK 形式分发，未上架 Play Store。
+- 当前发布形态：v1 仅支持 Android，`minSdkVersion = 26`（Android 8.0+）；测试机安装使用本地 Gradle release APK，未上架 Play Store。
 - 默认连接的是生产后端 `https://lumingchuan.vip/api`；本地调试请按 [`mobile/AGENTS.md`](mobile/AGENTS.md) 临时改写 `mobile/app.json` 中的 `extra.apiBaseUrl`，不要把本地 URL 提交。
-- 日常 UI 开发可走本地 build chain（`npm run android:debug` / `android:install`）；发布版必须走 Expo EAS。详细说明见 [`mobile/README.md`](mobile/README.md) 和 [`docs/android-native-build.md`](docs/android-native-build.md)。
+- Android 查 bug 用本地 debug build（`npm run android:debug` / `android:install`，需要 Metro）；安装到 X90/测试机用本地 Gradle release build（`npm run android:release` 后 `adb install -r`），不需要走 Expo/EAS 额度。详细说明见 [`mobile/README.md`](mobile/README.md) 和 [`docs/android-native-build.md`](docs/android-native-build.md)。
 
 iOS 暂未列入 v1 范围。
 
@@ -290,9 +290,9 @@ Album photos and chat images are stored in MinIO. PostgreSQL keeps metadata, tag
 
 `mobile/` is an Expo (managed workflow) + React Native + TypeScript native Android client that reuses the FastAPI surface in `backend/`.
 
-- v1 ships Android only, `minSdkVersion = 26` (Android 8.0+), distributed as a sideloadable APK via EAS internal distribution. Not published to the Play Store.
+- v1 ships Android only, `minSdkVersion = 26` (Android 8.0+). Test-device installs use a local Gradle release APK. Not published to the Play Store.
 - The default backend baked into the app is production (`https://lumingchuan.vip/api`). For local debugging, follow [`mobile/AGENTS.md`](mobile/AGENTS.md) and temporarily override `extra.apiBaseUrl` in `mobile/app.json` — do not commit the local URL.
-- Day-to-day UI work can use the local build chain (`npm run android:debug` / `android:install`); release artifacts must go through Expo EAS. See [`mobile/README.md`](mobile/README.md) and [`docs/android-native-build.md`](docs/android-native-build.md).
+- Use local debug builds (`npm run android:debug` / `android:install`, with Metro) for bug investigation. Use local Gradle release builds (`npm run android:release`, then `adb install -r`) for X90/test-device installs; this does not consume Expo/EAS quota. See [`mobile/README.md`](mobile/README.md) and [`docs/android-native-build.md`](docs/android-native-build.md).
 
 iOS is out of scope for v1.
 
