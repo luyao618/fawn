@@ -12,9 +12,37 @@ export const queryKeys = {
   chat: {
     all: ['chat'] as const,
     conversations: () => [...queryKeys.chat.all, 'conversations'] as const,
-    messages: (id: string) => [...queryKeys.chat.all, 'messages', id] as const,
+    messages: (
+      id: string,
+      target?: {
+        targetMessageId?: string | null;
+        targetDate?: string | null;
+        aroundLimit?: number;
+      },
+    ) =>
+      target?.targetMessageId || target?.targetDate
+        ? [...queryKeys.chat.all, 'messages', id, target] as const
+        : [...queryKeys.chat.all, 'messages', id] as const,
+    targetWindow: (id: string, targetMessageId: string, aroundLimit: number) =>
+      [
+        ...queryKeys.chat.all,
+        'messages',
+        id,
+        { targetMessageId, aroundLimit },
+      ] as const,
+    historyRoot: () => [...queryKeys.chat.all, 'history'] as const,
     history: (pageSize: number) =>
-      [...queryKeys.chat.all, 'history', { pageSize }] as const,
+      [...queryKeys.chat.historyRoot(), { pageSize }] as const,
+    search: (query: string, pageSize: number) =>
+      [
+        ...queryKeys.chat.all,
+        'search',
+        { query: query.trim(), pageSize },
+      ] as const,
+    monthActivity: (year: number, month: number) =>
+      [...queryKeys.chat.all, 'activity', { year, month }] as const,
+    dayTarget: (date: string) =>
+      [...queryKeys.chat.all, 'day-target', { date }] as const,
   },
   growth: {
     all: ['growth'] as const,

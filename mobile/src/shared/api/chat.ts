@@ -1,10 +1,14 @@
 import { api } from './client';
 import { queryKeys } from './queryKeys';
 import type {
+  ChatDayTargetResponse,
   ChatImageUploadResponse,
+  ChatMonthActivityResponse,
   ConversationDetail,
   ConversationSummary,
+  PaginatedChatMessageSearchResults,
   PaginatedConversations,
+  SendChatMessageResult,
 } from './types';
 
 async function fetchConversations(): Promise<ConversationSummary[]> {
@@ -26,14 +30,70 @@ export async function fetchConversationsPage(
 
 export async function fetchConversation(
   id: string,
-  before?: string,
+  beforeOrOptions?:
+    | string
+    | {
+        before?: string;
+        limit?: number;
+        targetMessageId?: string;
+        aroundLimit?: number;
+      },
   limit = 50,
 ): Promise<ConversationDetail> {
-  const params: Record<string, string | number> = { limit };
-  if (before) params.before = before;
+  const options =
+    typeof beforeOrOptions === 'object'
+      ? beforeOrOptions
+      : { before: beforeOrOptions, limit };
+  const params: Record<string, string | number> = {
+    limit: options.limit ?? limit,
+  };
+  if (options.before) params.before = options.before;
+  if (options.targetMessageId) {
+    params.target_message_id = options.targetMessageId;
+    params.around_limit = options.aroundLimit ?? 25;
+  }
   const { data } = await api.get<ConversationDetail>(`/chat/conversations/${id}`, {
     params,
   });
+  return data;
+}
+
+export async function searchMessages(
+  query: string,
+  page: number,
+  pageSize: number,
+): Promise<PaginatedChatMessageSearchResults> {
+  const { data } = await api.get<PaginatedChatMessageSearchResults>(
+    '/chat/messages/search',
+    {
+      params: { q: query, page, page_size: pageSize },
+    },
+  );
+  return data;
+}
+
+export async function fetchChatMonthActivity(
+  year: number,
+  month: number,
+): Promise<ChatMonthActivityResponse> {
+  const { data } = await api.get<ChatMonthActivityResponse>(
+    '/chat/history/activity',
+    {
+      params: { year, month },
+    },
+  );
+  return data;
+}
+
+export async function fetchChatDayTarget(
+  date: string,
+): Promise<ChatDayTargetResponse> {
+  const { data } = await api.get<ChatDayTargetResponse>(
+    '/chat/history/day-target',
+    {
+      params: { date },
+    },
+  );
   return data;
 }
 
@@ -97,6 +157,8 @@ export async function transcribeVoice(file: {
 export interface SendChatMessageCallbacks {
   onToken?: (content: string) => void;
   onDone?: (messageId: string, messageType: string) => void;
+  onError?: (message: string) => void;
+  onSessionExpired?: (expiredConversationId: string) => void;
 }
 
 export async function sendChatMessage(
@@ -106,18 +168,20 @@ export async function sendChatMessage(
   baseUrl: string,
   token: string | null,
   callbacks: SendChatMessageCallbacks = {},
-): Promise<void> {
+): Promise<SendChatMessageResult> {
   const url = `${baseUrl}/chat/conversations/${conversationId}/messages`;
   const body = JSON.stringify({ content, image_url: imageUrl });
-  const { onToken, onDone } = callbacks;
+  const { onToken, onDone, onError, onSessionExpired } = callbacks;
 
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<SendChatMessageResult>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     let processed = 0;
     let buffer = '';
+    let result: SendChatMessageResult = { type: 'sent' };
+    let streamError: Error | null = null;
 
     const parseChunk = (raw: string) => {
-      buffer += raw;
+      buffer += raw.replace(/\r\n/g, '\n');
       // SSE events are separated by a blank line ("\n\n"). Process every
       // complete event and leave the trailing partial event in `buffer`.
       let sepIdx: number;
@@ -136,11 +200,25 @@ export async function sendChatMessage(
               content?: string;
               message_id?: string;
               message_type?: string;
+              message?: string;
+              expired_conversation_id?: string;
             };
             if (parsed.type === 'token' && typeof parsed.content === 'string') {
               onToken?.(parsed.content);
             } else if (parsed.type === 'done') {
               onDone?.(parsed.message_id ?? '', parsed.message_type ?? 'text');
+            } else if (parsed.type === 'error') {
+              const message = parsed.message ?? '发送失败';
+              onError?.(message);
+              streamError = new Error(message);
+            } else if (parsed.type === 'session_expired') {
+              const expiredConversationId =
+                parsed.expired_conversation_id ?? conversationId;
+              result = {
+                type: 'session_expired',
+                expiredConversationId,
+              };
+              onSessionExpired?.(expiredConversationId);
             }
           } catch {
             // Ignore malformed frames — the server occasionally sends keep-alives.
@@ -174,7 +252,11 @@ export async function sendChatMessage(
         processed = text.length;
         parseChunk(chunk);
       }
-      resolve();
+      if (streamError) {
+        reject(streamError);
+        return;
+      }
+      resolve(result);
     };
     xhr.onerror = () => reject(new Error('send message network error'));
     xhr.ontimeout = () => reject(new Error('send message timed out'));
@@ -205,6 +287,38 @@ export const chatQueries = {
       const loaded = lastPage.page * lastPage.page_size;
       return loaded < lastPage.total ? lastPage.page + 1 : undefined;
     },
+  }),
+  search: (query: string, pageSize: number) => ({
+    queryKey: queryKeys.chat.search(query, pageSize),
+    queryFn: ({ pageParam = 1 }: { pageParam?: number }) =>
+      searchMessages(query.trim(), pageParam, pageSize),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage: PaginatedChatMessageSearchResults) => {
+      const loaded = lastPage.page * lastPage.page_size;
+      return loaded < lastPage.total ? lastPage.page + 1 : undefined;
+    },
+    enabled: query.trim().length > 0,
+  }),
+  monthActivity: (year: number, month: number) => ({
+    queryKey: queryKeys.chat.monthActivity(year, month),
+    queryFn: () => fetchChatMonthActivity(year, month),
+  }),
+  dayTarget: (date: string) => ({
+    queryKey: queryKeys.chat.dayTarget(date),
+    queryFn: () => fetchChatDayTarget(date),
+  }),
+  targetWindow: (
+    id: string,
+    targetMessageId: string,
+    aroundLimit = 25,
+  ) => ({
+    queryKey: queryKeys.chat.targetWindow(id, targetMessageId, aroundLimit),
+    queryFn: () =>
+      fetchConversation(id, {
+        targetMessageId,
+        aroundLimit,
+        limit: aroundLimit * 2 + 1,
+      }),
   }),
 };
 

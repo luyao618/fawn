@@ -19,6 +19,7 @@ import {
   chatQueries,
   createConversation,
   fetchConversation,
+  queryKeys,
   resolveChatImageUrl,
   sendChatMessage,
   uploadChatImage,
@@ -79,6 +80,8 @@ interface Props {
 interface PendingImage {
   imageUrl: string; // server-returned ref (e.g. /api/chat/.../images/xxx.jpg)
   localUri: string; // local file uri for instant preview
+  mimeType: string;
+  filename: string;
 }
 
 function senderMeta(sender: Pick<User, 'display_name' | 'role'> | null | undefined) {
@@ -272,7 +275,12 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
       const mimeType = asset.mimeType ?? 'image/jpeg';
       const filename = asset.fileName ?? `upload-${Date.now()}.jpg`;
       const res = await uploadChatImage(resolvedId, asset.uri, mimeType, filename);
-      setPendingImage({ imageUrl: res.image_url, localUri: asset.uri });
+      setPendingImage({
+        imageUrl: res.image_url,
+        localUri: asset.uri,
+        mimeType,
+        filename,
+      });
     } catch (err) {
       Alert.alert('上传失败', (err as Error).message);
     } finally {
@@ -286,8 +294,9 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     // setText() that the keyboard path relies on.
     const content = (overrideContent ?? text).trim();
     if (!content && !pendingImage) return;
+    const sentImage = pendingImage;
     const sentContent = content || (pendingImage ? '[图片]' : '');
-    const sentImageUrl = pendingImage?.imageUrl ?? null;
+    const sentImageUrl = sentImage?.imageUrl ?? null;
     // Clear composer + show optimistic rows synchronously so the keyboard
     // dismiss and bubbles land in the same frame.
     setText('');
@@ -297,39 +306,90 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     setSending(true);
     try {
       const token = authToken ?? (await getToken());
-      await sendChatMessage(
-        resolvedId,
-        sentContent,
-        sentImageUrl,
-        baseUrl,
-        token,
-        {
-          onToken: (chunk) => {
-            pendingBuffer.current += chunk;
-            startTypingTimer();
-          },
-          onDone: () => {
-            // Flush remaining buffer before refreshing the first page so the
-            // user never sees text jump from mid-typewriter to the full
-            // response.
-            flushBuffer();
-          },
+      const callbacks = {
+        onToken: (chunk: string) => {
+          pendingBuffer.current += chunk;
+          startTypingTimer();
         },
-      );
-      // Refresh page 0 only (NOT all pages, to avoid spurious refetch of every
-      // previously-loaded older page). React Query v5 removed `refetchPage`, so
-      // we manually fetch page 0 and splice it into the cache; dedup-by-id in
-      // `baseMessages` protects against boundary overlap with page 1.
-      const fresh = await fetchConversation(resolvedId, undefined, 50);
-      const key = chatQueries.messages(resolvedId).queryKey;
-      queryClient.setQueryData<
-        { pages: ConversationDetail[]; pageParams: (string | undefined)[] } | undefined
-      >(key, (old) => ({
-        pages: [fresh, ...(old?.pages.slice(1) ?? [])],
-        pageParams: [undefined, ...(old?.pageParams.slice(1) ?? [])],
-      }));
+        onDone: () => {
+          // Flush remaining buffer before refreshing the first page so the
+          // user never sees text jump from mid-typewriter to the full
+          // response.
+          flushBuffer();
+        },
+      };
+
+      const sendOnce = async (
+        targetConversationId: string,
+        targetImageUrl: string | null,
+      ) =>
+        sendChatMessage(
+          targetConversationId,
+          sentContent,
+          targetImageUrl,
+          baseUrl,
+          token,
+          callbacks,
+        );
+
+      const refreshFirstPage = async (targetConversationId: string) => {
+        // Refresh page 0 only (NOT all pages, to avoid spurious refetch of every
+        // previously-loaded older page). React Query v5 removed `refetchPage`, so
+        // we manually fetch page 0 and splice it into the cache; dedup-by-id in
+        // `baseMessages` protects against boundary overlap with page 1.
+        const fresh = await fetchConversation(targetConversationId, undefined, 50);
+        const key = chatQueries.messages(targetConversationId).queryKey;
+        queryClient.setQueryData<
+          { pages: ConversationDetail[]; pageParams: (string | undefined)[] } | undefined
+        >(key, (old) => ({
+          pages: [fresh, ...(old?.pages.slice(1) ?? [])],
+          pageParams: [undefined, ...(old?.pageParams.slice(1) ?? [])],
+        }));
+      };
+
+      const retryAfterSessionExpired = async () => {
+        // Expired sends are server-defined as non-persisting. Reset the local
+        // streaming placeholder, resolve the current active conversation, then
+        // replay the same user intent once. Image sends must be uploaded again
+        // because the first image URL points at the expired conversation's
+        // upload namespace.
+        stopTypingTimer();
+        pendingBuffer.current = '';
+        setStreamingAssistant({ content: '' });
+
+        const freshConversation = await createConversation();
+        await queryClient.invalidateQueries({
+          queryKey: chatQueries.conversations().queryKey,
+        });
+
+        let retryImageUrl: string | null = null;
+        if (sentImage) {
+          const uploaded = await uploadChatImage(
+            freshConversation.id,
+            sentImage.localUri,
+            sentImage.mimeType,
+            sentImage.filename,
+          );
+          retryImageUrl = uploaded.image_url;
+        }
+        setOptimisticUser({ content: sentContent, imageUrl: retryImageUrl });
+
+        const retryResult = await sendOnce(freshConversation.id, retryImageUrl);
+        if (retryResult.type === 'session_expired') {
+          throw new Error('会话已过期，请重新发送');
+        }
+        return freshConversation.id;
+      };
+
+      const firstResult = await sendOnce(resolvedId, sentImageUrl);
+      const completedConversationId =
+        firstResult.type === 'session_expired'
+          ? await retryAfterSessionExpired()
+          : resolvedId;
+
+      await refreshFirstPage(completedConversationId);
       await queryClient.invalidateQueries({
-        queryKey: chatQueries.conversations().queryKey,
+        queryKey: queryKeys.chat.all,
       });
       setOptimisticUser(null);
       setStreamingAssistant(null);
@@ -344,7 +404,6 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
       setSending(false);
     }
   };
-
   const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
     const ref = item.metadata?.image_url;
     const uri = ref ? resolveChatImageUrl(baseUrl, ref) : null;

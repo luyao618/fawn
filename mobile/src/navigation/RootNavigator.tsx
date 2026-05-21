@@ -33,6 +33,29 @@ import { ROUTES } from './routeNames';
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator;
 
+type HistoryTargetParams = {
+  targetMessageId?: string;
+  targetDate?: string;
+};
+
+type HistoryConversationRouteParams = HistoryTargetParams & {
+  id?: string;
+};
+
+type HistoryListWithTargetProps = {
+  onOpenConversation: (id: string, target?: HistoryTargetParams) => void;
+};
+
+type HistoryConversationWithTargetProps = HistoryTargetParams & {
+  conversationId: string;
+  onBack: () => void;
+};
+
+const TargetAwareHistoryListScreen =
+  HistoryListScreen as React.ComponentType<HistoryListWithTargetProps>;
+const TargetAwareHistoryConversationScreen =
+  HistoryConversationScreen as React.ComponentType<HistoryConversationWithTargetProps>;
+
 // ----- Per-tab stacks -------------------------------------------------------
 
 function ChatStack() {
@@ -80,19 +103,25 @@ function HistoryStack() {
     <HistoryNav.Navigator screenOptions={{ headerShown: false }}>
       <HistoryNav.Screen name={ROUTES.HISTORY_LIST}>
         {({ navigation }) => (
-          <HistoryListScreen
-            onOpenConversation={(id) =>
-              navigation.navigate(ROUTES.HISTORY_CONVERSATION, { id })
+          <TargetAwareHistoryListScreen
+            onOpenConversation={(id, target) =>
+              navigation.navigate(ROUTES.HISTORY_CONVERSATION, {
+                id,
+                targetMessageId: target?.targetMessageId,
+                targetDate: target?.targetDate,
+              })
             }
           />
         )}
       </HistoryNav.Screen>
       <HistoryNav.Screen name={ROUTES.HISTORY_CONVERSATION}>
         {({ route, navigation }) => {
-          const params = (route.params ?? {}) as { id?: string };
+          const params = (route.params ?? {}) as HistoryConversationRouteParams;
           return (
-            <HistoryConversationScreen
+            <TargetAwareHistoryConversationScreen
               conversationId={params.id ?? ''}
+              targetMessageId={params.targetMessageId}
+              targetDate={params.targetDate}
               onBack={() => navigation.goBack()}
             />
           );
