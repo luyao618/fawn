@@ -29,6 +29,8 @@ import { dedupById } from '../shared/utils/dedupById';
 import { useAuth } from '../auth/AuthContext';
 import { getApiBaseUrl } from '../lib/api';
 import { getToken } from '../lib/tokenStorage';
+import type { User } from '../lib/types';
+import { roleLabel } from '../lib/utils';
 import {
   colors,
   radii,
@@ -79,10 +81,10 @@ interface PendingImage {
   localUri: string; // local file uri for instant preview
 }
 
-function senderMeta(user: { display_name?: string | null; role?: string | null } | null) {
+function senderMeta(sender: Pick<User, 'display_name' | 'role'> | null | undefined) {
   return {
-    name: user?.display_name ?? '家庭成员',
-    role: user?.role ?? '',
+    name: sender?.display_name?.trim() || '家庭成员',
+    role: roleLabel(sender?.role),
   };
 }
 
@@ -343,13 +345,13 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     }
   };
 
-  const meta = senderMeta(user);
-
   const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
     const ref = item.metadata?.image_url;
     const uri = ref ? resolveChatImageUrl(baseUrl, ref) : null;
-    const isOwnMessage =
-      item.role === 'user' && (!item.sender_user_id || item.sender_user_id === user?.id);
+    const isUserMessage = item.role === 'user';
+    const fallbackSender =
+      !item.sender_user_id || item.sender_user_id === user?.id ? user : null;
+    const meta = senderMeta(item.sender ?? fallbackSender);
     // FlatList `inverted` consumes `reversedMessages`: index 0 is the newest
     // and `index + 1` is the message that came chronologically *just before*
     // `item`. Insert a TimeSeparator at the visual top of each day's block,
@@ -366,8 +368,8 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
           message={item}
           imageUri={uri}
           imageHeaders={uri ? imageHeaders : undefined}
-          senderName={isOwnMessage ? meta.name : undefined}
-          senderRole={isOwnMessage ? meta.role : undefined}
+          senderName={isUserMessage ? meta.name : undefined}
+          senderRole={isUserMessage ? meta.role : undefined}
           isStreaming={item.id === 'temp-assistant'}
         />
         {/* In an inverted FlatList, JSX rendered AFTER the bubble visually
