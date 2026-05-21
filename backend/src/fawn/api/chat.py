@@ -6,8 +6,10 @@ import json
 import logging
 import mimetypes
 import uuid
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response, StreamingResponse
@@ -23,9 +25,15 @@ from fawn.agent.prompts import build_system_prompt
 from fawn.agent.tracker_orchestrator import route_tracker_message
 from fawn.api.schemas import (
     ChatImageResponse,
+    ChatHistoryActivityDay,
+    ChatHistoryActivityResponse,
+    ChatHistoryDayTargetResponse,
+    ChatHistoryTarget,
     ConversationDetail,
     ConversationRead,
+    ConversationTargetWindow,
     MessageRead,
+    MessageSearchResult,
     PaginatedResponse,
     SendMessageRequest,
     VoiceTranscriptionResponse,
@@ -40,12 +48,48 @@ from fawn.services.images import (
     prepare_model_image,
 )
 from fawn.services.long_term_memory import LongTermMemoryService
+from fawn.services.memory import get_or_create_current_conversation
 from fawn.services.memory_curator import CuratorTurn, MemoryCurator
 from fawn.services.storage import get_bytes, put_bytes
 from fawn.services.voice_asr import DoubaoASRError, DoubaoASRService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger(__name__)
+CHAT_HISTORY_TIMEZONE = ZoneInfo("Asia/Shanghai")
+
+
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _local_day_range(day: date) -> tuple[datetime, datetime]:
+    start_local = datetime.combine(day, time.min, tzinfo=CHAT_HISTORY_TIMEZONE)
+    end_local = start_local + timedelta(days=1)
+    return start_local.astimezone(UTC), end_local.astimezone(UTC)
+
+
+def _local_month_range(year: int, month: int) -> tuple[datetime, datetime]:
+    start = date(year, month, 1)
+    if month == 12:
+        end = date(year + 1, 1, 1)
+    else:
+        end = date(year, month + 1, 1)
+    start_local = datetime.combine(start, time.min, tzinfo=CHAT_HISTORY_TIMEZONE)
+    end_local = datetime.combine(end, time.min, tzinfo=CHAT_HISTORY_TIMEZONE)
+    return start_local.astimezone(UTC), end_local.astimezone(UTC)
+
+
+def _history_target(message: Message, conversation_started_at: datetime) -> ChatHistoryTarget:
+    return ChatHistoryTarget(
+        message_id=message.id,
+        conversation_id=message.conversation_id,
+        created_at=message.created_at,
+        role=message.role,
+        content=message.content,
+        message_type=message.message_type,
+        metadata=message.message_metadata,
+        conversation_started_at=conversation_started_at,
+    )
 
 
 async def _get_family_conversation(
@@ -54,22 +98,6 @@ async def _get_family_conversation(
     conversation = await db.get(Conversation, conversation_id)
     if conversation is None or conversation.family_id != user.family_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-    return conversation
-
-
-async def _get_or_create_family_conversation(db: AsyncSession, user: User) -> Conversation:
-    conversation = await db.scalar(
-        select(Conversation)
-        .where(Conversation.family_id == user.family_id, Conversation.is_active.is_(True))
-        .order_by(Conversation.started_at.asc())
-        .limit(1)
-    )
-    if conversation is not None:
-        return conversation
-    conversation = Conversation(family_id=user.family_id, user_id=user.id)
-    db.add(conversation)
-    await db.commit()
-    await db.refresh(conversation)
     return conversation
 
 
@@ -97,8 +125,8 @@ async def create_conversation(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ConversationRead:
-    conversation = await _get_or_create_family_conversation(db, user)
-    return await _conversation_read(db, conversation)
+    resolution = await get_or_create_current_conversation(db, user)
+    return await _conversation_read(db, resolution.conversation)
 
 
 @router.get("/conversations", response_model=PaginatedResponse)
@@ -134,15 +162,152 @@ async def list_conversations(
     )
 
 
+@router.get("/history/activity", response_model=ChatHistoryActivityResponse)
+async def get_history_activity(
+    year: int = Query(..., ge=1970, le=9999),
+    month: int = Query(..., ge=1, le=12),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChatHistoryActivityResponse:
+    start_utc, end_utc = _local_month_range(year, month)
+    rows = list(
+        (
+            await db.execute(
+                select(Message.created_at)
+                .join(Conversation, Conversation.id == Message.conversation_id)
+                .where(
+                    Conversation.family_id == user.family_id,
+                    Message.created_at >= start_utc,
+                    Message.created_at < end_utc,
+                )
+            )
+        ).all()
+    )
+    counts: dict[date, int] = {}
+    for (created_at,) in rows:
+        local_date = _aware(created_at).astimezone(CHAT_HISTORY_TIMEZONE).date()
+        counts[local_date] = counts.get(local_date, 0) + 1
+    return ChatHistoryActivityResponse(
+        year=year,
+        month=month,
+        days=[
+            ChatHistoryActivityDay(date=day, day=day.day, message_count=counts[day])
+            for day in sorted(counts)
+        ],
+    )
+
+
+@router.get("/history/day-target", response_model=ChatHistoryDayTargetResponse)
+async def get_history_day_target(
+    target_date: date = Query(..., alias="date"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChatHistoryDayTargetResponse:
+    start_utc, end_utc = _local_day_range(target_date)
+    row = (
+        await db.execute(
+            select(Message, Conversation.started_at.label("conversation_started_at"))
+            .options(selectinload(Message.sender))
+            .join(Conversation, Conversation.id == Message.conversation_id)
+            .where(
+                Conversation.family_id == user.family_id,
+                Message.created_at >= start_utc,
+                Message.created_at < end_utc,
+            )
+            .order_by(Message.created_at.asc(), Message.id.asc())
+            .limit(1)
+        )
+    ).first()
+    if row is None:
+        return ChatHistoryDayTargetResponse(date=target_date, target=None)
+    message, conversation_started_at = row
+    return ChatHistoryDayTargetResponse(
+        date=target_date,
+        target=_history_target(message, conversation_started_at),
+    )
+
+
+async def _target_conversation_detail(
+    *,
+    conversation: Conversation,
+    conversation_id: uuid.UUID,
+    target_message_id: uuid.UUID,
+    around_limit: int,
+    db: AsyncSession,
+) -> ConversationDetail:
+    target_message = await db.scalar(
+        select(Message)
+        .options(selectinload(Message.sender))
+        .where(Message.id == target_message_id, Message.conversation_id == conversation_id)
+    )
+    if target_message is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"target message {target_message_id} not found in conversation",
+        )
+    target_cursor = (target_message.created_at, target_message.id)
+    before_rows = list(
+        (
+            await db.execute(
+                select(Message)
+                .options(selectinload(Message.sender))
+                .where(
+                    Message.conversation_id == conversation_id,
+                    tuple_(Message.created_at, Message.id) < target_cursor,
+                )
+                .order_by(Message.created_at.desc(), Message.id.desc())
+                .limit(around_limit)
+            )
+        ).scalars()
+    )
+    before_rows.reverse()
+    after_rows = list(
+        (
+            await db.execute(
+                select(Message)
+                .options(selectinload(Message.sender))
+                .where(
+                    Message.conversation_id == conversation_id,
+                    tuple_(Message.created_at, Message.id) > target_cursor,
+                )
+                .order_by(Message.created_at.asc(), Message.id.asc())
+                .limit(around_limit)
+            )
+        ).scalars()
+    )
+    rows = before_rows + [target_message] + after_rows
+    return ConversationDetail(
+        conversation=await _conversation_read(db, conversation),
+        messages=[MessageRead.model_validate(message) for message in rows],
+        has_more=False,
+        next_before=None,
+        target=ConversationTargetWindow(
+            target_message_id=target_message.id,
+            target_index=len(before_rows),
+            around_limit=around_limit,
+        ),
+    )
+
+
 @router.get("/conversations/{conversation_id}", response_model=ConversationDetail)
 async def get_conversation(
     conversation_id: uuid.UUID,
     before: uuid.UUID | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
+    target_message_id: uuid.UUID | None = Query(None),
+    around_limit: int = Query(25, ge=1, le=50),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ConversationDetail:
     conversation = await _get_family_conversation(db, user, conversation_id)
+    if target_message_id is not None:
+        return await _target_conversation_detail(
+            conversation=conversation,
+            conversation_id=conversation_id,
+            target_message_id=target_message_id,
+            around_limit=around_limit,
+            db=db,
+        )
     cursor: tuple[Any, uuid.UUID] | None = None
     if before is not None:
         row = (
@@ -204,21 +369,27 @@ async def _search_messages(
     rows = list(
         (
             await db.execute(
-                base.order_by(Message.created_at.desc()).limit(page_size).offset(offset)
+                base.order_by(Message.created_at.desc(), Message.id.desc())
+                .limit(page_size)
+                .offset(offset)
             )
         ).all()
     )
     items = []
     for message, conversation_started_at in rows:
-        data = MessageRead.model_validate(message).model_dump(mode="json")
-        data["conversation_started_at"] = conversation_started_at.isoformat()
-        items.append(data)
+        message_data = MessageRead.model_validate(message).model_dump()
+        items.append(
+            MessageSearchResult(
+                **message_data,
+                conversation_started_at=conversation_started_at,
+            ).model_dump(mode="json")
+        )
     return PaginatedResponse(items=items, total=total or 0, page=page, page_size=page_size)
 
 
 @router.get("/search", response_model=PaginatedResponse)
 async def search_messages(
-    q: str,
+    q: str = Query(..., min_length=1),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
@@ -229,7 +400,7 @@ async def search_messages(
 
 @router.get("/messages/search", response_model=PaginatedResponse)
 async def search_messages_compat(
-    q: str,
+    q: str = Query(..., min_length=1),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
@@ -322,7 +493,28 @@ async def send_message(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
-    await _get_family_conversation(db, user, conversation_id)
+    conversation = await _get_family_conversation(db, user, conversation_id)
+    if not conversation.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Conversation is not active",
+        )
+    resolution = await get_or_create_current_conversation(db, user)
+    if resolution.conversation.id != conversation_id:
+        if resolution.expired_conversation_id == conversation_id:
+            async def expired_stream():
+                yield _sse(
+                    {
+                        "type": "session_expired",
+                        "expired_conversation_id": str(conversation_id),
+                    }
+                )
+
+            return StreamingResponse(expired_stream(), media_type="text/event-stream")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Conversation is not current",
+        )
 
     async def event_stream():
         user_message = Message(
