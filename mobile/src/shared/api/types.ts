@@ -2,6 +2,8 @@
 // backend/src/fawn/api/schemas.py and are the single source of truth for any
 // feature code that talks to the backend.
 
+import type { User } from '../../lib/types';
+
 export type BabyGender = 'male' | 'female';
 
 export interface Baby {
@@ -33,6 +35,7 @@ export interface ChatMessage {
   id: string;
   conversation_id: string;
   sender_user_id: string | null;
+  sender?: User | null;
   role: 'user' | 'assistant';
   content: string;
   message_type: MessageType;
