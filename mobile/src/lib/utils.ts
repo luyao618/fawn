@@ -26,6 +26,25 @@ function pad2(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;
 }
 
+const APP_TIME_ZONE_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+interface DateParts {
+  year: number;
+  month: number;
+  day: number;
+}
+
+function appDateParts(value: string | Date): DateParts | null {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return null;
+  const appDate = new Date(date.getTime() + APP_TIME_ZONE_OFFSET_MS);
+  return {
+    year: appDate.getUTCFullYear(),
+    month: appDate.getUTCMonth() + 1,
+    day: appDate.getUTCDate(),
+  };
+}
+
 /**
  * Mobile `formatDate` — supports the patterns used by the dashboard port:
  * default `M月d日`, plus `yyyy年M月d日` and `M/d`. Falls back to default for
@@ -40,6 +59,19 @@ export function formatDate(value: string | Date, pattern = 'M月d日'): string {
   if (pattern === 'yyyy年M月d日') return `${y}年${m}月${d}日`;
   if (pattern === 'M/d') return `${m}/${d}`;
   return `${m}月${d}日`;
+}
+
+/**
+ * Format album dates in the product's app-local calendar day.
+ */
+export function formatAppDate(value: string | Date, pattern = 'M月d日'): string {
+  const parts = appDateParts(value);
+  if (!parts) return typeof value === 'string' ? value : '';
+  if (pattern === 'yyyy年M月d日') {
+    return `${parts.year}年${parts.month}月${parts.day}日`;
+  }
+  if (pattern === 'M/d') return `${parts.month}/${parts.day}`;
+  return `${parts.month}月${parts.day}日`;
 }
 
 /**

@@ -998,9 +998,7 @@ export class ApiClient {
       original_filename: file.name,
       taken_at: new Date().toISOString(),
       uploaded_at: new Date().toISOString(),
-      tags: [
-        { id: `tag-${Date.now()}`, tag_type: 'scene', tag_value: '新上传', confidence: 0.82, is_confirmed: true },
-      ],
+      tags: [],
     };
     mockPhotos.unshift(photo);
     return clone(photo);
@@ -1012,7 +1010,8 @@ export class ApiClient {
       if (params?.view) search.set('view', params.view);
       if (params?.scene) search.set('scene', params.scene);
       if (params?.month) search.set('month', params.month);
-      return this.request(`/album/photos?${search.toString()}`);
+      const query = search.toString();
+      return this.request(`/album/photos${query ? `?${query}` : ''}`);
     }
     await delay();
     if (!usesSharedMockData()) return paginate([]);

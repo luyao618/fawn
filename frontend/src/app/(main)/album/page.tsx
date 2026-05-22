@@ -10,28 +10,19 @@ import { useAuthStore } from '@/lib/auth-store';
 import { canSoftDeleteData, canUploadPhotos } from '@/lib/utils';
 import type { Photo } from '@/lib/types';
 
-type ViewMode = 'timeline' | 'scene' | 'milestone';
-
-const modes: Array<{ value: ViewMode; label: string }> = [
-  { value: 'timeline', label: '时间线' },
-  { value: 'scene', label: '场景' },
-  { value: 'milestone', label: '里程碑' },
-];
-
 export default function AlbumPage() {
   const user = useAuthStore((state) => state.user);
-  const [view, setView] = useState<ViewMode>('timeline');
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selected, setSelected] = useState<Photo | null>(null);
   const [isUploading, setUploading] = useState(false);
   const [isLoading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  async function loadPhotos(nextView = view) {
+  async function loadAlbum() {
     setLoading(true);
     setErrorMessage(null);
     try {
-      const response = await api.getPhotos({ view: nextView });
+      const response = await api.getPhotos();
       setPhotos(response.items);
     } catch {
       setErrorMessage('照片加载失败，请稍后再试。');
@@ -41,15 +32,15 @@ export default function AlbumPage() {
   }
 
   useEffect(() => {
-    void loadPhotos(view);
-  }, [view]);
+    void loadAlbum();
+  }, []);
 
   async function upload(file: File) {
     setUploading(true);
     setErrorMessage(null);
     try {
       await api.uploadPhoto(file);
-      await loadPhotos();
+      await loadAlbum();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '照片上传失败，请稍后再试。');
     } finally {
@@ -78,7 +69,7 @@ export default function AlbumPage() {
     if (!confirmed) return;
     await api.deletePhoto(selected.id);
     setSelected(null);
-    await loadPhotos();
+    await loadAlbum();
   }
 
   return (
@@ -89,29 +80,17 @@ export default function AlbumPage() {
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-nursery-mint text-brand-strong">
               <Images className="h-4 w-4" aria-hidden />
             </span>
-            <p className="truncate text-xs italic text-mid-gray">按时间、场景和里程碑浏览</p>
+            <p className="truncate text-xs italic text-mid-gray">按拍摄时间浏览</p>
           </div>
           <span className="shrink-0 rounded-full bg-warm-gray px-2.5 py-1 text-xs font-semibold text-dark-gray">
             {isLoading ? '加载中' : `${photos.length} 张`}
           </span>
         </div>
-        <div className="grid grid-cols-3 rounded-2xl bg-warm-gray p-1">
-          {modes.map((mode) => (
-            <button
-              type="button"
-              key={mode.value}
-              onClick={() => setView(mode.value)}
-              className={`min-h-10 rounded-xl text-sm font-semibold ${view === mode.value ? 'bg-white text-fawn-amber shadow-card' : 'text-dark-gray'}`}
-            >
-              {mode.label}
-            </button>
-          ))}
-        </div>
       </div>
       {errorMessage ? (
         <div className="rounded-2xl bg-safety-red-light px-4 py-3 text-sm text-safety-red">{errorMessage}</div>
       ) : null}
-      <PhotoGrid photos={photos} view={view} onPhotoClick={setSelected} />
+      <PhotoGrid photos={photos} onPhotoClick={setSelected} />
       {canUpload ? <UploadButton onUpload={upload} isUploading={isUploading} /> : null}
       {selected ? (
         <PhotoViewer

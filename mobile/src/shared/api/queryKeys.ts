@@ -76,6 +76,6 @@ export const queryKeys = {
   },
   album: {
     all: ['album'] as const,
-    photos: (view: string) => [...queryKeys.album.all, 'photos', view] as const,
+    photos: () => [...queryKeys.album.all, 'photos'] as const,
   },
 } as const;

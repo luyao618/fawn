@@ -3,6 +3,14 @@ import { format, intervalToDuration, parseISO } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { twMerge } from 'tailwind-merge';
 
+const APP_TIME_ZONE = 'Asia/Shanghai';
+
+interface CalendarDateParts {
+  year: number;
+  month: number;
+  day: number;
+}
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -24,6 +32,39 @@ export function getAgeDisplay(birthDate: string | null | undefined, now = new Da
   const days = duration.days ?? 0;
   if (months <= 0) return `${days}天`;
   return `${months}个月${days}天`;
+}
+
+function daysInMonth(year: number, month: number) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function isValidCalendarDate({ year, month, day }: CalendarDateParts) {
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month);
+}
+
+function toAppCalendarDate(value: string | Date): CalendarDateParts | null {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: APP_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  const day = Number(parts.find((part) => part.type === 'day')?.value);
+  const calendarDate = { year, month, day };
+  return isValidCalendarDate(calendarDate) ? calendarDate : null;
+}
+
+export function formatAppDate(value: string | Date, pattern = 'M月d日') {
+  const parts = toAppCalendarDate(value);
+  if (!parts) return '';
+  if (pattern === 'yyyy年M月d日') return `${parts.year}年${parts.month}月${parts.day}日`;
+  return `${parts.month}月${parts.day}日`;
 }
 
 export function getAgeDays(birthDate: string | null | undefined, now = new Date()) {

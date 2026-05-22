@@ -3,6 +3,7 @@
 import { Download, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { PhotoImage } from '@/components/album/PhotoImage';
+import { formatAppDate } from '@/lib/utils';
 import type { Photo } from '@/lib/types';
 
 interface PhotoViewerProps {
@@ -23,8 +24,8 @@ function iconButtonClass(tone: 'neutral' | 'delete' = 'neutral') {
 export function PhotoViewer({ photo, onClose, onDownload, onDelete }: PhotoViewerProps) {
   const [pendingAction, setPendingAction] = useState<'download' | 'delete' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const visibleTags = photo.tags.slice(0, 3);
-  const extraTagCount = photo.tags.length - visibleTags.length;
+  const date = photo.taken_at ?? photo.uploaded_at;
+  const dateLabel = formatAppDate(date, 'yyyy年M月d日');
 
   async function runAction(action: 'download' | 'delete', callback?: () => Promise<void> | void) {
     if (!callback) return;
@@ -102,23 +103,9 @@ export function PhotoViewer({ photo, onClose, onDownload, onDelete }: PhotoViewe
               ) : null}
             </div>
           ) : null}
-          {visibleTags.length > 0 ? (
-            <div className="ml-auto flex min-w-0 max-w-[46vw] flex-col items-end gap-1">
-              {visibleTags.map((tag) => (
-                <span
-                  key={tag.id}
-                  className="max-w-full truncate rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-medium text-white/60 backdrop-blur-sm"
-                >
-                  {tag.tag_value}
-                </span>
-              ))}
-              {extraTagCount > 0 ? (
-                <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-medium text-white/50 backdrop-blur-sm">
-                  +{extraTagCount}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
+          <div className="ml-auto min-w-0 max-w-[58vw] text-right">
+            <p className="truncate text-xs font-semibold text-white/85">{dateLabel}</p>
+          </div>
         </div>
       </div>
     </div>

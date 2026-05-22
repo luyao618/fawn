@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AlbumPage from '@/app/(main)/album/page';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
@@ -14,16 +14,19 @@ describe('album page', () => {
   });
 
   it('loads photos with compact album controls', async () => {
+    const getPhotos = vi.spyOn(api, 'getPhotos');
     render(<AlbumPage />);
 
-    await waitFor(() => expect(screen.getByText('按时间、场景和里程碑浏览')).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: '时间线' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '场景' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '里程碑' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('按拍摄时间浏览')).toBeInTheDocument());
+    expect(getPhotos).toHaveBeenCalledWith();
+    expect(screen.queryByRole('button', { name: '时间线' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '场景' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '里程碑' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /上传/ })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: '场景' }));
-    await waitFor(() => expect(screen.getByText('客厅')).toBeInTheDocument());
+    expect((await screen.findAllByText('2026年4月28日')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('2026年4月28日 · 1个月27天')).not.toBeInTheDocument();
+    expect(screen.queryByText('客厅')).not.toBeInTheDocument();
   });
 
   it('shows download and delete actions for parents', async () => {
