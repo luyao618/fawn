@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import asyncio
-import base64
-import logging
+import io
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,10 +11,14 @@ from sqlalchemy.orm import selectinload
 
 from fawn.dependencies import can_soft_delete_data
 from fawn.models import Baby, Photo, PhotoTag, User
-from fawn.services.images import prepare_model_image
 from fawn.services.storage import get_presigned_download_url, put_bytes
 
-logger = logging.getLogger(__name__)
+APP_TIMEZONE = ZoneInfo("Asia/Shanghai")
+EXIF_CAPTURE_TAGS = (
+    (36867, 36881),  # DateTimeOriginal, OffsetTimeOriginal
+    (36868, 36882),  # DateTimeDigitized, OffsetTimeDigitized
+    (306, 36880),  # DateTime, OffsetTime
+)
 
 
 class AlbumError(Exception):
@@ -30,59 +33,69 @@ class PermissionDenied(AlbumError):
     pass
 
 
-async def _auto_tag_photo(photo_id: uuid.UUID, image_bytes: bytes, mime_type: str) -> None:
-    """Call Vision model to generate scene/milestone tags for a photo."""
+def _parse_offset(value: object) -> timezone | None:
+    if not isinstance(value, str):
+        return None
     try:
-        from fawn.db.session import async_session_factory
-        from fawn.llm.factory import create_chat_model
-        vision_llm = create_chat_model("vision")
-        image_bytes, mime_type = prepare_model_image(image_bytes)
-        b64 = base64.b64encode(image_bytes).decode()
-        data_url = f"data:{mime_type};base64,{b64}"
-        prompt = [
-            {
-                "type": "text",
-                "text": (
-                    "Analyze this baby/child photo. Return a JSON object with:\n"
-                    '- "scenes": list of scene tags (e.g. "outdoor", "bath", "feeding", "sleeping", "playing")\n'
-                    '- "milestones": list of developmental milestone tags if any (e.g. "first_smile", "sitting", "crawling", "walking", "first_tooth")\n'
-                    "Only include tags you are confident about. Return valid JSON only, no markdown."
-                ),
-            },
-            {"type": "image_url", "image_url": {"url": data_url}},
-        ]
-        from langchain_core.messages import HumanMessage
-        response = await vision_llm.ainvoke([HumanMessage(content=prompt)])
-        import json
-        text = response.content.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[-1].rsplit("```", 1)[0]
-        tags_data = json.loads(text)
+        sign = 1 if value[0] == "+" else -1 if value[0] == "-" else 0
+        if not sign:
+            return None
+        hours, minutes = value[1:].split(":", 1)
+        return timezone(sign * timedelta(hours=int(hours), minutes=int(minutes)))
+    except (ValueError, IndexError):
+        return None
 
-        async with async_session_factory() as db:
-            for scene in tags_data.get("scenes", []):
-                tag = PhotoTag(
-                    photo_id=photo_id,
-                    tag_type="scene",
-                    tag_value=scene,
-                    confidence=0.8,
-                    is_confirmed=False,
-                )
-                db.add(tag)
 
-            for milestone in tags_data.get("milestones", []):
-                tag = PhotoTag(
-                    photo_id=photo_id,
-                    tag_type="milestone",
-                    tag_value=milestone,
-                    confidence=0.7,
-                    is_confirmed=False,
-                )
-                db.add(tag)
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=APP_TIMEZONE)
+    return value.astimezone(UTC)
 
-            await db.commit()
+
+def _parse_client_taken_at(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return _as_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
+    except ValueError:
+        return None
+
+
+def _parse_exif_datetime(value: object, offset: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+    except ValueError:
+        return None
+    parsed_offset = _parse_offset(offset)
+    if parsed_offset is not None:
+        parsed = parsed.replace(tzinfo=parsed_offset)
+    return _as_utc(parsed)
+
+
+def _parse_exif_taken_at(file_bytes: bytes) -> datetime | None:
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(file_bytes)) as image:
+            exif = image.getexif()
     except Exception:
-        logger.warning("Vision auto-tagging failed for photo %s", photo_id, exc_info=True)
+        return None
+
+    for timestamp_tag, offset_tag in EXIF_CAPTURE_TAGS:
+        parsed = _parse_exif_datetime(exif.get(timestamp_tag), exif.get(offset_tag))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _resolve_taken_at(file_bytes: bytes, client_taken_at: str | None) -> datetime:
+    return (
+        _parse_client_taken_at(client_taken_at)
+        or _parse_exif_taken_at(file_bytes)
+        or datetime.now(UTC)
+    )
 
 
 async def upload_photo(
@@ -94,6 +107,7 @@ async def upload_photo(
     filename: str,
     mime_type: str,
     file_size: int,
+    taken_at: str | None = None,
 ) -> Photo:
     # Verify baby exists
     baby = await db.get(Baby, baby_id)
@@ -115,13 +129,11 @@ async def upload_photo(
         original_filename=filename,
         mime_type=mime_type,
         file_size_bytes=file_size,
-        taken_at=datetime.now(UTC),
+        taken_at=_resolve_taken_at(file_bytes, taken_at),
     )
     db.add(photo)
     await db.commit()
     await db.refresh(photo, attribute_names=["tags"])
-
-    asyncio.create_task(_auto_tag_photo(photo.id, file_bytes, mime_type))
 
     return photo
 

@@ -3,7 +3,7 @@
 // Layout matches the Web component:
 //   - Header (filename + close button) on a dark gradient.
 //   - Photo centered, fitted into the viewport.
-//   - Footer with optional download/delete buttons + tag chips.
+//   - Footer with optional download/delete buttons + photo date.
 //
 // Android gestures supported with stock RN primitives (no extra deps):
 //   - Horizontal swipe to flip between sibling photos (FlatList paging).
@@ -44,6 +44,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, layout, radii, spacing, typography } from '../../shared/theme';
 import type { PhotoRecord } from '../../shared/api';
+import { formatAppDate } from '../../lib/utils';
 import { resolvePhotoUri } from './resolvePhotoUri';
 
 interface PhotoViewerProps {
@@ -133,10 +134,9 @@ export function PhotoViewer({
     );
   }, [current, onDelete, runAction]);
 
-  const visibleTags = current ? current.tags.slice(0, 3) : [];
-  const extraTagCount = current ? current.tags.length - visibleTags.length : 0;
-
   if (!current) return null;
+  const currentTime = current.taken_at ?? current.uploaded_at;
+  const currentDate = formatAppDate(currentTime, 'yyyy年M月d日');
 
   return (
     <Modal
@@ -210,7 +210,7 @@ export function PhotoViewer({
           ) : null}
         </View>
 
-        {/* Bottom gradient: action icons + tag chips */}
+        {/* Bottom gradient: action icons + photo date */}
         <View
           pointerEvents="box-none"
           style={[
@@ -252,22 +252,11 @@ export function PhotoViewer({
                 </Pressable>
               ) : null}
             </View>
-            {visibleTags.length > 0 ? (
-              <View style={styles.tagColumn}>
-                {visibleTags.map((tag) => (
-                  <View key={tag.id} style={styles.tagChip}>
-                    <Text style={typography.overlayChip} numberOfLines={1}>
-                      {tag.tag_value}
-                    </Text>
-                  </View>
-                ))}
-                {extraTagCount > 0 ? (
-                  <View style={styles.tagChip}>
-                    <Text style={typography.overlayChip}>+{extraTagCount}</Text>
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
+            <View style={styles.photoMeta}>
+              <Text style={styles.photoDate} numberOfLines={1}>
+                {currentDate}
+              </Text>
+            </View>
           </View>
         </View>
       </View>
@@ -594,17 +583,13 @@ const styles = StyleSheet.create({
   iconButtonDisabled: {
     opacity: 0.4,
   },
-  tagColumn: {
+  photoMeta: {
     maxWidth: '60%',
     alignItems: 'flex-end',
     gap: spacing['1'],
   },
-  tagChip: {
-    paddingHorizontal: spacing['2'],
-    paddingVertical: 2,
-    borderRadius: radii.chip,
-    borderWidth: 1,
-    borderColor: colors['white-overlay'],
-    backgroundColor: colors['overlay-scrim-soft'],
+  photoDate: {
+    ...typography.overlayLabel,
+    color: colors['white'],
   },
 });

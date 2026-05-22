@@ -1,8 +1,7 @@
 // Album photo grid — mirrors `frontend/src/components/album/PhotoGrid.tsx`.
 //
-// Photos are grouped by the selected `view` (timeline / scene / milestone),
-// rendered as a 2-column grid of rounded tiles with a gradient label strip
-// across the bottom — matching the Web visual exactly. Every visual constant
+// Photos are grouped by the photo timeline and rendered as a 2-column grid of
+// rounded tiles with a label strip across the bottom. Every visual constant
 // (radius / spacing / color / typography) comes from `shared/theme` so the
 // surface stays in sync with the Web tokens.
 
@@ -18,64 +17,39 @@ import {
 
 import { colors, radii, shadows, spacing, typography } from '../../shared/theme';
 import type { PhotoRecord } from '../../shared/api';
+import { formatAppDate } from '../../lib/utils';
 import { resolvePhotoUri } from './resolvePhotoUri';
-
-export type AlbumView = 'timeline' | 'scene' | 'milestone';
 
 interface PhotoGridProps {
   photos: PhotoRecord[];
-  view: AlbumView;
   onPhotoPress: (photo: PhotoRecord) => void;
 }
 
-function formatGroupDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '未分类';
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+function photoTime(photo: PhotoRecord): string {
+  return photo.taken_at ?? photo.uploaded_at;
 }
 
-function formatShortDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  // Mirrors Web `formatDate(..., 'M月d日')` default used by PhotoGrid tile.
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
+function formatTimelineLabel(value: string): string {
+  return formatAppDate(value, 'yyyy年M月d日');
 }
 
-function pickGroupKey(photo: PhotoRecord, view: AlbumView): string {
-  if (view === 'timeline') {
-    return formatGroupDate(photo.taken_at ?? photo.uploaded_at);
-  }
-  if (view === 'scene') {
-    return photo.tags.find((t) => t.tag_type === 'scene')?.tag_value ?? '未识别场景';
-  }
-  return photo.tags.find((t) => t.tag_type === 'milestone')?.tag_value ?? '普通照片';
-}
-
-function pickTileLabel(photo: PhotoRecord): string {
-  return (
-    photo.tags.find((t) => t.tag_type === 'milestone')?.tag_value ??
-    photo.tags.find((t) => t.tag_type === 'scene')?.tag_value ??
-    '照片'
-  );
-}
-
-export function PhotoGrid({ photos, view, onPhotoPress }: PhotoGridProps) {
+export function PhotoGrid({ photos, onPhotoPress }: PhotoGridProps) {
   const groups = useMemo(() => {
     const map = new Map<string, PhotoRecord[]>();
     for (const photo of photos) {
-      const key = pickGroupKey(photo, view);
+      const key = formatTimelineLabel(photoTime(photo));
       const arr = map.get(key);
       if (arr) arr.push(photo);
       else map.set(key, [photo]);
     }
     return Array.from(map.entries());
-  }, [photos, view]);
+  }, [photos]);
 
   if (photos.length === 0) {
     return (
       <View style={styles.empty}>
         <Text style={[typography.body, styles.emptyText]}>
-          还没有照片。上传后，这里会按时间、场景或里程碑自动整理。
+          还没有照片。上传后，这里会按拍摄时间自动整理。
         </Text>
       </View>
     );
@@ -102,12 +76,13 @@ export function PhotoGrid({ photos, view, onPhotoPress }: PhotoGridProps) {
           </View>
           <View style={[styles.grid, { gap }]}>
             {items.map((photo) => {
-              const label = pickTileLabel(photo);
+              const time = photoTime(photo);
+              const dateLabel = formatAppDate(time);
               return (
                 <Pressable
                   key={photo.id}
                   accessibilityRole="button"
-                  accessibilityLabel={`查看照片：${label}`}
+                  accessibilityLabel={`查看照片：${dateLabel}`}
                   onPress={() => onPhotoPress(photo)}
                   style={({ pressed }) => [
                     styles.tile,
@@ -124,10 +99,7 @@ export function PhotoGrid({ photos, view, onPhotoPress }: PhotoGridProps) {
                   />
                   <View style={styles.tileOverlay}>
                     <Text style={[typography.overlayCaption, styles.tileDate]} numberOfLines={1}>
-                      {formatShortDate(photo.taken_at ?? photo.uploaded_at)}
-                    </Text>
-                    <Text style={typography.overlayLabel} numberOfLines={1}>
-                      {label}
+                      {dateLabel}
                     </Text>
                   </View>
                 </Pressable>

@@ -1,10 +1,9 @@
 // Album tab screen — mirrors `frontend/src/app/(main)/album/page.tsx`.
 //
-// Top of the page hosts a mode switcher (时间线 / 场景 / 里程碑) that drives the
-// `view` parameter on the photo list query. Below it sits the photo grid. A
-// floating upload button hovers above the bottom safe-area inset; tapping it
-// triggers the camera / library picker and uploads via the album API. Tapping
-// a tile opens the full-screen viewer with swipe / zoom gestures.
+// Top of the page hosts a compact timeline summary. Below it sits the photo
+// grid. A floating upload button hovers above the bottom safe-area inset;
+// tapping it triggers the camera / library picker and uploads via the album
+// API. Tapping a tile opens the full-screen viewer with swipe / zoom gestures.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +14,6 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -23,10 +21,7 @@ import {
   View,
 } from 'react-native';
 
-import {
-  PhotoGrid,
-  type AlbumView,
-} from '../components/album/PhotoGrid';
+import { PhotoGrid } from '../components/album/PhotoGrid';
 import { PhotoViewer } from '../components/album/PhotoViewer';
 import { TopBar } from '../components/layout/TopBar';
 import { UploadButton, type PickedAsset } from '../components/album/UploadButton';
@@ -40,12 +35,6 @@ import {
 import { getUser } from '../lib/tokenStorage';
 import { colors, layout, radii, shadows, spacing, typography } from '../shared/theme';
 
-const MODES: ReadonlyArray<{ value: AlbumView; label: string }> = [
-  { value: 'timeline', label: '时间线' },
-  { value: 'scene', label: '场景' },
-  { value: 'milestone', label: '里程碑' },
-];
-
 export function AlbumScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -54,7 +43,6 @@ export function AlbumScreen() {
     [navigation],
   );
   const queryClient = useQueryClient();
-  const [view, setView] = useState<AlbumView>('timeline');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Cached permission flags from the active account; fetched once on mount.
   const [perms, setPerms] = useState<{ canUpload: boolean; canDelete: boolean }>({
@@ -82,7 +70,7 @@ export function AlbumScreen() {
   }, []);
 
   const { data, isPending, isFetching, isError, error, refetch } = useQuery(
-    albumQueries.photos(view),
+    albumQueries.photos(),
   );
 
   const photos = data ?? [];
@@ -92,14 +80,13 @@ export function AlbumScreen() {
   );
 
   const invalidate = useCallback(async () => {
-    // Invalidate every view so a freshly uploaded / deleted photo is
-    // reflected when the user switches modes.
+    // Keep the timeline fresh after upload/delete.
     await queryClient.invalidateQueries({ queryKey: ['album', 'photos'] });
   }, [queryClient]);
 
   const uploadMutation = useMutation({
     mutationFn: (asset: PickedAsset) =>
-      uploadAlbumPhoto(asset.uri, asset.mimeType, asset.filename),
+      uploadAlbumPhoto(asset.uri, asset.mimeType, asset.filename, asset.takenAt),
     onSuccess: () => {
       void invalidate();
     },
@@ -155,7 +142,7 @@ export function AlbumScreen() {
                 <Ionicons name="images-outline" size={16} color={colors['brand-strong']} />
               </View>
               <Text style={[typography.caption, styles.modeHint]} numberOfLines={1}>
-                按时间、场景和里程碑浏览
+                按拍摄时间浏览
               </Text>
             </View>
             <View style={styles.countPill}>
@@ -163,31 +150,6 @@ export function AlbumScreen() {
                 {isPending ? '加载中' : `${photos.length} 张`}
               </Text>
             </View>
-          </View>
-          <View style={styles.modeSwitcher}>
-            {MODES.map((mode) => {
-              const active = mode.value === view;
-              return (
-                <Pressable
-                  key={mode.value}
-                  accessibilityRole="button"
-                  accessibilityState={active ? { selected: true } : {}}
-                  accessibilityLabel={mode.label}
-                  onPress={() => setView(mode.value)}
-                  style={[styles.modeButton, active && styles.modeButtonActive]}
-                >
-                  <Text
-                    style={[
-                      typography.button,
-                      styles.modeButtonText,
-                      active && styles.modeButtonTextActive,
-                    ]}
-                  >
-                    {mode.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
           </View>
         </View>
 
@@ -207,7 +169,6 @@ export function AlbumScreen() {
         ) : (
           <PhotoGrid
             photos={photos}
-            view={view}
             onPhotoPress={(photo) => setSelectedId(photo.id)}
           />
         )}
@@ -286,30 +247,6 @@ const styles = StyleSheet.create({
   countText: {
     color: colors['dark-gray'],
     fontWeight: '600',
-  },
-  modeSwitcher: {
-    flexDirection: 'row',
-    backgroundColor: colors['warm-gray'],
-    borderRadius: radii.lg,
-    padding: spacing['1'],
-    gap: spacing['1'],
-  },
-  modeButton: {
-    flex: 1,
-    minHeight: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.md,
-  },
-  modeButtonActive: {
-    backgroundColor: colors['card'],
-    ...shadows.card,
-  },
-  modeButtonText: {
-    color: colors['dark-gray'],
-  },
-  modeButtonTextActive: {
-    color: colors['fawn-amber'],
   },
   errorBanner: {
     borderRadius: radii.lg,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.api.schemas import PaginatedResponse, PhotoDownloadResponse, PhotoRead, PhotoTagRead
@@ -30,6 +30,7 @@ def _photo_to_read(photo) -> dict:
 @router.post("/photos", response_model=PhotoRead, status_code=status.HTTP_201_CREATED)
 async def upload_photo(
     file: UploadFile,
+    taken_at: str | None = Form(None),
     user: User = Depends(require_photo_uploader),
     db: AsyncSession = Depends(get_db),
 ):
@@ -44,6 +45,7 @@ async def upload_photo(
             filename=file.filename or "upload.bin",
             mime_type=file.content_type or "application/octet-stream",
             file_size=len(content),
+            taken_at=taken_at,
         )
     except profile_service.NotFound as exc:
         raise HTTPException(

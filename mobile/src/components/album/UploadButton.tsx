@@ -28,11 +28,54 @@ export interface PickedAsset {
   uri: string;
   mimeType: string;
   filename: string;
+  takenAt?: string;
 }
 
 interface UploadButtonProps {
   onPicked: (asset: PickedAsset) => Promise<void> | void;
   isUploading: boolean;
+}
+
+function normalizeExifOffset(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  const match = /^([+-])(\d{2}):?(\d{2})?$/.exec(trimmed);
+  if (!match) return null;
+  return `${match[1]}${match[2]}:${match[3] ?? '00'}`;
+}
+
+function parseExifDateTime(value: unknown, offset: string | null): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const millis = value > 1_000_000_000_000 ? value : value * 1000;
+    const date = new Date(millis);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const exifMatch =
+    /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/.exec(trimmed);
+  if (exifMatch) {
+    const [, year, month, day, hour, minute, second] = exifMatch;
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}${offset ?? '+08:00'}`;
+  }
+
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function extractTakenAt(exif: Record<string, unknown> | null | undefined): string | undefined {
+  if (!exif) return undefined;
+  const offset =
+    normalizeExifOffset(exif.OffsetTimeOriginal) ??
+    normalizeExifOffset(exif.OffsetTimeDigitized) ??
+    normalizeExifOffset(exif.OffsetTime);
+  const takenAt =
+    parseExifDateTime(exif.DateTimeOriginal, offset) ??
+    parseExifDateTime(exif.DateTimeDigitized, offset) ??
+    parseExifDateTime(exif.DateTime, offset);
+  return takenAt ?? undefined;
 }
 
 function assetFromPickerResult(
@@ -42,7 +85,7 @@ function assetFromPickerResult(
   const asset = result.assets[0];
   const mimeType = asset.mimeType ?? 'image/jpeg';
   const filename = asset.fileName ?? `photo-${Date.now()}.jpg`;
-  return { uri: asset.uri, mimeType, filename };
+  return { uri: asset.uri, mimeType, filename, takenAt: extractTakenAt(asset.exif) };
 }
 
 async function pickFromLibrary(): Promise<PickedAsset | null> {
@@ -54,6 +97,7 @@ async function pickFromLibrary(): Promise<PickedAsset | null> {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ImagePicker.MediaTypeOptions.Images,
     quality: 0.85,
+    exif: true,
   });
   return assetFromPickerResult(result);
 }
@@ -67,6 +111,7 @@ async function pickFromCamera(): Promise<PickedAsset | null> {
   const result = await ImagePicker.launchCameraAsync({
     mediaTypes: ImagePicker.MediaTypeOptions.Images,
     quality: 0.85,
+    exif: true,
   });
   return assetFromPickerResult(result);
 }
