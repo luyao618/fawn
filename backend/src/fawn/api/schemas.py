@@ -136,11 +136,18 @@ class MessageRead(BaseModel):
     created_at: datetime
 
 
+class ConversationTargetWindow(BaseModel):
+    target_message_id: uuid.UUID
+    target_index: int = Field(ge=0)
+    around_limit: int = Field(ge=1, le=50)
+
+
 class ConversationDetail(BaseModel):
     conversation: ConversationRead
     messages: list[MessageRead]
     has_more: bool = False
     next_before: uuid.UUID | None = None
+    target: ConversationTargetWindow | None = None
 
 
 class SendMessageRequest(BaseModel):
@@ -159,6 +166,34 @@ class VoiceTranscriptionResponse(BaseModel):
 
 class MessageSearchResult(MessageRead):
     conversation_started_at: datetime
+
+
+class ChatHistoryActivityDay(BaseModel):
+    date: date
+    day: int = Field(ge=1, le=31)
+    message_count: int = Field(ge=1)
+
+
+class ChatHistoryActivityResponse(BaseModel):
+    year: int
+    month: int
+    days: list[ChatHistoryActivityDay]
+
+
+class ChatHistoryTarget(BaseModel):
+    message_id: uuid.UUID
+    conversation_id: uuid.UUID
+    created_at: datetime
+    role: Literal["user", "assistant"]
+    content: str
+    message_type: MessageType
+    metadata: dict[str, Any] | None = None
+    conversation_started_at: datetime
+
+
+class ChatHistoryDayTargetResponse(BaseModel):
+    date: date
+    target: ChatHistoryTarget | None
 
 
 class PaginatedResponse(BaseModel):

@@ -22,6 +22,11 @@ export interface Baby {
 
 export type MessageType = 'text' | 'image' | 'data_card' | 'safety_alert';
 
+export type ChatMessageMetadata = {
+  image_url?: string;
+  [key: string]: unknown;
+};
+
 export interface ConversationSummary {
   id: string;
   started_at: string;
@@ -39,8 +44,14 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   message_type: MessageType;
-  metadata: { image_url?: string } | null;
+  metadata: ChatMessageMetadata | null;
   created_at: string;
+}
+
+export interface ConversationTargetMetadata {
+  target_message_id: string | null;
+  target_index: number | null;
+  around_limit: number | null;
 }
 
 export interface ConversationDetail {
@@ -48,6 +59,7 @@ export interface ConversationDetail {
   messages: ChatMessage[];
   has_more: boolean;
   next_before: string | null;
+  target: ConversationTargetMetadata | null;
 }
 
 export interface ChatImageUploadResponse {
@@ -61,6 +73,50 @@ export interface PaginatedConversations {
   page: number;
   page_size: number;
 }
+
+export interface ChatMessageSearchResult extends ChatMessage {
+  conversation_started_at: string;
+}
+
+export interface PaginatedChatMessageSearchResults {
+  items: ChatMessageSearchResult[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ChatMonthActivityDay {
+  date: string; // YYYY-MM-DD in Asia/Shanghai
+  day: number;
+  message_count: number;
+}
+
+export interface ChatMonthActivityResponse {
+  year: number;
+  month: number;
+  days: ChatMonthActivityDay[];
+}
+
+export interface ChatHistoryTarget {
+  conversation_id: string;
+  message_id: string;
+  created_at: string;
+  role: 'user' | 'assistant';
+  content: string;
+  message_type: MessageType;
+  metadata: ChatMessageMetadata | null;
+  sender_user_id: string | null;
+  sender?: User | null;
+}
+
+export interface ChatDayTargetResponse {
+  date: string; // YYYY-MM-DD in Asia/Shanghai
+  target: ChatHistoryTarget | null;
+}
+
+export type SendChatMessageResult =
+  | { type: 'sent' }
+  | { type: 'session_expired'; expiredConversationId: string };
 
 // ---------- Records (feeding / growth / album) ----------
 

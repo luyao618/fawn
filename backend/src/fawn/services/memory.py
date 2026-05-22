@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
+from typing import Literal
+from zoneinfo import ZoneInfo
 
 from langchain_core.messages import HumanMessage
 from sqlalchemy import select
@@ -11,11 +14,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.config import get_settings
 from fawn.llm import create_chat_model
-from fawn.models import Conversation, ConversationSummary, Message, ProfileItem
+from fawn.models import Conversation, ConversationSummary, Message, ProfileItem, User
+
+APP_TIMEZONE = ZoneInfo("Asia/Shanghai")
+RolloverReason = Literal["cross_day", "timeout"]
+
+
+@dataclass
+class ConversationResolution:
+    conversation: Conversation
+    expired_conversation_id: uuid.UUID | None = None
+    rollover_reason: RolloverReason | None = None
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 def _aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _local_date(value: datetime) -> date:
+    return _aware(value).astimezone(APP_TIMEZONE).date()
 
 
 async def check_session_timeout(db: AsyncSession, family_id: uuid.UUID) -> uuid.UUID | None:
@@ -36,9 +57,61 @@ async def check_session_timeout(db: AsyncSession, family_id: uuid.UUID) -> uuid.
     )
     last_activity = last_message.created_at if last_message else active.started_at
     timeout = timedelta(minutes=get_settings().session_timeout_minutes)
-    if datetime.now(UTC) - _aware(last_activity) > timeout:
+    if _utc_now() - _aware(last_activity) > timeout:
         return active.id
     return None
+
+
+async def _latest_activity(db: AsyncSession, conversation: Conversation) -> datetime:
+    last_message = await db.scalar(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    return _aware(last_message.created_at if last_message else conversation.started_at)
+
+
+def _rollover_reason(last_activity: datetime, now: datetime) -> RolloverReason | None:
+    if _local_date(last_activity) != _local_date(now):
+        return "cross_day"
+    timeout = timedelta(minutes=get_settings().session_timeout_minutes)
+    if _aware(now) - _aware(last_activity) > timeout:
+        return "timeout"
+    return None
+
+
+async def get_or_create_current_conversation(
+    db: AsyncSession,
+    user: User,
+    *,
+    now: datetime | None = None,
+) -> ConversationResolution:
+    current_time = _aware(now or _utc_now())
+    active = await db.scalar(
+        select(Conversation)
+        .where(Conversation.family_id == user.family_id, Conversation.is_active.is_(True))
+        .order_by(Conversation.started_at.desc())
+        .limit(1)
+    )
+    expired_conversation_id: uuid.UUID | None = None
+    rollover_reason: RolloverReason | None = None
+    if active is not None:
+        rollover_reason = _rollover_reason(await _latest_activity(db, active), current_time)
+        if rollover_reason is None:
+            return ConversationResolution(conversation=active)
+        expired_conversation_id = active.id
+        await finalize_conversation(db, active.id)
+
+    conversation = Conversation(family_id=user.family_id, user_id=user.id)
+    db.add(conversation)
+    await db.commit()
+    await db.refresh(conversation)
+    return ConversationResolution(
+        conversation=conversation,
+        expired_conversation_id=expired_conversation_id,
+        rollover_reason=rollover_reason,
+    )
 
 
 def _message_transcript(messages: list[Message]) -> str:
@@ -157,5 +230,5 @@ async def finalize_conversation(db: AsyncSession, conversation_id: uuid.UUID) ->
         )
 
     conversation.is_active = False
-    conversation.ended_at = datetime.now(UTC)
+    conversation.ended_at = _utc_now()
     await db.commit()
