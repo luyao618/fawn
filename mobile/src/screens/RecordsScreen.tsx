@@ -1,7 +1,7 @@
 // RecordsScreen — RN port of frontend/src/app/(main)/record/page.tsx.
 //
-// Mirrors the structured-form layout used on Web: a 4-tab picker
-// (喂养 / 睡眠 / 生长 / 健康) that swaps in a tab-specific form. Submits land in
+// Mirrors the structured-form layout used on Web: a record-kind picker
+// (喂养 / 睡眠 / 生长 / 健康 / 大小便) that swaps in a tab-specific form. Submits land in
 // the same /tracker/* endpoints used by the web app. Replaces the previous
 // "quick-add chips + Modal" UI so the two surfaces feel identical.
 //
@@ -12,7 +12,7 @@
 //   • TopBar "记录"
 //   • Header date / title / subtitle  (mirrors web `<section>`)
 //   • Permission / babyMissing banners
-//   • 4-up tab cards (aria-pressed via accessibilityState.selected)
+//   • record-kind tab cards (aria-pressed via accessibilityState.selected)
 //   • Active-tab form Card
 //   • Status banner + Submit button
 //   • Growth tab → 成长记录历史 (reuses GrowthHistoryList)
@@ -37,9 +37,10 @@ import { GrowthHistoryList } from '../components/dashboard/GrowthHistoryList';
 import { TopBar } from '../components/layout/TopBar';
 import { Button, Card, SegmentedChoice } from '../components/ui';
 import { useAuth } from '../auth/AuthContext';
-import { canWriteTracker, formatDate } from '../lib/utils';
+import { canWriteTracker, formatDate, formatDateTime } from '../lib/utils';
 import { ROUTES } from '../navigation/routeNames';
 import {
+  createDiaper,
   createFeeding,
   createGrowth,
   createHealth,
@@ -47,7 +48,9 @@ import {
   dashboardQueries,
   growthQueries,
   recordQueries,
+  trackerQueries,
 } from '../shared/api';
+import type { DiaperType } from '../shared/api';
 import {
   borderWidth,
   colors,
@@ -61,7 +64,7 @@ import {
 
 // ---------- Constants -------------------------------------------------------
 
-type RecordKind = 'feeding' | 'sleep' | 'growth' | 'health';
+type RecordKind = 'feeding' | 'sleep' | 'growth' | 'health' | 'diaper';
 type FeedType = 'formula' | 'breast';
 type SleepType = 'nap' | 'night';
 type HealthType = 'checkup' | 'vaccination' | 'illness';
@@ -108,6 +111,14 @@ const RECORD_CARDS: RecordCard[] = [
     tintBg: 'safety-red-light',
     tintFg: 'safety-red',
   },
+  {
+    kind: 'diaper',
+    label: '大小便',
+    description: '大便、小便、混合',
+    icon: 'water-outline',
+    tintBg: 'nursery-butter',
+    tintFg: 'warning-amber',
+  },
 ];
 
 const FEED_TYPE_OPTIONS = [
@@ -124,6 +135,12 @@ const HEALTH_TYPE_OPTIONS = [
   { value: 'checkup' as HealthType, label: '体检' },
   { value: 'vaccination' as HealthType, label: '疫苗' },
   { value: 'illness' as HealthType, label: '不适' },
+];
+
+const DIAPER_TYPE_OPTIONS = [
+  { value: 'poop' as DiaperType, label: '大便' },
+  { value: 'pee' as DiaperType, label: '小便' },
+  { value: 'mixed' as DiaperType, label: '混合' },
 ];
 
 // ---------- Date / number helpers (mirror web record/page.tsx) --------------
@@ -255,6 +272,14 @@ function initialHealthForm() {
   };
 }
 
+function initialDiaperForm() {
+  return {
+    diaper_time: localDateTimeValue(),
+    diaper_type: 'poop' as DiaperType,
+    notes: '',
+  };
+}
+
 // ---------- Screen ----------------------------------------------------------
 
 export function RecordsScreen() {
@@ -270,12 +295,14 @@ export function RecordsScreen() {
 
   const { data: summary } = useQuery(dashboardQueries.summary());
   const { data: growthRecords } = useQuery(growthQueries.records());
+  const { data: diaperRecords } = useQuery(trackerQueries.diaper());
 
   const [activeKind, setActiveKind] = useState<RecordKind>('feeding');
   const [feeding, setFeeding] = useState(initialFeedingForm);
   const [sleep, setSleep] = useState(initialSleepForm);
   const [growth, setGrowth] = useState(initialGrowthForm);
   const [health, setHealth] = useState(initialHealthForm);
+  const [diaper, setDiaper] = useState(initialDiaperForm);
   const [status, setStatus] = useState<
     { type: 'success' | 'error'; message: string } | null
   >(null);
@@ -294,6 +321,7 @@ export function RecordsScreen() {
     if (activeKind === 'sleep') setSleep(initialSleepForm());
     if (activeKind === 'growth') setGrowth(initialGrowthForm());
     if (activeKind === 'health') setHealth(initialHealthForm());
+    if (activeKind === 'diaper') setDiaper(initialDiaperForm());
   }
 
   const mutation = useMutation({
@@ -342,15 +370,23 @@ export function RecordsScreen() {
         });
         return;
       }
-      // health
-      validateDate(health.record_date, '健康记录日期', birthDate);
-      const title = health.title.trim();
-      if (!title) throw new Error('标题不能为空');
-      await createHealth({
-        record_date: health.record_date,
-        record_type: health.record_type,
-        title,
-        description: textOrNull(health.description),
+      if (activeKind === 'health') {
+        validateDate(health.record_date, '健康记录日期', birthDate);
+        const title = health.title.trim();
+        if (!title) throw new Error('标题不能为空');
+        await createHealth({
+          record_date: health.record_date,
+          record_type: health.record_type,
+          title,
+          description: textOrNull(health.description),
+        });
+        return;
+      }
+      validateDateTime(diaper.diaper_time, '大小便时间', birthDate);
+      await createDiaper({
+        diaper_time: toIsoDateTime(diaper.diaper_time),
+        diaper_type: diaper.diaper_type,
+        notes: textOrNull(diaper.notes),
       });
     },
     onSuccess: async () => {
@@ -364,6 +400,10 @@ export function RecordsScreen() {
         queryClient.invalidateQueries({ queryKey: recordQueries.timeline().queryKey }),
         queryClient.invalidateQueries({ queryKey: growthQueries.records().queryKey }),
         queryClient.invalidateQueries({ queryKey: dashboardQueries.summary().queryKey }),
+        queryClient.invalidateQueries({
+          queryKey: dashboardQueries.diaperStats(90).queryKey,
+        }),
+        queryClient.invalidateQueries({ queryKey: trackerQueries.diaper().queryKey }),
       ]);
     },
     onError: (err: unknown) => {
@@ -513,6 +553,13 @@ export function RecordsScreen() {
                 disabled={formDisabled}
               />
             ) : null}
+            {activeKind === 'diaper' ? (
+              <DiaperForm
+                value={diaper}
+                onChange={setDiaper}
+                disabled={formDisabled}
+              />
+            ) : null}
 
             {status ? (
               <View
@@ -553,6 +600,29 @@ export function RecordsScreen() {
             <Card style={styles.historyCard}>
               <Text style={styles.historyTitle}>成长记录历史</Text>
               <GrowthHistoryList records={growthRecords ?? []} />
+            </Card>
+          ) : null}
+
+          {activeKind === 'diaper' ? (
+            <Card style={styles.historyCard}>
+              <Text style={styles.historyTitle}>大小便记录历史</Text>
+              <View style={styles.diaperHistoryList}>
+                {(diaperRecords ?? []).map((record) => (
+                  <View key={record.id} style={styles.diaperHistoryRow}>
+                    <Text style={styles.diaperHistoryTitle}>
+                      {formatDateTime(record.diaper_time)} ·{' '}
+                      {DIAPER_TYPE_OPTIONS.find((option) => option.value === record.diaper_type)
+                        ?.label ?? record.diaper_type}
+                    </Text>
+                    {record.notes ? (
+                      <Text style={styles.diaperHistoryNotes}>{record.notes}</Text>
+                    ) : null}
+                  </View>
+                ))}
+                {(diaperRecords ?? []).length === 0 ? (
+                  <Text style={styles.historyEmpty}>暂无大小便记录</Text>
+                ) : null}
+              </View>
             </Card>
           ) : null}
         </ScrollView>
@@ -826,7 +896,7 @@ function HealthForm({
         accessibilityLabel="健康类型"
         options={HEALTH_TYPE_OPTIONS}
         value={value.record_type}
-disabled={disabled}
+        disabled={disabled}
         onChange={(record_type) => onChange((s) => ({ ...s, record_type }))}
       />
       <Field label="标题">
@@ -846,6 +916,47 @@ disabled={disabled}
           value={value.description}
           onChangeText={(v) => onChange((s) => ({ ...s, description: v }))}
           placeholder="记录医生建议、症状或观察重点"
+          placeholderTextColor={colors['mid-gray']}
+          multiline
+          style={[styles.input, styles.inputMultiline, disabled && styles.inputDisabled]}
+        />
+      </Field>
+    </View>
+  );
+}
+
+function DiaperForm({
+  value,
+  onChange,
+  disabled,
+}: FormSubProps<ReturnType<typeof initialDiaperForm>>) {
+  return (
+    <View style={styles.formBody}>
+      <Field label="时间" hint="格式 YYYY-MM-DDTHH:mm">
+        <TextInput
+          editable={!disabled}
+          value={value.diaper_time}
+          onChangeText={(v) => onChange((s) => ({ ...s, diaper_time: v }))}
+          placeholder="2026-05-18T14:30"
+          placeholderTextColor={colors['mid-gray']}
+          style={[styles.input, disabled && styles.inputDisabled]}
+          autoCapitalize="none"
+        />
+      </Field>
+      <SegmentedChoice
+        label="类型"
+        accessibilityLabel="大小便类型"
+        options={DIAPER_TYPE_OPTIONS}
+        value={value.diaper_type}
+        disabled={disabled}
+        onChange={(diaper_type) => onChange((s) => ({ ...s, diaper_type }))}
+      />
+      <Field label="备注">
+        <TextInput
+          editable={!disabled}
+          value={value.notes}
+          onChangeText={(v) => onChange((s) => ({ ...s, notes: v }))}
+          placeholder="例如：颜色、状态、换尿布后皮肤情况"
           placeholderTextColor={colors['mid-gray']}
           multiline
           style={[styles.input, styles.inputMultiline, disabled && styles.inputDisabled]}
@@ -932,10 +1043,12 @@ const styles = StyleSheet.create({
   // Tabs
   tabs: {
     flexDirection: 'row',
+    flexWrap: 'nowrap',
     gap: spacing['2'],
   },
   tabCard: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: colors['card'],
     borderRadius: radii.lg,
     borderWidth: borderWidth.hairline,
@@ -1086,5 +1199,28 @@ const styles = StyleSheet.create({
     ...typography.heading,
     fontSize: 16,
     lineHeight: 20,
+  },
+  diaperHistoryList: {
+    gap: spacing['2'],
+  },
+  diaperHistoryRow: {
+    backgroundColor: colors['warm-gray'],
+    borderRadius: radii.lg,
+    padding: spacing['3'],
+    gap: spacing['1'],
+  },
+  diaperHistoryTitle: {
+    ...typography.body,
+    fontWeight: '600',
+  },
+  diaperHistoryNotes: {
+    ...typography.caption,
+    color: colors['dark-gray'],
+  },
+  historyEmpty: {
+    ...typography.bodySmall,
+    color: colors['mid-gray'],
+    textAlign: 'center',
+    paddingVertical: spacing['3'],
   },
 });

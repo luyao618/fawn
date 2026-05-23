@@ -2,6 +2,8 @@ import type {
   Baby,
   Conversation,
   DashboardSummary,
+  DiaperRecord,
+  DiaperStatsData,
   FeedingRecord,
   FeedingStatsData,
   Family,
@@ -285,6 +287,27 @@ export const mockHealthRecords: HealthRecord[] = [
   },
 ];
 
+export const mockDiaperRecords: DiaperRecord[] = [
+  {
+    id: 'diaper-1',
+    diaper_time: '2026-04-29T07:15:00+08:00',
+    diaper_type: 'pee',
+    notes: '尿量正常',
+  },
+  {
+    id: 'diaper-2',
+    diaper_time: '2026-04-29T11:05:00+08:00',
+    diaper_type: 'poop',
+    notes: '黄色软便',
+  },
+  {
+    id: 'diaper-3',
+    diaper_time: '2026-04-28T18:40:00+08:00',
+    diaper_type: 'mixed',
+    notes: null,
+  },
+];
+
 const weightRef = {
   p3: [3.0, 3.4, 4.0, 4.5, 5.0, 5.4, 5.7],
   p15: [3.2, 3.8, 4.4, 5.0, 5.5, 5.9, 6.2],
@@ -386,6 +409,23 @@ export const mockSleepStats: SleepStatsData = {
   ],
   average_daily_hours: 11.93,
   average_night_wakings: 2,
+};
+
+export const mockDiaperStats: DiaperStatsData = {
+  days: 7,
+  daily: [
+    { date: '2026-04-23', poop: 1, pee: 5, mixed: 1, total: 7 },
+    { date: '2026-04-24', poop: 1, pee: 6, mixed: 0, total: 7 },
+    { date: '2026-04-25', poop: 0, pee: 6, mixed: 1, total: 7 },
+    { date: '2026-04-26', poop: 1, pee: 5, mixed: 0, total: 6 },
+    { date: '2026-04-27', poop: 1, pee: 6, mixed: 1, total: 8 },
+    { date: '2026-04-28', poop: 0, pee: 5, mixed: 1, total: 6 },
+    { date: '2026-04-29', poop: 1, pee: 1, mixed: 0, total: 2 },
+  ],
+  average_daily_poop: 0.7,
+  average_daily_pee: 4.9,
+  average_daily_mixed: 0.6,
+  average_daily_total: 6.1,
 };
 
 export const mockPhotos: Photo[] = [

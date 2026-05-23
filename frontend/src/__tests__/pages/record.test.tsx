@@ -17,6 +17,7 @@ vi.mock('next/navigation', () => ({
 describe('record page', () => {
   beforeEach(async () => {
     process.env.NEXT_PUBLIC_USE_MOCK = 'true';
+    vi.restoreAllMocks();
     window.localStorage.clear();
     mockSearchParams = new URLSearchParams();
     useAuthStore.getState().logout();
@@ -152,6 +153,49 @@ describe('record page', () => {
     expect(within(group).getByRole('button', { name: '疫苗' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('creates diaper records with the approved label-to-payload mapping', async () => {
+    const createDiaperSpy = vi.spyOn(api, 'createDiaperRecord');
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存喂养' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /大小便：/ }));
+
+    expect(screen.getByRole('button', { name: '保存大小便' })).toBeInTheDocument();
+    const group = screen.getByRole('group', { name: '大小便类型' });
+    expect(within(group).getByRole('button', { name: '小便' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('时间')).toHaveAttribute('type', 'datetime-local');
+
+    await userEvent.click(within(group).getByRole('button', { name: '大便' }));
+    await userEvent.type(screen.getByLabelText('备注'), '黄色软便测试');
+    await userEvent.click(screen.getByRole('button', { name: '保存大小便' }));
+
+    await waitFor(() => expect(screen.getByText(/大小便已保存/)).toBeInTheDocument());
+    expect(createDiaperSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ diaper_type: 'poop', notes: '黄色软便测试' }),
+    );
+    expect((await api.getDiaperRecords()).some((record) => record.diaper_type === 'poop')).toBe(true);
+
+    await userEvent.click(within(group).getByRole('button', { name: '小便' }));
+    await userEvent.click(screen.getByRole('button', { name: '保存大小便' }));
+    await waitFor(() => expect(createDiaperSpy).toHaveBeenLastCalledWith(expect.objectContaining({ diaper_type: 'pee' })));
+
+    await userEvent.click(within(group).getByRole('button', { name: '混合' }));
+    await userEvent.click(screen.getByRole('button', { name: '保存大小便' }));
+    await waitFor(() =>
+      expect(createDiaperSpy).toHaveBeenLastCalledWith(expect.objectContaining({ diaper_type: 'mixed' })),
+    );
+  });
+
+  it('shows diaper history when the diaper tab is active', async () => {
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存喂养' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /大小便：/ }));
+
+    expect(screen.getByText('大小便记录历史')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('尿量正常')).toBeInTheDocument());
+  });
+
   it('disables submission for users without tracker write permission', async () => {
     useAuthStore.getState().logout();
     await useAuthStore.getState().login('doctor', 'password');
@@ -160,6 +204,8 @@ describe('record page', () => {
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('当前账号只有查看权限'));
     expect(screen.getByRole('button', { name: '保存喂养' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: /大小便：/ }));
+    expect(screen.getByRole('button', { name: '保存大小便' })).toBeDisabled();
   });
 
   it('disables save and links to profile when no baby exists', async () => {
@@ -179,6 +225,8 @@ describe('record page', () => {
     await waitFor(() => expect(screen.getByText('还没有宝宝档案，暂时不能保存记录。')).toBeInTheDocument());
     expect(screen.getByRole('link', { name: '去家庭页' })).toHaveAttribute('href', '/profile');
     expect(screen.getByRole('button', { name: '保存喂养' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: /大小便：/ }));
+    expect(screen.getByRole('button', { name: '保存大小便' })).toBeDisabled();
   });
 
   it('shows growth history list when growth tab is active', async () => {
@@ -196,6 +244,14 @@ describe('record page', () => {
     render(<RecordPage />);
 
     await waitFor(() => expect(screen.getByRole('button', { name: '保存生长' })).toBeInTheDocument());
+  });
+
+  it('initializes diaper tab when ?kind=diaper is in the URL', async () => {
+    mockSearchParams = new URLSearchParams('kind=diaper');
+
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存大小便' })).toBeInTheDocument());
   });
 
   it('falls back to feeding tab for invalid ?kind= param', async () => {

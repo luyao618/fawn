@@ -1,10 +1,21 @@
-from decimal import Decimal
+import uuid
 from datetime import UTC, datetime, time, timedelta
+from decimal import Decimal
 
 from fawn.api.dashboard import DASHBOARD_TIMEZONE, dashboard_today, growth_reference_span_months
-from fawn.models import Baby, FeedingRecord, GrowthRecord, SleepRecord, User, WhoGrowthReference
-from sqlalchemy.ext.asyncio import AsyncSession
+from fawn.models import (
+    Baby,
+    DiaperRecord,
+    Family,
+    FeedingRecord,
+    GrowthRecord,
+    SleepRecord,
+    User,
+    WhoGrowthReference,
+)
+from fawn.services.family import normalize_family_name
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def test_growth_reference_span_matches_record_ages() -> None:
@@ -111,6 +122,7 @@ async def test_dashboard_returns_empty_contracts_without_baby(
     )
     feeding_response = await client.get("/api/dashboard/feeding-stats?days=2", headers=auth_headers)
     sleep_response = await client.get("/api/dashboard/sleep-stats?days=2", headers=auth_headers)
+    diaper_response = await client.get("/api/dashboard/diaper-stats?days=2", headers=auth_headers)
 
     assert summary_response.status_code == 200
     assert summary_response.json()["baby"] is None
@@ -136,6 +148,10 @@ async def test_dashboard_returns_empty_contracts_without_baby(
     assert sleep_response.status_code == 200
     assert sleep_response.json()["days"] == 2
     assert sleep_response.json()["average_daily_hours"] is None
+    assert diaper_response.status_code == 200
+    assert diaper_response.json()["days"] == 2
+    assert diaper_response.json()["average_daily_total"] == 0.0
+    assert diaper_response.json()["daily"][0]["total"] == 0
 
 
 async def test_dashboard_handles_partial_baby_without_who_or_fake_age(
@@ -315,6 +331,143 @@ async def test_feeding_stats_uses_local_day_and_excludes_future_records(
     assert data["average_daily_ml"] == 60.0
     assert data["average_daily_breast_duration_min"] == 18.0
     assert data["average_daily_count"] == 2.0
+
+
+async def test_diaper_stats_counts_daily_types(
+    client: AsyncClient,
+    db: AsyncSession,
+    auth_headers: dict[str, str],
+    test_baby: Baby,
+    test_user: User,
+) -> None:
+    today = dashboard_today()
+    morning = datetime.combine(today, time(8, 0), tzinfo=DASHBOARD_TIMEZONE)
+    db.add_all(
+        [
+            DiaperRecord(
+                baby_id=test_baby.id,
+                recorded_by=test_user.id,
+                diaper_time=morning.astimezone(UTC),
+                diaper_type="poop",
+            ),
+            DiaperRecord(
+                baby_id=test_baby.id,
+                recorded_by=test_user.id,
+                diaper_time=(morning + timedelta(hours=1)).astimezone(UTC),
+                diaper_type="pee",
+            ),
+            DiaperRecord(
+                baby_id=test_baby.id,
+                recorded_by=test_user.id,
+                diaper_time=(morning + timedelta(hours=2)).astimezone(UTC),
+                diaper_type="mixed",
+            ),
+        ]
+    )
+    await db.commit()
+
+    response = await client.get("/api/dashboard/diaper-stats?days=1", headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["daily"] == [
+        {"date": today.isoformat(), "poop": 1, "pee": 1, "mixed": 1, "total": 3}
+    ]
+    assert data["average_daily_poop"] == 1.0
+    assert data["average_daily_pee"] == 1.0
+    assert data["average_daily_mixed"] == 1.0
+    assert data["average_daily_total"] == 3.0
+
+
+async def test_diaper_stats_uses_local_day_and_excludes_future_records(
+    client: AsyncClient,
+    db: AsyncSession,
+    auth_headers: dict[str, str],
+    test_baby: Baby,
+    test_user: User,
+) -> None:
+    today = dashboard_today()
+    local_record_time = datetime.combine(today, time(0, 30), tzinfo=DASHBOARD_TIMEZONE)
+    future_record_time = datetime.combine(
+        today + timedelta(days=1), time(0, 30), tzinfo=DASHBOARD_TIMEZONE
+    )
+    db.add_all(
+        [
+            DiaperRecord(
+                baby_id=test_baby.id,
+                recorded_by=test_user.id,
+                diaper_time=local_record_time.astimezone(UTC),
+                diaper_type="poop",
+            ),
+            DiaperRecord(
+                baby_id=test_baby.id,
+                recorded_by=test_user.id,
+                diaper_time=future_record_time.astimezone(UTC),
+                diaper_type="pee",
+            ),
+        ]
+    )
+    await db.commit()
+
+    response = await client.get("/api/dashboard/diaper-stats?days=1", headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["daily"] == [
+        {"date": today.isoformat(), "poop": 1, "pee": 0, "mixed": 0, "total": 1}
+    ]
+    assert data["average_daily_total"] == 1.0
+
+
+async def test_diaper_stats_respects_family_scope(
+    client: AsyncClient,
+    db: AsyncSession,
+    auth_headers: dict[str, str],
+    test_baby: Baby,
+    test_user: User,
+) -> None:
+    today = dashboard_today()
+    other_family = Family(
+        id=uuid.uuid4(),
+        name="Other Family",
+        name_key=normalize_family_name("Other Family"),
+    )
+    other_baby = Baby(
+        id=uuid.uuid4(),
+        family_id=other_family.id,
+        name="Other Baby",
+        gender="female",
+        birth_date=today - timedelta(days=20),
+        is_premature=False,
+    )
+    record_time = datetime.combine(today, time(8, 0), tzinfo=DASHBOARD_TIMEZONE)
+    db.add_all([other_family, other_baby])
+    await db.flush()
+    db.add_all(
+        [
+            DiaperRecord(
+                baby_id=test_baby.id,
+                recorded_by=test_user.id,
+                diaper_time=record_time.astimezone(UTC),
+                diaper_type="pee",
+            ),
+            DiaperRecord(
+                baby_id=other_baby.id,
+                recorded_by=test_user.id,
+                diaper_time=record_time.astimezone(UTC),
+                diaper_type="poop",
+            ),
+        ]
+    )
+    await db.commit()
+
+    response = await client.get("/api/dashboard/diaper-stats?days=1", headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["daily"] == [
+        {"date": today.isoformat(), "poop": 0, "pee": 1, "mixed": 0, "total": 1}
+    ]
 
 
 async def test_stats_date_ranges_do_not_start_before_baby_birth(

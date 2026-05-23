@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.api.schemas import (
+    DiaperRecordCreate,
+    DiaperRecordRead,
     FeedingRecordCreate,
     FeedingRecordRead,
     GrowthRecordCreate,
@@ -23,6 +25,7 @@ from fawn.services.tracker import (
     NotFound,
     PermissionDenied,
     ValidationError,
+    create_diaper_record,
     create_feeding_record,
     create_growth_record,
     create_health_record,
@@ -39,6 +42,7 @@ SCHEMAS = {
     "feeding": FeedingRecordRead,
     "sleep": SleepRecordRead,
     "health": HealthRecordRead,
+    "diaper": DiaperRecordRead,
 }
 
 
@@ -53,7 +57,7 @@ def _service_error(exc: Exception) -> HTTPException:
 
 
 async def _list_records(
-    record_type: Literal["growth", "feeding", "sleep", "health"],
+    record_type: Literal["growth", "feeding", "sleep", "health", "diaper"],
     user: User,
     date_value: date | None,
     from_date: date | None,
@@ -131,6 +135,19 @@ async def list_health(
     return await _list_records("health", user, date_value, from_date, to_date, limit, offset, db)
 
 
+@router.get("/diaper", response_model=list[DiaperRecordRead])
+async def list_diaper(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    date_value: date | None = Query(None, alias="date"),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> list[DiaperRecordRead]:
+    return await _list_records("diaper", user, date_value, from_date, to_date, limit, offset, db)
+
+
 @router.post("/growth", response_model=GrowthRecordRead, status_code=status.HTTP_201_CREATED)
 async def create_growth(
     body: GrowthRecordCreate,
@@ -155,6 +172,19 @@ async def create_feeding(
     except Exception as exc:
         raise _service_error(exc) from exc
     return FeedingRecordRead.model_validate(record)
+
+
+@router.post("/diaper", response_model=DiaperRecordRead, status_code=status.HTTP_201_CREATED)
+async def create_diaper(
+    body: DiaperRecordCreate,
+    user: User = Depends(require_tracker_writer),
+    db: AsyncSession = Depends(get_db),
+) -> DiaperRecordRead:
+    try:
+        record = await create_diaper_record(db, user, **body.model_dump())
+    except Exception as exc:
+        raise _service_error(exc) from exc
+    return DiaperRecordRead.model_validate(record)
 
 
 @router.post("/sleep", response_model=SleepRecordRead, status_code=status.HTTP_201_CREATED)
@@ -185,7 +215,7 @@ async def create_health(
 
 @router.patch("/{record_type}/{record_id}")
 async def patch_tracker_record(
-    record_type: Literal["growth", "feeding", "sleep", "health"],
+    record_type: Literal["growth", "feeding", "sleep", "health", "diaper"],
     record_id: uuid.UUID,
     body: TrackerUpdate,
     user: User = Depends(require_tracker_writer),
@@ -206,7 +236,7 @@ async def patch_tracker_record(
 
 @router.delete("/{record_type}/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_tracker_record(
-    record_type: Literal["growth", "feeding", "sleep", "health"],
+    record_type: Literal["growth", "feeding", "sleep", "health", "diaper"],
     record_id: uuid.UUID,
     user: User = Depends(require_tracker_writer),
     db: AsyncSession = Depends(get_db),

@@ -168,6 +168,7 @@ export interface PhotoRecord {
  */
 export type RecordEntry =
   | { kind: 'feeding'; id: string; record: FeedingRecord }
+  | { kind: 'diaper'; id: string; record: DiaperRecord }
   | { kind: 'weight'; id: string; record: GrowthRecord }
   | { kind: 'height'; id: string; record: GrowthRecord }
   | { kind: 'photo'; id: string; record: PhotoRecord };
@@ -223,6 +224,15 @@ export interface SleepRecord {
   sleep_end: string | null;
   night_wakings: number;
   sleep_type: 'nap' | 'night';
+  notes: string | null;
+}
+
+export type DiaperType = 'poop' | 'pee' | 'mixed';
+
+export interface DiaperRecord {
+  id: string;
+  diaper_time: string;
+  diaper_type: DiaperType;
   notes: string | null;
 }
 
@@ -283,4 +293,21 @@ export interface SleepStatsData {
   daily: SleepStatsDaily[];
   average_daily_hours: number | null;
   average_night_wakings: number | null;
+}
+
+export interface DiaperStatsDaily {
+  date: string;
+  poop: number;
+  pee: number;
+  mixed: number;
+  total: number;
+}
+
+export interface DiaperStatsData {
+  days: number;
+  daily: DiaperStatsDaily[];
+  average_daily_poop: number;
+  average_daily_pee: number;
+  average_daily_mixed: number;
+  average_daily_total: number;
 }

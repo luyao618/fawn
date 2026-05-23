@@ -193,11 +193,11 @@ export function HistoryListScreen({ onOpenConversation }: Props) {
   );
 
   const activeDays = useMemo(() => {
-    const map = new Map<string, number>();
+    const dates = new Set<string>();
     for (const day of activity.data?.days ?? []) {
-      map.set(day.date, day.message_count);
+      if (day.message_count > 0) dates.add(day.date);
     }
-    return map;
+    return dates;
   }, [activity.data?.days]);
 
   const yearOptions = useMemo(
@@ -440,7 +440,7 @@ export function HistoryListScreen({ onOpenConversation }: Props) {
               <Text style={styles.sectionTitle}>{monthTitle(selectedYear, selectedMonth)}</Text>
               <Ionicons name="chevron-down" size={18} color={colors['dark-gray']} />
             </TouchableOpacity>
-            <Text style={styles.sectionHint}>有记录的日期会加深显示</Text>
+            <Text style={styles.sectionHint}>有消息的日期会加粗，可点击打开当天消息</Text>
           </View>
 
           {activity.isError ? (
@@ -466,28 +466,27 @@ export function HistoryListScreen({ onOpenConversation }: Props) {
           <View style={styles.calendarGrid}>
             {calendarCells.map((cell) => {
               if (cell.kind === 'blank') return <View key={cell.key} style={styles.dayCell} />;
-              const messageCount = activeDays.get(cell.date) ?? 0;
-              const isActive = messageCount > 0;
+              const isActive = activeDays.has(cell.date);
               const isPending = pendingDate === cell.date;
               return (
                 <TouchableOpacity
                   key={cell.key}
-                  style={[styles.dayCell, styles.dayButton, isActive && styles.dayButtonActive]}
+                  style={[styles.dayCell, styles.dayButton]}
                   onPress={() => {
                     if (isActive && !isPending) void openDateTarget(cell.date);
                   }}
                   disabled={!isActive || isPending}
                   accessibilityRole="button"
+                  accessibilityLabel={`${cell.date}${isActive ? ' 有消息' : ' 无消息'}`}
                   accessibilityState={{ disabled: !isActive || isPending }}
                   activeOpacity={0.85}
                 >
                   {isPending ? (
                     <ActivityIndicator color={colors['fawn-amber']} size="small" />
                   ) : (
-                    <>
-                      <Text style={[styles.dayText, isActive && styles.dayTextActive]}>{cell.day}</Text>
-                      {isActive ? <Text style={styles.dayMeta}>{messageCount}</Text> : null}
-                    </>
+                    <Text style={[styles.dayText, isActive && styles.dayTextActive]}>
+                      {cell.day}
+                    </Text>
                   )}
                 </TouchableOpacity>
               );
@@ -743,11 +742,6 @@ const styles = StyleSheet.create({
   dayButton: {
     borderRadius: radii.md,
   },
-  dayButtonActive: {
-    backgroundColor: colors['fawn-amber-light'],
-    borderWidth: 1,
-    borderColor: colors['fawn-amber'],
-  },
   dayText: {
     ...typography.bodySmall,
     color: colors['mid-gray'],
@@ -755,11 +749,7 @@ const styles = StyleSheet.create({
   dayTextActive: {
     color: colors['brand-strong'],
     fontFamily: typography.button.fontFamily,
-  },
-  dayMeta: {
-    ...typography.caption,
-    color: colors['fawn-amber'],
-    marginTop: spacing['1'],
+    fontWeight: '700',
   },
   pickerBackdrop: {
     flex: 1,

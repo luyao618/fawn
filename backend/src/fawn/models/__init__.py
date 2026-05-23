@@ -9,6 +9,7 @@ from fawn.models.knowledge import KnowledgeChunk, KnowledgeDocument, SeedMetadat
 from fawn.models.profile import ProfileItem
 from fawn.models.push_token import PushToken
 from fawn.models.tracker import (
+    DiaperRecord,
     FeedingRecord,
     GrowthRecord,
     HealthRecord,
@@ -25,6 +26,7 @@ __all__ = [
     "Conversation",
     "ConversationSummary",
     "Family",
+    "DiaperRecord",
     "FeedingRecord",
     "GrowthRecord",
     "HealthRecord",

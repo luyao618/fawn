@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radii, spacing, typography } from '../../shared/theme';
 import type {
+  DiaperRecord,
   FeedingRecord,
   GrowthRecord,
   HealthRecord,
@@ -15,10 +16,10 @@ import { formatDate, formatDateTime, toKg } from '../../lib/utils';
 /**
  * "最近记录" card — mobile equivalent of the inline `RecentRecords` in
  * `frontend/src/app/(main)/dashboard/page.tsx`. Builds a unified
- * reverse-chronological top-5 from the four tracker sources.
+ * reverse-chronological top-5 from the tracker sources.
  */
 
-export type RecentRecordType = '生长' | '喂养' | '睡眠' | '健康';
+export type RecentRecordType = '生长' | '喂养' | '睡眠' | '健康' | '大小便';
 
 export interface RecentRecord {
   id: string;
@@ -40,6 +41,12 @@ const healthTypeLabel: Record<HealthRecord['record_type'], string> = {
   checkup: '体检',
 };
 
+const diaperTypeLabel: Record<DiaperRecord['diaper_type'], string> = {
+  poop: '大便',
+  pee: '小便',
+  mixed: '混合',
+};
+
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const TYPE_STYLE: Record<
@@ -50,6 +57,7 @@ const TYPE_STYLE: Record<
   睡眠: { icon: 'moon-outline', bg: colors['info-blue-light'], fg: colors['info-blue'] },
   生长: { icon: 'resize-outline', bg: colors['sage-green-light'], fg: colors['sage-green'] },
   健康: { icon: 'medical-outline', bg: colors['nursery-mint'], fg: colors['brand-strong'] },
+  大小便: { icon: 'water-outline', bg: colors['nursery-butter'], fg: colors['warning-amber'] },
 };
 
 function sortDesc(records: RecentRecord[]): RecentRecord[] {
@@ -68,6 +76,7 @@ export function buildRecentRecords(
   feedingRecords: FeedingRecord[],
   sleepRecords: SleepRecord[],
   healthRecords: HealthRecord[],
+  diaperRecords: DiaperRecord[] = [],
 ): RecentRecord[] {
   const growth: RecentRecord[] = growthRecords.map((record) => ({
     id: record.id,
@@ -103,12 +112,19 @@ export function buildRecentRecords(
     detail: `${healthTypeLabel[record.record_type]}${record.description ? ` · ${record.description}` : ''}`,
     at: record.record_date,
   }));
+  const diaper: RecentRecord[] = diaperRecords.map((record) => ({
+    id: record.id,
+    type: '大小便',
+    title: `${formatDateTime(record.diaper_time)} ${diaperTypeLabel[record.diaper_type]}`,
+    detail: record.notes ?? '未填写备注',
+    at: record.diaper_time,
+  }));
 
-  const primary = [growth, sleep, health, feeding]
+  const primary = [growth, sleep, health, feeding, diaper]
     .map((records) => sortDesc(records)[0])
     .filter((record): record is RecentRecord => Boolean(record));
   const selected = new Set(primary.map((record) => `${record.type}-${record.id}`));
-  const rest = sortDesc([...growth, ...feeding, ...sleep, ...health]).filter(
+  const rest = sortDesc([...growth, ...feeding, ...sleep, ...health, ...diaper]).filter(
     (record) => !selected.has(`${record.type}-${record.id}`),
   );
   return sortDesc([...primary, ...rest.slice(0, 5 - primary.length)]).slice(0, 5);

@@ -5,7 +5,6 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useRoute } from '@react-navigation/native';
-import { Image as ExpoImage } from 'expo-image';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -24,11 +23,15 @@ import {
 } from '../shared/api';
 import { getApiBaseUrl } from '../lib/api';
 import { getToken } from '../lib/tokenStorage';
+import type { User } from '../lib/types';
+import { roleLabel } from '../lib/utils';
+import { useAuth } from '../auth/AuthContext';
+import { MessageBubble } from '../components/chat/MessageBubble';
+import { TimeSeparator } from '../components/chat/TimeSeparator';
 import { TopBar } from '../components/layout/TopBar';
 import {
   colors,
   radii,
-  shadows,
   spacing,
   typography,
 } from '../shared/theme';
@@ -81,6 +84,13 @@ function formatDateLabel(date: string): string {
   });
 }
 
+function senderMeta(sender: Pick<User, 'display_name' | 'role'> | null | undefined) {
+  return {
+    name: sender?.display_name?.trim() || '家庭成员',
+    role: roleLabel(sender?.role),
+  };
+}
+
 export function HistoryConversationScreen({
   conversationId,
   onBack,
@@ -88,6 +98,7 @@ export function HistoryConversationScreen({
   targetDate,
 }: Props) {
   const baseUrl = getApiBaseUrl();
+  const { user } = useAuth();
   const route = useRoute();
   const routeParams = (route.params ?? {}) as HistoryRouteParams;
   const effectiveConversationId = conversationId || routeParams.id || '';
@@ -148,42 +159,31 @@ export function HistoryConversationScreen({
     return () => clearTimeout(handle);
   }, [contentReady, targetIndex]);
 
-  const renderMessage = ({ item }: { item: ChatMessage }) => {
+  const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
     const isUser = item.role === 'user';
     const isTarget = item.id === effectiveTargetMessageId;
     const imgRef = item.metadata?.image_url;
     const imgUri = imgRef ? resolveChatImageUrl(baseUrl, imgRef) : null;
+    const fallbackSender =
+      !item.sender_user_id || item.sender_user_id === user?.id ? user : null;
+    const meta = senderMeta(item.sender ?? fallbackSender);
+    const prev = index > 0 ? messages[index - 1] : null;
+    const showSeparator =
+      !prev ||
+      new Date(item.created_at).toDateString() !==
+        new Date(prev.created_at).toDateString();
+
     return (
       <View style={[styles.messageBlock, isTarget && styles.targetBlock]}>
+        {showSeparator ? <TimeSeparator timestamp={item.created_at} /> : null}
         {isTarget ? <Text style={styles.targetLabel}>定位到这里</Text> : null}
-        <View style={[styles.bubbleRow, isUser ? styles.bubbleRight : styles.bubbleLeft]}>
-          <View
-            style={[
-              styles.bubble,
-              isUser ? styles.bubbleUser : styles.bubbleAssistant,
-              isTarget && styles.bubbleTarget,
-            ]}
-          >
-            {imgUri && (
-              <ExpoImage
-                source={{ uri: imgUri, headers: imageHeaders }}
-                style={styles.messageImage}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                transition={150}
-                accessibilityLabel="聊天图片"
-              />
-            )}
-            {item.content ? (
-              <Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant]}>
-                {item.content}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-        <Text style={[styles.messageMeta, isUser ? styles.messageMetaRight : styles.messageMetaLeft]}>
-          {formatDateTime(item.created_at)}
-        </Text>
+        <MessageBubble
+          message={item}
+          imageUri={imgUri}
+          imageHeaders={imgUri ? imageHeaders : undefined}
+          senderName={isUser ? meta.name : undefined}
+          senderRole={isUser ? meta.role : undefined}
+        />
       </View>
     );
   };
@@ -319,48 +319,6 @@ const styles = StyleSheet.create({
     color: colors['warning-amber'],
     fontFamily: typography.button.fontFamily,
     textAlign: 'center',
-    marginBottom: spacing['1'],
-  },
-  bubbleRow: { flexDirection: 'row' },
-  bubbleLeft: { justifyContent: 'flex-start' },
-  bubbleRight: { justifyContent: 'flex-end' },
-  bubble: {
-    maxWidth: '78%',
-    paddingHorizontal: spacing['3'],
-    paddingVertical: spacing['2'],
-    borderRadius: radii.bubble,
-    ...shadows.card,
-  },
-  bubbleUser: { backgroundColor: colors['bubble-user'] },
-  bubbleAssistant: {
-    backgroundColor: colors['bubble-agent'],
-    borderWidth: 1,
-    borderColor: colors['oat-border'],
-  },
-  bubbleTarget: {
-    borderWidth: 1,
-    borderColor: colors['warning-amber'],
-  },
-  bubbleText: {
-    ...typography.body,
-  },
-  bubbleTextUser: { color: colors['card'] },
-  bubbleTextAssistant: { color: colors['soft-charcoal'] },
-  messageMeta: {
-    ...typography.caption,
-    color: colors['mid-gray'],
-    marginTop: spacing['1'],
-  },
-  messageMetaLeft: {
-    textAlign: 'left',
-  },
-  messageMetaRight: {
-    textAlign: 'right',
-  },
-  messageImage: {
-    width: 200,
-    height: 200,
-    borderRadius: radii.md,
     marginBottom: spacing['1'],
   },
 });

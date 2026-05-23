@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ClipboardList, Moon, Ruler, Stethoscope, Utensils } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
+import { DiaperStats } from '@/components/dashboard/DiaperStats';
 import { FeedingStats } from '@/components/dashboard/FeedingStats';
 import { HealthTimeline } from '@/components/dashboard/HealthTimeline';
 import { LatestGrowthCards } from '@/components/dashboard/LatestGrowthCards';
@@ -14,6 +15,8 @@ import { api } from '@/lib/api';
 import { cn, formatDate, formatDateTime, toKg } from '@/lib/utils';
 import type {
   DashboardSummary,
+  DiaperRecord,
+  DiaperStatsData,
   FeedingRecord,
   FeedingStatsData,
   GrowthRecord,
@@ -22,7 +25,7 @@ import type {
   SleepRecord,
 } from '@/lib/types';
 
-type RecentRecordType = '生长' | '喂养' | '睡眠' | '健康';
+type RecentRecordType = '生长' | '喂养' | '睡眠' | '健康' | '大小便';
 type RecentRecord = {
   id: string;
   type: RecentRecordType;
@@ -43,7 +46,14 @@ const healthTypeLabel: Record<HealthRecord['record_type'], string> = {
   illness: '不适',
   checkup: '体检',
 };
+const diaperTypeLabel: Record<DiaperRecord['diaper_type'], string> = {
+  poop: '大便',
+  pee: '小便',
+  mixed: '混合',
+};
 const STATS_HISTORY_DAYS = 90;
+const DASHBOARD_SECTIONS = ['摘要', '喂养', '大小便', '睡眠', '健康'] as const;
+type DashboardSection = (typeof DASHBOARD_SECTIONS)[number];
 const recentTypeStyle: Record<
   RecentRecordType,
   {
@@ -72,6 +82,11 @@ const recentTypeStyle: Record<
     iconBox: 'bg-nursery-mint text-brand-strong',
     label: 'text-brand-strong',
   },
+  大小便: {
+    icon: ClipboardList,
+    iconBox: 'bg-nursery-butter text-warning-amber',
+    label: 'text-warning-amber',
+  },
 };
 
 function Skeleton({ className = '' }: { className?: string }) {
@@ -91,6 +106,7 @@ function recentFromRecords(
   feedingRecords: FeedingRecord[],
   sleepRecords: SleepRecord[],
   healthRecords: HealthRecord[],
+  diaperRecords: DiaperRecord[],
 ) {
   const growth: RecentRecord[] = growthRecords.map((record) => ({
     id: record.id,
@@ -122,12 +138,19 @@ function recentFromRecords(
     detail: `${healthTypeLabel[record.record_type]}${record.description ? ` · ${record.description}` : ''}`,
     at: record.record_date,
   }));
+  const diaper: RecentRecord[] = diaperRecords.map((record) => ({
+    id: record.id,
+    type: '大小便',
+    title: `${formatDateTime(record.diaper_time)} ${diaperTypeLabel[record.diaper_type]}`,
+    detail: record.notes ?? '未填写备注',
+    at: record.diaper_time,
+  }));
 
-  const primaryRecords = [growth, sleep, health, feeding]
+  const primaryRecords = [growth, sleep, health, feeding, diaper]
     .map((records) => sortRecentRecords(records)[0])
     .filter((record): record is RecentRecord => Boolean(record));
   const selectedIds = new Set(primaryRecords.map((record) => `${record.type}-${record.id}`));
-  const remainingRecords = sortRecentRecords([...growth, ...feeding, ...sleep, ...health]).filter(
+  const remainingRecords = sortRecentRecords([...growth, ...feeding, ...sleep, ...health, ...diaper]).filter(
     (record) => !selectedIds.has(`${record.type}-${record.id}`),
   );
 
@@ -251,13 +274,46 @@ function RecentRecords({ records }: { records: RecentRecord[] }) {
   );
 }
 
+function DashboardSectionSelector({
+  activeSection,
+  onChange,
+}: {
+  activeSection: DashboardSection;
+  onChange: (section: DashboardSection) => void;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-2xl bg-warm-gray p-1" aria-label="成长看板分区">
+      <div className="grid min-w-max grid-cols-5 gap-1">
+        {DASHBOARD_SECTIONS.map((section) => (
+          <button
+            key={section}
+            type="button"
+            onClick={() => onChange(section)}
+            aria-pressed={activeSection === section}
+            className={cn(
+              'min-h-9 whitespace-nowrap rounded-xl px-3 text-sm font-semibold transition-colors',
+              activeSection === section
+                ? 'bg-white text-fawn-amber shadow-card'
+                : 'text-dark-gray hover:bg-white/70',
+            )}
+          >
+            {section}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
+  const [activeSection, setActiveSection] = useState<DashboardSection>('摘要');
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [feeding, setFeeding] = useState<FeedingStatsData | null>(null);
   const [sleep, setSleep] = useState<SleepStatsData | null>(null);
+  const [diaperStats, setDiaperStats] = useState<DiaperStatsData | null>(null);
+  const [diaperRecords, setDiaperRecords] = useState<DiaperRecord[] | null>(null);
   const [health, setHealth] = useState<HealthRecord[] | null>(null);
   const [recentRecords, setRecentRecords] = useState<RecentRecord[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     const [
@@ -268,6 +324,8 @@ export default function DashboardPage() {
       growthRecords,
       feedingRecords,
       sleepRecords,
+      diaperStatsData,
+      diaperRecordData,
     ] = await Promise.allSettled([
       api.getDashboardSummary(),
       api.getFeedingStats(STATS_HISTORY_DAYS),
@@ -276,20 +334,14 @@ export default function DashboardPage() {
       api.getGrowthRecords(),
       api.getFeedingRecords(),
       api.getSleepRecords(),
+      api.getDiaperStats(STATS_HISTORY_DAYS),
+      api.getDiaperRecords(),
     ] as const);
-    const failedCount = [
-      summaryData,
-      feedingData,
-      sleepData,
-      healthData,
-      growthRecords,
-      feedingRecords,
-      sleepRecords,
-    ].filter((result) => result.status === 'rejected').length;
-
     if (summaryData.status === 'fulfilled') setSummary(summaryData.value);
     if (feedingData.status === 'fulfilled') setFeeding(feedingData.value);
     if (sleepData.status === 'fulfilled') setSleep(sleepData.value);
+    if (diaperStatsData.status === 'fulfilled') setDiaperStats(diaperStatsData.value);
+    if (diaperRecordData.status === 'fulfilled') setDiaperRecords(diaperRecordData.value);
     if (healthData.status === 'fulfilled') setHealth(healthData.value);
     if (
       growthRecords.status === 'fulfilled' &&
@@ -302,10 +354,10 @@ export default function DashboardPage() {
           feedingRecords.value,
           sleepRecords.value,
           fulfilledValue(healthData, []),
+          fulfilledValue(diaperRecordData, []),
         ),
       );
     }
-    setLoadError(failedCount > 0 ? `有 ${failedCount} 项数据暂时没更新，已保留可用内容。` : null);
   }, []);
 
   useEffect(() => {
@@ -314,28 +366,28 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4 px-4 pt-4 pb-6">
-      {loadError ? (
-        <div
-          role="status"
-          className="rounded-2xl border border-fawn-amber/30 bg-fawn-amber-light px-3 py-2 text-xs leading-5 text-soft-charcoal"
-        >
-          {loadError}
+      <DashboardSectionSelector activeSection={activeSection} onChange={setActiveSection} />
+      {activeSection === '摘要' ? (
+        <div className="space-y-4">
+          {summary ? (
+            <DashboardOverview summary={summary} latestRecord={recentRecords[0]} />
+          ) : (
+            <Skeleton className="h-36" />
+          )}
+          <RecentRecords records={recentRecords} />
+          <LatestGrowthCards latest={summary?.latest_growth ?? null} />
         </div>
       ) : null}
-      {summary ? (
-        <DashboardOverview summary={summary} latestRecord={recentRecords[0]} />
-      ) : (
-        <Skeleton className="h-36" />
-      )}
-      <LatestGrowthCards latest={summary?.latest_growth ?? null} />
-
-      <div className="grid grid-cols-1 gap-4">
-        {feeding ? <FeedingStats data={feeding} /> : <Skeleton className="h-48" />}
-        {sleep ? <SleepStats data={sleep} /> : <Skeleton className="h-48" />}
-      </div>
-
-      {health ? <HealthTimeline records={health} /> : <Skeleton className="h-52" />}
-      <RecentRecords records={recentRecords} />
+      {activeSection === '喂养' ? feeding ? <FeedingStats data={feeding} /> : <Skeleton className="h-48" /> : null}
+      {activeSection === '大小便' ? (
+        diaperStats && diaperRecords ? (
+          <DiaperStats data={diaperStats} records={diaperRecords} />
+        ) : (
+          <Skeleton className="h-60" />
+        )
+      ) : null}
+      {activeSection === '睡眠' ? sleep ? <SleepStats data={sleep} /> : <Skeleton className="h-48" /> : null}
+      {activeSection === '健康' ? health ? <HealthTimeline records={health} /> : <Skeleton className="h-52" /> : null}
     </div>
   );
 }

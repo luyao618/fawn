@@ -3,16 +3,19 @@
 import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Moon, Ruler, Stethoscope, Utensils } from 'lucide-react';
+import { ClipboardList, Moon, Ruler, Stethoscope, Utensils } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { DiaperHistory } from '@/components/dashboard/DiaperStats';
 import { GrowthHistoryList } from '@/components/dashboard/GrowthHistoryList';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
 import { canWriteTracker, formatDate } from '@/lib/utils';
 import type {
   DashboardSummary,
+  DiaperRecord,
+  DiaperRecordCreate,
   FeedingRecordCreate,
   GrowthRecord,
   GrowthRecordCreate,
@@ -21,7 +24,7 @@ import type {
   SleepRecordCreate,
 } from '@/lib/types';
 
-type RecordKind = 'feeding' | 'sleep' | 'growth' | 'health';
+type RecordKind = 'feeding' | 'sleep' | 'growth' | 'health' | 'diaper';
 
 interface RecordCard {
   kind: RecordKind;
@@ -60,6 +63,13 @@ const recordCards: RecordCard[] = [
     icon: Stethoscope,
     tint: 'bg-safety-red-light text-safety-red',
   },
+  {
+    kind: 'diaper',
+    label: '大小便',
+    description: '大便、小便、混合尿布',
+    icon: ClipboardList,
+    tint: 'bg-nursery-butter text-warning-amber',
+  },
 ];
 
 const feedingTypeOptions: Array<{ value: FeedingRecordCreate['feed_type']; label: string }> = [
@@ -76,6 +86,12 @@ const healthTypeOptions: Array<{ value: HealthRecordCreate['record_type']; label
   { value: 'checkup', label: '体检' },
   { value: 'vaccination', label: '疫苗' },
   { value: 'illness', label: '不适' },
+];
+
+const diaperTypeOptions: Array<{ value: DiaperRecordCreate['diaper_type']; label: string }> = [
+  { value: 'poop', label: '大便' },
+  { value: 'pee', label: '小便' },
+  { value: 'mixed', label: '混合' },
 ];
 
 const inputClass =
@@ -278,7 +294,15 @@ function initialHealthForm() {
   };
 }
 
-const validKinds: RecordKind[] = ['feeding', 'sleep', 'growth', 'health'];
+function initialDiaperForm() {
+  return {
+    diaper_time: localDateTimeInputValue(),
+    diaper_type: 'pee' as DiaperRecordCreate['diaper_type'],
+    notes: '',
+  };
+}
+
+const validKinds: RecordKind[] = ['feeding', 'sleep', 'growth', 'health', 'diaper'];
 
 function RecordPageInner() {
   const searchParams = useSearchParams();
@@ -295,11 +319,13 @@ function RecordPageInner() {
   const [sleep, setSleep] = useState(initialSleepForm);
   const [growth, setGrowth] = useState(initialGrowthForm);
   const [growthRecords, setGrowthRecords] = useState<GrowthRecord[]>([]);
+  const [diaperRecords, setDiaperRecords] = useState<DiaperRecord[]>([]);
   const [growthReference, setGrowthReference] = useState<GrowthReferenceP50 | null>(null);
   const [growthReferenceLoading, setGrowthReferenceLoading] = useState(false);
   const [growthReferenceUnavailable, setGrowthReferenceUnavailable] = useState(false);
   const growthReferenceCache = useRef(new Map<string, GrowthReferenceP50 | null>());
   const [health, setHealth] = useState(initialHealthForm);
+  const [diaper, setDiaper] = useState(initialDiaperForm);
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -315,6 +341,12 @@ function RecordPageInner() {
       .getGrowthRecords()
       .then((data) => {
         if (active) setGrowthRecords(data);
+      })
+      .catch(() => undefined);
+    api
+      .getDiaperRecords()
+      .then((data) => {
+        if (active) setDiaperRecords(data);
       })
       .catch(() => undefined);
     return () => {
@@ -380,6 +412,7 @@ function RecordPageInner() {
     if (activeKind === 'sleep') setSleep(initialSleepForm());
     if (activeKind === 'growth') setGrowth(initialGrowthForm());
     if (activeKind === 'health') setHealth(initialHealthForm());
+    if (activeKind === 'diaper') setDiaper(initialDiaperForm());
   }
 
   async function submitRecord(event: FormEvent<HTMLFormElement>) {
@@ -446,6 +479,16 @@ function RecordPageInner() {
         });
       }
 
+      if (activeKind === 'diaper') {
+        validateRecordDateTime(diaper.diaper_time, '大小便时间', birthDate, maxDateTime);
+        await api.createDiaperRecord({
+          diaper_time: toIsoDateTime(diaper.diaper_time),
+          diaper_type: diaper.diaper_type,
+          notes: textOrNull(diaper.notes),
+        });
+        api.getDiaperRecords().then(setDiaperRecords).catch(() => undefined);
+      }
+
       setStatus({ type: 'success', message: `${activeCard.label}已保存，成长看板会同步更新。` });
       resetActiveForm();
     } catch (error) {
@@ -482,7 +525,7 @@ function RecordPageInner() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-5 gap-1.5">
         {recordCards.map((card) => {
           const Icon = card.icon;
           const active = card.kind === activeKind;
@@ -812,6 +855,44 @@ function RecordPageInner() {
             </>
           ) : null}
 
+          {activeKind === 'diaper' ? (
+            <>
+              <label className={labelClass}>
+                时间
+                <input
+                  type="datetime-local"
+                  required
+                  value={diaper.diaper_time}
+                  onChange={(event) => setDiaper((value) => ({ ...value, diaper_time: event.target.value }))}
+                  disabled={formDisabled}
+                  min={minDateTime}
+                  max={maxDateTime}
+                  className={inputClass}
+                />
+              </label>
+              <SegmentedChoice
+                label="类型"
+                ariaLabel="大小便类型"
+                options={diaperTypeOptions}
+                value={diaper.diaper_type}
+                columns={3}
+                disabled={formDisabled}
+                onChange={(diaperType) => setDiaper((value) => ({ ...value, diaper_type: diaperType }))}
+              />
+              <label className={labelClass}>
+                备注
+                <textarea
+                  rows={2}
+                  value={diaper.notes}
+                  onChange={(event) => setDiaper((value) => ({ ...value, notes: event.target.value }))}
+                  disabled={formDisabled}
+                  className={`${inputClass} py-2.5`}
+                  placeholder="例如：颜色、量、皮肤状态"
+                />
+              </label>
+            </>
+          ) : null}
+
           {status ? (
             <p
               role="status"
@@ -835,6 +916,13 @@ function RecordPageInner() {
         <Card className="space-y-2 p-3">
           <h3 className="text-[15px] font-semibold text-soft-charcoal">成长记录历史</h3>
           <GrowthHistoryList records={growthRecords} />
+        </Card>
+      ) : null}
+
+      {activeKind === 'diaper' ? (
+        <Card className="space-y-2 p-3">
+          <h3 className="text-[15px] font-semibold text-soft-charcoal">大小便记录历史</h3>
+          <DiaperHistory records={diaperRecords} />
         </Card>
       ) : null}
     </div>

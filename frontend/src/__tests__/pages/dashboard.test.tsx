@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DashboardPage from '@/app/(main)/dashboard/page';
 import { api } from '@/lib/api';
@@ -21,13 +22,35 @@ describe('dashboard page', () => {
   it('loads dashboard mock data', async () => {
     render(<DashboardPage />);
     await waitFor(() => expect(screen.getByText(/晨晨/)).toBeInTheDocument(), { timeout: 2000 });
-    expect(screen.getByText('体重')).toBeInTheDocument();
-    expect(screen.getByText('喂养统计')).toBeInTheDocument();
-    expect(screen.getByText('睡眠统计')).toBeInTheDocument();
-    expect(screen.getByText('健康时间线')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '摘要' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('喂养统计')).not.toBeInTheDocument();
+    expect(screen.queryByText('睡眠统计')).not.toBeInTheDocument();
+    expect(screen.queryByText('健康时间线')).not.toBeInTheDocument();
     expect(screen.getByText('最近记录')).toBeInTheDocument();
+    expect(screen.getByText('体重')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /刷新/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /去记录/ })).not.toBeInTheDocument();
+  });
+
+  it('uses the approved dashboard section order and renders only the selected section', async () => {
+    render(<DashboardPage />);
+    await waitFor(() => expect(screen.getByText(/晨晨/)).toBeInTheDocument(), { timeout: 2000 });
+
+    const labels = ['摘要', '喂养', '大小便', '睡眠', '健康'];
+    expect(screen.getAllByRole('button').map((button) => button.textContent).slice(0, labels.length)).toEqual(labels);
+
+    await userEvent.click(screen.getByRole('button', { name: '喂养' }));
+    expect(screen.getByText('喂养统计')).toBeInTheDocument();
+    expect(screen.queryByText('今日摘要')).not.toBeInTheDocument();
+    expect(screen.queryByText('最近记录')).not.toBeInTheDocument();
+    expect(screen.queryByText('体重')).not.toBeInTheDocument();
+    expect(screen.queryByText('睡眠统计')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: '大小便' }));
+    expect(screen.getByText('大小便统计')).toBeInTheDocument();
+    expect(screen.getByText('大小便历史')).toBeInTheDocument();
+    expect(screen.getByText('黄色软便')).toBeInTheDocument();
+    expect(screen.queryByText('喂养统计')).not.toBeInTheDocument();
   });
 
   it('keeps available dashboard sections visible when one load source fails', async () => {
@@ -36,10 +59,10 @@ describe('dashboard page', () => {
     render(<DashboardPage />);
 
     await waitFor(() => expect(screen.getByText(/晨晨/)).toBeInTheDocument(), { timeout: 2000 });
-    expect(screen.getByText('体重')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '喂养' }));
     expect(screen.getByText('喂养统计')).toBeInTheDocument();
-    expect(screen.getByText('睡眠统计')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('有 1 项数据暂时没更新');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText(/已保留可用内容/)).not.toBeInTheDocument();
   });
 
   it('renders setup state without fake baby data for registered empty families', async () => {

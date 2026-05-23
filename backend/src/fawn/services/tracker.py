@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fawn.dependencies import can_write_tracker
 from fawn.models import (
     Baby,
+    DiaperRecord,
     FeedingRecord,
     GrowthRecord,
     HealthRecord,
@@ -22,7 +23,7 @@ from fawn.models import (
     WhoGrowthReference,
 )
 
-TrackerType = Literal["growth", "feeding", "sleep", "health"]
+TrackerType = Literal["growth", "feeding", "sleep", "health", "diaper"]
 APP_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
@@ -47,6 +48,7 @@ RECORD_MODELS: dict[str, type] = {
     "feeding": FeedingRecord,
     "sleep": SleepRecord,
     "health": HealthRecord,
+    "diaper": DiaperRecord,
 }
 
 DATE_FIELDS = {
@@ -54,6 +56,7 @@ DATE_FIELDS = {
     "feeding": FeedingRecord.feed_time,
     "sleep": SleepRecord.sleep_start,
     "health": HealthRecord.record_date,
+    "diaper": DiaperRecord.diaper_time,
 }
 
 
@@ -297,6 +300,40 @@ async def create_feeding_record(
     return record
 
 
+async def create_diaper_record(
+    db: AsyncSession,
+    user: User,
+    *,
+    diaper_time: datetime,
+    diaper_type: str,
+    notes: str | None = None,
+    baby_id: uuid.UUID | None = None,
+    source_conversation_id: uuid.UUID | None = None,
+) -> DiaperRecord:
+    ensure_tracker_write(user)
+    baby = (
+        await db.get(Baby, baby_id)
+        if baby_id
+        else await get_default_baby_for_recording(db, user.family_id)
+    )
+    if baby is None:
+        raise NotFound("Baby profile not found")
+    if baby.family_id != user.family_id:
+        raise PermissionDenied("Cannot write records for another family")
+    record = DiaperRecord(
+        baby_id=baby.id,
+        recorded_by=user.id,
+        diaper_time=diaper_time,
+        diaper_type=diaper_type,
+        notes=notes,
+        source_conversation_id=source_conversation_id,
+    )
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+    return record
+
+
 async def create_sleep_record(
     db: AsyncSession,
     user: User,
@@ -450,14 +487,14 @@ def _apply_date_filters(
 ) -> Select[tuple[Any]]:
     field = DATE_FIELDS[record_type]
     if date_value:
-        if record_type == "feeding":
+        if record_type in {"feeding", "diaper"}:
             start, end = _local_date_bounds_utc(date_value)
             return stmt.where(field >= start, field < end)
         if record_type == "sleep":
             start, end = _local_date_bounds_utc(date_value)
             return _apply_sleep_overlap(stmt, start, end)
         return stmt.where(field == date_value)
-    if record_type == "feeding":
+    if record_type in {"feeding", "diaper"}:
         if from_date:
             stmt = stmt.where(field >= _local_date_bounds_utc(from_date)[0])
         if to_date:
@@ -531,6 +568,10 @@ async def query_sleep(db: AsyncSession, **kwargs: Any) -> list[SleepRecord]:
 
 async def query_health(db: AsyncSession, **kwargs: Any) -> list[HealthRecord]:
     return await query_records(db, "health", **kwargs)
+
+
+async def query_diaper(db: AsyncSession, **kwargs: Any) -> list[DiaperRecord]:
+    return await query_records(db, "diaper", **kwargs)
 
 
 async def seed_who_csv(db: AsyncSession, csv_path: Path, idempotent: bool) -> int:

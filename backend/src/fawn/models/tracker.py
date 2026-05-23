@@ -128,6 +128,33 @@ class HealthRecord(UUIDMixin, TimestampMixin, Base):
     deleted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
 
+class DiaperRecord(UUIDMixin, TimestampMixin, Base):
+    __tablename__ = "diaper_records"
+    __table_args__ = (
+        CheckConstraint(
+            "diaper_type IN ('poop', 'pee', 'mixed')",
+            name="ck_diaper_records_diaper_type",
+        ),
+        Index("idx_diaper_records_time", "baby_id", "diaper_time"),
+    )
+
+    baby_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("babies.id"), nullable=False
+    )
+    recorded_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    diaper_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    diaper_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    source_conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id"),
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+
 class WhoGrowthReference(Base):
     __tablename__ = "who_growth_reference"
     __table_args__ = (

@@ -103,7 +103,7 @@ export type SSEEvent =
   | { type: 'error'; message: string }
   | { type: 'session_expired'; expired_conversation_id: string };
 
-export type TrackerType = 'growth' | 'feeding' | 'sleep' | 'health';
+export type TrackerType = 'growth' | 'feeding' | 'sleep' | 'health' | 'diaper';
 
 export interface GrowthRecord {
   id: string;
@@ -181,6 +181,19 @@ export interface HealthRecordCreate {
   record_type: 'vaccination' | 'illness' | 'checkup';
   title: string;
   description?: string | null;
+}
+
+export interface DiaperRecord {
+  id: string;
+  diaper_time: string;
+  diaper_type: 'poop' | 'pee' | 'mixed';
+  notes: string | null;
+}
+
+export interface DiaperRecordCreate {
+  diaper_time: string;
+  diaper_type: 'poop' | 'pee' | 'mixed';
+  notes?: string | null;
 }
 
 export interface DashboardLatestGrowthMetric {
@@ -262,6 +275,21 @@ export interface SleepStatsData {
   average_night_wakings: number | null;
 }
 
+export interface DiaperStatsData {
+  days: number;
+  daily: Array<{
+    date: string;
+    poop: number;
+    pee: number;
+    mixed: number;
+    total: number;
+  }>;
+  average_daily_poop: number;
+  average_daily_pee: number;
+  average_daily_mixed: number;
+  average_daily_total: number;
+}
+
 export type PhotoTagType = 'scene' | 'expression' | 'milestone';
 
 export interface Photo {
@@ -316,6 +344,6 @@ export interface PaginatedResponse<T> {
   page_size: number;
 }
 
-export type TrackerRecord = GrowthRecord | FeedingRecord | SleepRecord | HealthRecord;
+export type TrackerRecord = GrowthRecord | FeedingRecord | SleepRecord | HealthRecord | DiaperRecord;
 
 export type MessageSearchResult = Message & { conversation_started_at: string };

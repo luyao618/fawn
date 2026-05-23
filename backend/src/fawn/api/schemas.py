@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 UserAccessType = Literal["parent", "family", "friend"]
-TrackerType = Literal["growth", "feeding", "sleep", "health"]
+TrackerType = Literal["growth", "feeding", "sleep", "health", "diaper"]
 MessageType = Literal["text", "image", "data_card", "safety_alert"]
 
 
@@ -289,6 +289,21 @@ class HealthRecordCreate(BaseModel):
     description: str | None = None
 
 
+class DiaperRecordRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    diaper_time: datetime
+    diaper_type: Literal["poop", "pee", "mixed"]
+    notes: str | None = None
+
+
+class DiaperRecordCreate(BaseModel):
+    diaper_time: datetime
+    diaper_type: Literal["poop", "pee", "mixed"]
+    notes: str | None = None
+
+
 class TrackerUpdate(BaseModel):
     measurement_date: date | None = None
     weight_g: int | None = None
@@ -306,6 +321,8 @@ class TrackerUpdate(BaseModel):
     record_type: Literal["vaccination", "illness", "checkup"] | None = None
     title: str | None = None
     description: str | None = None
+    diaper_time: datetime | None = None
+    diaper_type: Literal["poop", "pee", "mixed"] | None = None
     notes: str | None = None
 
 
@@ -405,6 +422,23 @@ class SleepStatsData(BaseModel):
     daily: list[SleepStatsDay]
     average_daily_hours: float | None
     average_night_wakings: float | None
+
+
+class DiaperStatsDay(BaseModel):
+    date: date
+    poop: int
+    pee: int
+    mixed: int
+    total: int
+
+
+class DiaperStatsData(BaseModel):
+    days: int
+    daily: list[DiaperStatsDay]
+    average_daily_poop: float
+    average_daily_pee: float
+    average_daily_mixed: float
+    average_daily_total: float
 
 
 class PhotoTagRead(BaseModel):

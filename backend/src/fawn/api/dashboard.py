@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.api.schemas import (
     DashboardSummary,
+    DiaperStatsData,
     FeedingStatsData,
     GrowthChartData,
     GrowthReferenceP50,
@@ -16,7 +17,15 @@ from fawn.api.schemas import (
 )
 from fawn.db.session import get_db
 from fawn.dependencies import get_current_user
-from fawn.models import Baby, FeedingRecord, GrowthRecord, SleepRecord, User, WhoGrowthReference
+from fawn.models import (
+    Baby,
+    DiaperRecord,
+    FeedingRecord,
+    GrowthRecord,
+    SleepRecord,
+    User,
+    WhoGrowthReference,
+)
 from fawn.services.tracker import (
     NotFound,
     calculate_age_months,
@@ -158,6 +167,27 @@ def empty_sleep_stats(today: date, days: int) -> SleepStatsData:
         ],
         average_daily_hours=None,
         average_night_wakings=None,
+    )
+
+
+def empty_diaper_stats(today: date, days: int) -> DiaperStatsData:
+    start_date = today - timedelta(days=days - 1)
+    return DiaperStatsData(
+        days=days,
+        daily=[
+            {
+                "date": (start_date + timedelta(days=index)).isoformat(),
+                "poop": 0,
+                "pee": 0,
+                "mixed": 0,
+                "total": 0,
+            }
+            for index in range(days)
+        ],
+        average_daily_poop=0.0,
+        average_daily_pee=0.0,
+        average_daily_mixed=0.0,
+        average_daily_total=0.0,
     )
 
 
@@ -480,4 +510,58 @@ async def sleep_stats(
             if waking_days
             else None
         ),
+    )
+
+
+@router.get("/diaper-stats", response_model=DiaperStatsData)
+async def diaper_stats(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    days: int = Query(7, ge=1, le=90),
+) -> DiaperStatsData:
+    try:
+        baby = await get_default_baby(db, user.family_id)
+    except NotFound:
+        return empty_diaper_stats(dashboard_today(), days)
+    today = dashboard_today()
+    start_date = dashboard_stats_start_date(today, baby.birth_date, days)
+    day_count = (today - start_date).days + 1
+    start_dt, end_dt = dashboard_range_bounds(start_date, day_count)
+    records = list(
+        (
+            await db.execute(
+                select(DiaperRecord).where(
+                    DiaperRecord.baby_id == baby.id,
+                    DiaperRecord.deleted_at.is_(None),
+                    DiaperRecord.diaper_time >= start_dt,
+                    DiaperRecord.diaper_time < end_dt,
+                )
+            )
+        ).scalars()
+    )
+    daily = []
+    for index in range(day_count):
+        current = start_date + timedelta(days=index)
+        matching = [
+            record for record in records if dashboard_local_date(record.diaper_time) == current
+        ]
+        poop = sum(1 for record in matching if record.diaper_type == "poop")
+        pee = sum(1 for record in matching if record.diaper_type == "pee")
+        mixed = sum(1 for record in matching if record.diaper_type == "mixed")
+        daily.append(
+            {
+                "date": current.isoformat(),
+                "poop": poop,
+                "pee": pee,
+                "mixed": mixed,
+                "total": poop + pee + mixed,
+            }
+        )
+    return DiaperStatsData(
+        days=day_count,
+        daily=daily,
+        average_daily_poop=round(sum(item["poop"] for item in daily) / day_count, 2),
+        average_daily_pee=round(sum(item["pee"] for item in daily) / day_count, 2),
+        average_daily_mixed=round(sum(item["mixed"] for item in daily) / day_count, 2),
+        average_daily_total=round(sum(item["total"] for item in daily) / day_count, 2),
     )
