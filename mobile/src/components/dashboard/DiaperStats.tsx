@@ -1,5 +1,11 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { colors, radii, spacing, typography } from '../../shared/theme';
 import type {
@@ -25,9 +31,47 @@ export const DIAPER_TYPE_LABEL: Record<DiaperType, string> = {
 interface DiaperStatsProps {
   data: DiaperStatsData;
   records: DiaperRecord[];
+  canDelete?: boolean;
+  deletingRecordId?: string | null;
+  onDelete?: (id: string) => void;
 }
 
-export function DiaperStats({ data, records }: DiaperStatsProps) {
+function DeleteButton({
+  isDeleting,
+  onPress,
+}: {
+  isDeleting: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="删除记录"
+      disabled={isDeleting}
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => [
+        styles.deleteButton,
+        pressed && !isDeleting && styles.deleteButtonPressed,
+        isDeleting && styles.deleteButtonDisabled,
+      ]}
+    >
+      {isDeleting ? (
+        <ActivityIndicator size="small" color={colors['safety-red']} />
+      ) : (
+        <Text style={styles.deleteButtonText}>删除</Text>
+      )}
+    </Pressable>
+  );
+}
+
+export function DiaperStats({
+  data,
+  records,
+  canDelete = false,
+  deletingRecordId = null,
+  onDelete,
+}: DiaperStatsProps) {
   const hasAnyData = data.daily.some((row) => row.total > 0);
   const latest = data.daily[data.daily.length - 1] ?? {
     date: '',
@@ -127,6 +171,12 @@ export function DiaperStats({ data, records }: DiaperStatsProps) {
                 </Text>
               ) : null}
             </View>
+            {canDelete ? (
+              <DeleteButton
+                isDeleting={deletingRecordId === record.id}
+                onPress={() => onDelete?.(record.id)}
+              />
+            ) : null}
           </View>
         ))}
       </View>
@@ -169,11 +219,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing['3'],
     borderRadius: radii.lg,
     backgroundColor: colors['warm-gray'],
     padding: spacing['3'],
   },
   rowMain: {
+    flex: 1,
+    minWidth: 0,
     gap: spacing['1'],
   },
   rowTitle: {
@@ -189,5 +244,27 @@ const styles = StyleSheet.create({
     color: colors['mid-gray'],
     textAlign: 'center',
     paddingVertical: spacing['2'],
+  },
+  deleteButton: {
+    minWidth: 48,
+    minHeight: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.chip,
+    borderWidth: 1,
+    borderColor: colors['safety-red-light'],
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing['2'],
+  },
+  deleteButtonPressed: {
+    opacity: 0.78,
+  },
+  deleteButtonDisabled: {
+    opacity: 0.55,
+  },
+  deleteButtonText: {
+    ...typography.caption,
+    color: colors['safety-red'],
+    fontWeight: '700',
   },
 });

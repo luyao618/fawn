@@ -109,6 +109,15 @@ export async function createDiaper(input: DiaperCreateInput): Promise<DiaperReco
   return data;
 }
 
+export type TrackerRecordType = 'growth' | 'feeding' | 'sleep' | 'health' | 'diaper';
+
+export async function deleteTrackerRecord(
+  type: TrackerRecordType,
+  id: string,
+): Promise<void> {
+  await api.delete(`/tracker/${type}/${id}`);
+}
+
 // ---------- Photo (album) ----------
 
 interface PaginatedPhotos {

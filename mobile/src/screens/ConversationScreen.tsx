@@ -636,12 +636,12 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     <View style={[styles.canvas, hideHeader ? { paddingTop: insets.top } : undefined]}>
       {tabRoot ? (
         <TopBar
-          title={conversation?.summary ?? ''}
+          title=""
           onMenu={openDrawer}
         />
       ) : hideHeader ? null : (
         <TopBar
-          title={conversation?.summary ?? ''}
+          title=""
           onBack={onBack}
         />
       )}
