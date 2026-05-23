@@ -11,14 +11,14 @@ import { Card } from '../ui/Card';
  * Top overview card on the Dashboard — mobile equivalent of the inline
  * `DashboardOverview` in `frontend/src/app/(main)/dashboard/page.tsx`.
  *
- * Layout: avatar + 「今日摘要」 eyebrow + age chip + summary headline
- * (name · 喂养 N 次 · 睡眠 Xh) + 最近 line + two StatChip side-by-side.
+ * Layout: avatar + 「今日摘要」 eyebrow + age chip + compact baby name,
+ * wrapped today facts, latest line, and two StatChip blocks.
  *
  * Empty state (no baby) keeps the same shape so the page doesn't jump.
  */
 
 export interface RecentRecordLite {
-  type: '生长' | '喂养' | '睡眠' | '健康';
+  type: '生长' | '喂养' | '睡眠' | '健康' | '大小便';
   title: string;
 }
 
@@ -82,10 +82,14 @@ export function DashboardOverview({
               <Text style={styles.ageChipText}>{babyAge}</Text>
             </View>
           </View>
-          <Text style={styles.headline} numberOfLines={1}>
-            {babyName} · 喂养 {summary.today_feeding.count} 次 · 睡眠 {todaySleepValue}
+          <Text style={styles.babyName} numberOfLines={1}>
+            {babyName}
           </Text>
-          <Text style={styles.meta} numberOfLines={1}>
+          <View style={styles.factRow}>
+            <Text style={styles.factText}>喂养 {summary.today_feeding.count} 次</Text>
+            <Text style={styles.factText}>睡眠 {todaySleepValue}</Text>
+          </View>
+          <Text style={styles.meta} numberOfLines={2}>
             最近：{latestRecordText}
           </Text>
         </View>
@@ -146,6 +150,20 @@ const styles = StyleSheet.create({
   headline: {
     ...typography.heading,
     marginTop: spacing['1'],
+  },
+  babyName: {
+    ...typography.chatTitle,
+    marginTop: spacing['1'],
+  },
+  factRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing['2'],
+    marginTop: spacing['1'],
+  },
+  factText: {
+    ...typography.caption,
+    color: colors['dark-gray'],
   },
   meta: {
     ...typography.caption,

@@ -84,6 +84,11 @@ interface PendingImage {
   filename: string;
 }
 
+interface LoadedArchiveConversation {
+  conversationId: string;
+  pages: ConversationDetail[];
+}
+
 function senderMeta(sender: Pick<User, 'display_name' | 'role'> | null | undefined) {
   return {
     name: sender?.display_name?.trim() || '家庭成员',
@@ -109,6 +114,14 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     ...chatQueries.conversations(),
     enabled: !conversationId,
   });
+  const conversationHistoryQuery = useInfiniteQuery({
+    ...chatQueries.history(50),
+    enabled: !conversationId,
+  });
+  const conversationHistoryItems = useMemo(() => {
+    const pageItems = conversationHistoryQuery.data?.pages.flatMap((page) => page.items) ?? [];
+    return dedupById(pageItems.length > 0 ? pageItems : conversationsQuery.data ?? []);
+  }, [conversationHistoryQuery.data, conversationsQuery.data]);
   const resolvedId = useMemo(() => {
     if (conversationId) return conversationId;
     const list = conversationsQuery.data ?? [];
@@ -150,6 +163,10 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
   const [streamingAssistant, setStreamingAssistant] = useState<{
     content: string;
   } | null>(null);
+  const [archiveGroups, setArchiveGroups] = useState<LoadedArchiveConversation[]>([]);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveExhausted, setArchiveExhausted] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   // 80 cps typewriter effect — faster pacing
   const pendingBuffer = useRef<string>('');
@@ -197,11 +214,23 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     () => dedupById(data?.pages.flatMap((p) => p.messages) ?? []),
     [data],
   );
+  const archiveMessages = useMemo<ChatMessage[]>(() => {
+    const chronologicalGroups = [...archiveGroups].reverse();
+    return dedupById(
+      chronologicalGroups.flatMap((group) =>
+        group.pages.flatMap((page) => page.messages),
+      ),
+    );
+  }, [archiveGroups]);
   // Synthesize the optimistic user + streaming assistant rows at the tail of
   // the list. Using a stable, prefixed id keeps FlatList's keyExtractor happy
   // and avoids collisions with real server ids (UUIDs).
   const messages = useMemo<ChatMessage[]>(() => {
     if (!resolvedId) return baseMessages;
+    const timelineBase =
+      !conversationId && archiveMessages.length > 0
+        ? [...archiveMessages, ...baseMessages]
+        : baseMessages;
     const extras: ChatMessage[] = [];
     if (optimisticUser) {
       extras.push({
@@ -227,8 +256,16 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
         created_at: new Date().toISOString(),
       });
     }
-    return extras.length > 0 ? [...baseMessages, ...extras] : baseMessages;
-  }, [baseMessages, optimisticUser, streamingAssistant, resolvedId, user?.id]);
+    return extras.length > 0 ? [...timelineBase, ...extras] : timelineBase;
+  }, [
+    archiveMessages,
+    baseMessages,
+    conversationId,
+    optimisticUser,
+    streamingAssistant,
+    resolvedId,
+    user?.id,
+  ]);
   // FlatList `inverted` consumes a reversed array: index 0 is the newest
   // (visually at the bottom) and the last item is the oldest (visually at the
   // top). dedup MUST happen before reverse and before FlatList consumption.
@@ -256,6 +293,107 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     () => (authToken ? { Authorization: `Bearer ${authToken}` } : undefined),
     [authToken],
   );
+
+  useEffect(() => {
+    setArchiveGroups([]);
+    setArchiveLoading(false);
+    setArchiveExhausted(false);
+    setArchiveError(null);
+  }, [resolvedId]);
+
+  const olderConversationIds = useMemo(() => {
+    if (!resolvedId) return [];
+    const currentIndex = conversationHistoryItems.findIndex(
+      (item) => item.id === resolvedId,
+    );
+    if (currentIndex < 0) return [];
+    return conversationHistoryItems.slice(currentIndex + 1).map((item) => item.id);
+  }, [conversationHistoryItems, resolvedId]);
+
+  const loadOlderTimeline = useCallback(async () => {
+    if (isFetchingNextPage || archiveLoading || conversationHistoryQuery.isFetchingNextPage) {
+      return;
+    }
+    if (hasNextPage) {
+      await fetchNextPage();
+      return;
+    }
+    if (conversationId || !resolvedId || archiveExhausted) return;
+    if (!conversationHistoryQuery.data && conversationHistoryQuery.isFetching) return;
+
+    setArchiveLoading(true);
+    setArchiveError(null);
+    try {
+      const activeArchive = archiveGroups[archiveGroups.length - 1];
+      const oldestArchivePage = activeArchive?.pages[0];
+      if (
+        activeArchive &&
+        oldestArchivePage?.has_more &&
+        oldestArchivePage.next_before
+      ) {
+        const olderPage = await fetchConversation(
+          activeArchive.conversationId,
+          oldestArchivePage.next_before,
+          50,
+        );
+        setArchiveGroups((current) =>
+          current.map((group, index) =>
+            index === current.length - 1
+              ? { ...group, pages: [olderPage, ...group.pages] }
+              : group,
+          ),
+        );
+        return;
+      }
+
+      const loadedConversationIds = new Set([
+        resolvedId,
+        ...archiveGroups.map((group) => group.conversationId),
+      ]);
+      let nextConversationId = olderConversationIds.find(
+        (id) => !loadedConversationIds.has(id),
+      );
+
+      if (!nextConversationId && conversationHistoryQuery.hasNextPage) {
+        const nextPageResult = await conversationHistoryQuery.fetchNextPage();
+        const freshItems = dedupById(
+          nextPageResult.data?.pages.flatMap((page) => page.items) ?? [],
+        );
+        const currentIndex = freshItems.findIndex((item) => item.id === resolvedId);
+        const freshOlderIds =
+          currentIndex >= 0 ? freshItems.slice(currentIndex + 1).map((item) => item.id) : [];
+        nextConversationId = freshOlderIds.find(
+          (id) => !loadedConversationIds.has(id),
+        );
+      }
+
+      if (!nextConversationId) {
+        setArchiveExhausted(true);
+        return;
+      }
+
+      const nextConversation = await fetchConversation(nextConversationId, undefined, 50);
+      setArchiveGroups((current) => [
+        ...current,
+        { conversationId: nextConversationId, pages: [nextConversation] },
+      ]);
+    } catch (err) {
+      setArchiveError((err as Error)?.message ?? '加载更早历史失败');
+    } finally {
+      setArchiveLoading(false);
+    }
+  }, [
+    archiveExhausted,
+    archiveGroups,
+    archiveLoading,
+    conversationHistoryQuery,
+    conversationId,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    olderConversationIds,
+    resolvedId,
+  ]);
 
   const handlePickImage = async () => {
     if (!resolvedId) return;
@@ -438,6 +576,8 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
       </>
     );
   };
+  const isLoadingOlderTimeline =
+    isFetchingNextPage || archiveLoading || conversationHistoryQuery.isFetchingNextPage;
 
   if (!conversationId && conversationsQuery.isPending && !conversationsQuery.data) {
     return (
@@ -453,9 +593,7 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
       setCreating(true);
       try {
         await createConversation();
-        await queryClient.invalidateQueries({
-          queryKey: chatQueries.conversations().queryKey,
-        });
+        await queryClient.invalidateQueries({ queryKey: queryKeys.chat.all });
       } catch (err) {
         Alert.alert('新建会话失败', (err as Error).message);
       } finally {
@@ -523,6 +661,14 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
             </Text>
           </View>
         ) : null}
+        {archiveError ? (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              更早历史加载失败。{'\n'}
+              {archiveError}
+            </Text>
+          </View>
+        ) : null}
 
         {/* PORT DECISION: MessageList skipped — FlatList covers this RN-idiomatically. */}
         <FlatList
@@ -536,11 +682,11 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
             { paddingTop: spacing['4'] },
           ]}
           onEndReached={() => {
-            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+            void loadOlderTimeline();
           }}
           onEndReachedThreshold={0.5}
           ListFooterComponent={
-            isFetchingNextPage ? (
+            isLoadingOlderTimeline ? (
               <View style={styles.loadMore}>
                 <ActivityIndicator size="small" color={colors['fawn-amber']} />
               </View>

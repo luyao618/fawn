@@ -4,6 +4,8 @@ import {
   mockBaby,
   mockConversations,
   mockDashboardSummary,
+  mockDiaperRecords,
+  mockDiaperStats,
   mockFamily,
   mockFeedingRecords,
   mockFeedingStats,
@@ -24,6 +26,9 @@ import type {
   Baby,
   Conversation,
   DashboardSummary,
+  DiaperRecord,
+  DiaperRecordCreate,
+  DiaperStatsData,
   FeedingRecordCreate,
   FeedingRecord,
   FeedingStatsData,
@@ -219,6 +224,7 @@ function recordMatchesType(type: TrackerType) {
   if (type === 'growth') return mockGrowthRecords;
   if (type === 'feeding') return mockFeedingRecords;
   if (type === 'sleep') return mockSleepRecords;
+  if (type === 'diaper') return mockDiaperRecords;
   return mockHealthRecords;
 }
 
@@ -306,6 +312,23 @@ function emptyMockSleepStats(days: number): SleepStatsData {
     })),
     average_daily_hours: null,
     average_night_wakings: null,
+  };
+}
+
+function emptyMockDiaperStats(days: number): DiaperStatsData {
+  return {
+    days,
+    daily: emptyDailyDates(days).map((date) => ({
+      date,
+      poop: 0,
+      pee: 0,
+      mixed: 0,
+      total: 0,
+    })),
+    average_daily_poop: 0,
+    average_daily_pee: 0,
+    average_daily_mixed: 0,
+    average_daily_total: 0,
   };
 }
 
@@ -549,6 +572,37 @@ function refreshMockSleepViews(record: SleepRecord) {
         (mockDashboardSummary.today_sleep.night_wakings ?? 0) + nightWakings;
     }
   }
+}
+
+function refreshMockDiaperViews(record: DiaperRecord) {
+  const date = dateKey(record.diaper_time);
+  const daily = mockDiaperStats.daily.find((item) => item.date === date);
+  if (daily) {
+    daily[record.diaper_type] += 1;
+    daily.total += 1;
+  } else {
+    mockDiaperStats.daily.push({
+      date,
+      poop: record.diaper_type === 'poop' ? 1 : 0,
+      pee: record.diaper_type === 'pee' ? 1 : 0,
+      mixed: record.diaper_type === 'mixed' ? 1 : 0,
+      total: 1,
+    });
+    mockDiaperStats.daily.sort((left, right) => left.date.localeCompare(right.date));
+  }
+  const days = mockDiaperStats.daily.length || 1;
+  mockDiaperStats.average_daily_poop = Number(
+    (mockDiaperStats.daily.reduce((total, item) => total + item.poop, 0) / days).toFixed(1),
+  );
+  mockDiaperStats.average_daily_pee = Number(
+    (mockDiaperStats.daily.reduce((total, item) => total + item.pee, 0) / days).toFixed(1),
+  );
+  mockDiaperStats.average_daily_mixed = Number(
+    (mockDiaperStats.daily.reduce((total, item) => total + item.mixed, 0) / days).toFixed(1),
+  );
+  mockDiaperStats.average_daily_total = Number(
+    (mockDiaperStats.daily.reduce((total, item) => total + item.total, 0) / days).toFixed(1),
+  );
 }
 
 export class ApiClient {
@@ -801,6 +855,13 @@ export class ApiClient {
     return clone(mockHealthRecords);
   }
 
+  async getDiaperRecords(date?: string): Promise<DiaperRecord[]> {
+    if (!isMockMode()) return this.request(`/tracker/diaper${date ? `?date=${date}` : ''}`);
+    await delay();
+    if (!usesSharedMockData()) return [];
+    return clone(mockDiaperRecords);
+  }
+
   async createGrowthRecord(data: GrowthRecordCreate): Promise<GrowthRecord> {
     if (!isMockMode()) {
       return this.request('/tracker/growth', {
@@ -898,6 +959,28 @@ export class ApiClient {
     return clone(record);
   }
 
+  async createDiaperRecord(data: DiaperRecordCreate): Promise<DiaperRecord> {
+    if (!isMockMode()) {
+      return this.request('/tracker/diaper', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    }
+
+    await delay();
+    ensureMockTrackerWrite();
+    ensureMockBaby();
+    const record: DiaperRecord = {
+      id: `diaper-${Date.now()}`,
+      diaper_time: data.diaper_time,
+      diaper_type: data.diaper_type,
+      notes: data.notes ?? null,
+    };
+    mockDiaperRecords.unshift(record);
+    refreshMockDiaperViews(record);
+    return clone(record);
+  }
+
   async updateTrackerRecord(
     type: TrackerType,
     id: string,
@@ -980,6 +1063,13 @@ export class ApiClient {
     await delay();
     if (!usesSharedMockData()) return emptyMockSleepStats(days);
     return clone({ ...mockSleepStats, days });
+  }
+
+  async getDiaperStats(days = 7): Promise<DiaperStatsData> {
+    if (!isMockMode()) return this.request(`/dashboard/diaper-stats?days=${days}`);
+    await delay();
+    if (!usesSharedMockData()) return emptyMockDiaperStats(days);
+    return clone({ ...mockDiaperStats, days });
   }
 
   async uploadPhoto(file: File): Promise<Photo> {

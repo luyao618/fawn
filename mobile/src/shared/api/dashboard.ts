@@ -6,6 +6,8 @@ import { api } from './client';
 import { queryKeys } from './queryKeys';
 import type {
   DashboardSummary,
+  DiaperRecord,
+  DiaperStatsData,
   FeedingRecord,
   FeedingStatsData,
   HealthRecord,
@@ -32,6 +34,13 @@ async function fetchSleepStats(days = 30): Promise<SleepStatsData> {
   return data;
 }
 
+async function fetchDiaperStats(days = 30): Promise<DiaperStatsData> {
+  const { data } = await api.get<DiaperStatsData>('/dashboard/diaper-stats', {
+    params: { days },
+  });
+  return data;
+}
+
 async function fetchHealthRecords(): Promise<HealthRecord[]> {
   const { data } = await api.get<HealthRecord[]>('/tracker/health');
   return data;
@@ -49,6 +58,10 @@ export const dashboardQueries = {
   sleepStats: (days = 30) => ({
     queryKey: queryKeys.dashboard.sleepStats(days),
     queryFn: () => fetchSleepStats(days),
+  }),
+  diaperStats: (days = 30) => ({
+    queryKey: queryKeys.dashboard.diaperStats(days),
+    queryFn: () => fetchDiaperStats(days),
   }),
   health: () => ({
     queryKey: queryKeys.dashboard.health(),
@@ -77,6 +90,13 @@ async function fetchTrackerHealth(): Promise<HealthRecord[]> {
   return data;
 }
 
+async function fetchTrackerDiaper(): Promise<DiaperRecord[]> {
+  const { data } = await api.get<DiaperRecord[]>('/tracker/diaper', {
+    params: { limit: 100 },
+  });
+  return data;
+}
+
 export const trackerQueries = {
   feeding: () => ({
     queryKey: queryKeys.tracker.feeding(),
@@ -89,5 +109,9 @@ export const trackerQueries = {
   health: () => ({
     queryKey: queryKeys.tracker.health(),
     queryFn: fetchTrackerHealth,
+  }),
+  diaper: () => ({
+    queryKey: queryKeys.tracker.diaper(),
+    queryFn: fetchTrackerDiaper,
   }),
 };

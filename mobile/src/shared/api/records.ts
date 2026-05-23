@@ -8,6 +8,8 @@
 import { api } from './client';
 import { queryKeys } from './queryKeys';
 import type {
+  DiaperRecord,
+  DiaperType,
   FeedingRecord,
   GrowthRecord,
   PhotoRecord,
@@ -87,6 +89,26 @@ export async function createHealth(input: HealthCreateInput): Promise<unknown> {
   return data;
 }
 
+// ---------- Diaper ----------
+
+export interface DiaperCreateInput {
+  diaper_time: string; // ISO datetime
+  diaper_type: DiaperType;
+  notes?: string | null;
+}
+
+async function fetchDiaper(): Promise<DiaperRecord[]> {
+  const { data } = await api.get<DiaperRecord[]>('/tracker/diaper', {
+    params: { limit: 100 },
+  });
+  return data;
+}
+
+export async function createDiaper(input: DiaperCreateInput): Promise<DiaperRecord> {
+  const { data } = await api.post<DiaperRecord>('/tracker/diaper', input);
+  return data;
+}
+
 // ---------- Photo (album) ----------
 
 interface PaginatedPhotos {
@@ -110,6 +132,8 @@ function timelineTime(entry: RecordEntry): number {
   switch (entry.kind) {
     case 'feeding':
       return new Date(entry.record.feed_time).getTime();
+    case 'diaper':
+      return new Date(entry.record.diaper_time).getTime();
     case 'weight':
     case 'height':
       // Growth records only have a date; sort by end-of-day so they slot in
@@ -121,7 +145,7 @@ function timelineTime(entry: RecordEntry): number {
 }
 
 /**
- * Pull all four event sources in parallel and fold them into a single
+ * Pull event sources in parallel and fold them into a single
  * reverse-chronological list. We split growth rows into separate weight/height
  * entries so the UI can render each measurement as its own card — a growth row
  * without weight_g is just a height entry (and vice versa). Rows with neither
@@ -134,10 +158,11 @@ function timelineTime(entry: RecordEntry): number {
  * order, preserving whatever ordering the server emitted within a day.
  */
 async function fetchTimeline(): Promise<RecordEntry[]> {
-  const [feeding, growth, photos] = await Promise.all([
+  const [feeding, growth, photos, diaper] = await Promise.all([
     fetchFeeding(),
     fetchGrowth(),
     fetchPhotos(),
+    fetchDiaper(),
   ]);
 
   const entries: RecordEntry[] = [];
@@ -149,6 +174,9 @@ async function fetchTimeline(): Promise<RecordEntry[]> {
 
   for (const r of feeding) {
     track({ kind: 'feeding', id: `feeding:${r.id}`, record: r }, 0);
+  }
+  for (const r of diaper) {
+    track({ kind: 'diaper', id: `diaper:${r.id}`, record: r }, 0);
   }
   growth.forEach((r, i) => {
     // Split entries from the same row need distinct fallback indices, otherwise
