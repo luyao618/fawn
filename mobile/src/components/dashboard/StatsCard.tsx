@@ -172,20 +172,15 @@ export function DailyMetricChart<T extends { date: string }>({
     if (series.some((item) => item.axis === 'right')) next.right = next.right ?? 1;
     return next;
   }, [series, visibleData]);
-  const defaultSelectedIndex = React.useMemo(() => {
-    for (let index = visibleData.length - 1; index >= 0; index -= 1) {
-      const point = visibleData[index];
-      if (series.some((item) => isFiniteNumber(item.getValue(point)))) return index;
-    }
-    return Math.max(0, visibleData.length - 1);
-  }, [series, visibleData]);
-  const [selectedIndex, setSelectedIndex] = React.useState(defaultSelectedIndex);
+  const [selectedIndex, setSelectedIndex] = React.useState<number | null>(null);
 
   React.useEffect(() => {
-    setSelectedIndex(defaultSelectedIndex);
-  }, [defaultSelectedIndex]);
+    setSelectedIndex((current) =>
+      current == null || current < visibleData.length ? current : null,
+    );
+  }, [visibleData.length]);
 
-  const selectedPoint = visibleData[selectedIndex] ?? null;
+  const selectedPoint = selectedIndex == null ? null : visibleData[selectedIndex] ?? null;
   const hasRightAxis = series.some((item) => item.axis === 'right') && rightAxisFormatter;
   const hasAnyValue = visibleData.some((point) =>
     series.some((item) => isFiniteNumber(item.getValue(point))),
@@ -197,6 +192,7 @@ export function DailyMetricChart<T extends { date: string }>({
   const barSeries = series.filter((item) => item.kind === 'bar');
   const lineSeries = series.filter((item) => item.kind === 'line');
   const plotCount = Math.max(1, visibleData.length);
+  const slotWidth = plotWidth / plotCount;
 
   const getRatio = (value: number, item: DailyMetricChartSeries<T>) => {
     const max = axisMax[axisKey(item)] ?? 1;
@@ -252,7 +248,10 @@ export function DailyMetricChart<T extends { date: string }>({
                           {
                             height: `${ratio * 100}%`,
                             backgroundColor: item.color,
-                            opacity: pointIndex === selectedIndex ? 1 : 0.78,
+                            opacity:
+                              selectedIndex == null || pointIndex === selectedIndex
+                                ? 1
+                                : 0.56,
                           },
                         ]}
                       />
@@ -323,7 +322,7 @@ export function DailyMetricChart<T extends { date: string }>({
               })
             : null}
 
-          {plotWidth > 0 && selectedPoint ? (
+          {plotWidth > 0 && selectedPoint && selectedIndex != null ? (
             <View
               pointerEvents="none"
               style={[
@@ -354,17 +353,48 @@ export function DailyMetricChart<T extends { date: string }>({
             </Text>
           ) : null}
 
-          <View style={styles.hitLayer}>
-            {visibleData.map((point, index) => (
-              <Pressable
-                key={`hit-${point.date}-${index}`}
-                accessibilityRole="button"
-                accessibilityLabel={`${formatDate(point.date)}统计明细`}
-                onPress={() => setSelectedIndex(index)}
-                style={styles.hitSlot}
-              />
-            ))}
-          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="收起统计明细"
+            onPress={() => setSelectedIndex(null)}
+            style={styles.plotBackgroundHit}
+          />
+
+          {plotWidth > 0 ? (
+            <View pointerEvents="box-none" style={styles.hitLayer}>
+              {visibleData.map((point, index) => {
+                const targetRatio = Math.max(
+                  0,
+                  ...barSeries
+                    .map((item) => {
+                      const value = item.getValue(point);
+                      return isFiniteNumber(value) ? getRatio(value, item) : 0;
+                    })
+                    .filter((value) => value > 0),
+                );
+                const hasTarget = targetRatio > 0;
+                const targetHeight = hasTarget
+                  ? Math.min(height, Math.max(28, targetRatio * height + 18))
+                  : 28;
+                return (
+                  <Pressable
+                    key={`hit-${point.date}-${index}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${formatDate(point.date)}统计明细`}
+                    onPress={() => setSelectedIndex(index)}
+                    style={[
+                      styles.hitSlot,
+                      {
+                        left: index * slotWidth + slotWidth * 0.16,
+                        width: slotWidth * 0.68,
+                        height: targetHeight,
+                      },
+                    ]}
+                  />
+                );
+              })}
+            </View>
+          ) : null}
         </View>
 
         {hasRightAxis ? (
@@ -386,7 +416,7 @@ export function DailyMetricChart<T extends { date: string }>({
               key={`x-${point.date}-${index}`}
               style={[
                 styles.xLabel,
-                index === selectedIndex && styles.xLabelSelected,
+                selectedIndex != null && index === selectedIndex && styles.xLabelSelected,
               ]}
               numberOfLines={1}
             >
@@ -576,13 +606,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: colors['mid-gray'],
   },
+  plotBackgroundHit: {
+    ...StyleSheet.absoluteFillObject,
+  },
   hitLayer: {
     ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
   },
   hitSlot: {
-    flex: 1,
-    height: '100%',
+    position: 'absolute',
+    bottom: 0,
   },
   xAxisRow: {
     flexDirection: 'row',

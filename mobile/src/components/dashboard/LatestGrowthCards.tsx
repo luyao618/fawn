@@ -8,10 +8,9 @@ import type {
 } from '../../shared/api';
 
 /**
- * Compact inline pill showing the latest weight / height / head measurements.
- * Mirrors `frontend/src/components/dashboard/LatestGrowthCards.tsx` post-4ce8ac2:
- * a single warm-gray row with three inline metric slots — value + baby's own
- * percentile (P35 etc.). WHO P50 reference line and "查看全部" button removed.
+ * Compact inline strip showing the latest weight / height / head measurements.
+ * It stays visually quiet so the summary stack reads as one cohesive set of
+ * warm dashboard cards.
  */
 
 interface MetricProps {
@@ -28,7 +27,7 @@ function formatValue(metric: DashboardLatestGrowthMetric, unit: 'kg' | 'cm') {
 function MetricInline({ label, unit, metric }: MetricProps) {
   if (!metric) {
     return (
-      <View style={styles.metric}>
+      <View style={[styles.metric, styles.metricMuted]}>
         <Text style={[styles.label, styles.labelMuted]}>{label}</Text>
         <Text style={[styles.value, styles.valueMuted]}>--</Text>
       </View>
@@ -37,12 +36,19 @@ function MetricInline({ label, unit, metric }: MetricProps) {
   return (
     <View style={styles.metric}>
       <Text style={styles.label}>{label}</Text>
-      <View style={styles.valueRow}>
-        <Text style={styles.value}>{formatValue(metric, unit)}</Text>
-        {metric.percentile != null ? (
-          <Text style={styles.percentile}>P{metric.percentile}</Text>
-        ) : null}
-      </View>
+      <Text
+        style={styles.value}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.82}
+      >
+        {formatValue(metric, unit)}
+      </Text>
+      {metric.percentile != null ? (
+        <Text style={styles.percentile} numberOfLines={1}>
+          P{metric.percentile}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -51,7 +57,9 @@ export function LatestGrowthCards({ latest }: { latest: DashboardLatestGrowth | 
   if (latest === null) {
     return (
       <View style={styles.pill}>
-        <Text style={[styles.label, styles.labelMuted]}>最新成长 · 暂无记录</Text>
+        <MetricInline label="体重" unit="kg" metric={null} />
+        <MetricInline label="身高" unit="cm" metric={null} />
+        <MetricInline label="头围" unit="cm" metric={null} />
       </View>
     );
   }
@@ -71,30 +79,33 @@ const styles = StyleSheet.create({
     gap: spacing['3'],
     backgroundColor: colors['warm-gray'],
     borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors['oat-border'],
     paddingHorizontal: spacing['3'],
-    paddingVertical: spacing['2'],
+    paddingVertical: spacing['3'],
   },
   metric: {
     flex: 1,
     minWidth: 0,
+    justifyContent: 'center',
+  },
+  metricMuted: {
+    opacity: 0.7,
   },
   label: {
-    ...typography.caption,
+    ...typography.metaXs,
     color: colors['dark-gray'],
   },
   labelMuted: {
     color: colors['mid-gray'],
   },
-  valueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing['1'],
-  },
   value: {
     fontFamily: fontFamily.mono,
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
     color: colors['soft-charcoal'],
+    marginTop: spacing['2'],
   },
   valueMuted: {
     color: colors['mid-gray'],
@@ -103,5 +114,6 @@ const styles = StyleSheet.create({
   percentile: {
     ...typography.caption,
     color: colors['sage-green'],
+    marginTop: spacing['1'],
   },
 });

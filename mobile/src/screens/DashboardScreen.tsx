@@ -1,9 +1,10 @@
-import { useQueries } from '@tanstack/react-query';
+import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -24,12 +25,15 @@ import {
   buildRecentRecords,
 } from '../components/dashboard/RecentRecords';
 import { TopBar } from '../components/layout/TopBar';
+import { useAuth } from '../auth/AuthContext';
 import {
   dashboardQueries,
+  deleteTrackerRecord,
   growthQueries,
+  queryKeys,
   trackerQueries,
 } from '../shared/api';
-import { formatDateTime } from '../lib/utils';
+import { canWriteTracker, formatDateTime } from '../lib/utils';
 import type {
   FeedingRecord,
   FeedingStatsData,
@@ -49,6 +53,7 @@ const DASHBOARD_SECTIONS = [
 ] as const;
 
 type DashboardSection = (typeof DASHBOARD_SECTIONS)[number];
+type DeleteRecordType = 'feeding' | 'sleep' | 'diaper';
 
 const FEEDING_TYPE_LABEL: Record<FeedingRecord['feed_type'], string> = {
   breast: '母乳',
@@ -92,22 +97,72 @@ function formatSleepDuration(record: SleepRecord): string {
   return restMinutes > 0 ? `${hours}小时${restMinutes}分` : `${hours}小时`;
 }
 
+function HistoryDeleteButton({
+  isDeleting,
+  onPress,
+}: {
+  isDeleting: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="删除记录"
+      disabled={isDeleting}
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => [
+        styles.deleteButton,
+        pressed && !isDeleting && styles.deleteButtonPressed,
+        isDeleting && styles.deleteButtonDisabled,
+      ]}
+    >
+      {isDeleting ? (
+        <ActivityIndicator size="small" color={colors['safety-red']} />
+      ) : (
+        <Text style={styles.deleteButtonText}>删除</Text>
+      )}
+    </Pressable>
+  );
+}
+
 function FeedingSection({
   data,
   records,
+  canDelete,
+  deletingRecordId,
+  onDelete,
 }: {
   data: FeedingStatsData;
   records: FeedingRecord[];
+  canDelete: boolean;
+  deletingRecordId: string | null;
+  onDelete: (type: DeleteRecordType, id: string) => void;
 }) {
   return (
     <View style={styles.sectionStack}>
       <FeedingStats data={data} />
-      <FeedingHistoryTable records={records} />
+      <FeedingHistoryTable
+        records={records}
+        canDelete={canDelete}
+        deletingRecordId={deletingRecordId}
+        onDelete={onDelete}
+      />
     </View>
   );
 }
 
-function FeedingHistoryTable({ records }: { records: FeedingRecord[] }) {
+function FeedingHistoryTable({
+  records,
+  canDelete,
+  deletingRecordId,
+  onDelete,
+}: {
+  records: FeedingRecord[];
+  canDelete: boolean;
+  deletingRecordId: string | null;
+  onDelete: (type: DeleteRecordType, id: string) => void;
+}) {
   const rows = useMemo(
     () => sortByTimeDesc(records, (record) => record.feed_time),
     [records],
@@ -124,6 +179,9 @@ function FeedingHistoryTable({ records }: { records: FeedingRecord[] }) {
             <Text style={[styles.tableHeaderCell, styles.typeColumn]}>类型</Text>
             <Text style={[styles.tableHeaderCell, styles.metricColumn]}>数据</Text>
             <Text style={[styles.tableHeaderCell, styles.notesColumn]}>备注</Text>
+            {canDelete ? (
+              <Text style={[styles.tableHeaderCell, styles.actionHeaderCell]}>操作</Text>
+            ) : null}
           </View>
           {rows.map((record, index) => (
             <View
@@ -148,6 +206,14 @@ function FeedingHistoryTable({ records }: { records: FeedingRecord[] }) {
               <Text style={[styles.tableCell, styles.notesColumn]} numberOfLines={2}>
                 {record.notes || '—'}
               </Text>
+              {canDelete ? (
+                <View style={styles.actionColumn}>
+                  <HistoryDeleteButton
+                    isDeleting={deletingRecordId === record.id}
+                    onPress={() => onDelete('feeding', record.id)}
+                  />
+                </View>
+              ) : null}
             </View>
           ))}
         </View>
@@ -159,19 +225,40 @@ function FeedingHistoryTable({ records }: { records: FeedingRecord[] }) {
 function SleepSection({
   data,
   records,
+  canDelete,
+  deletingRecordId,
+  onDelete,
 }: {
   data: SleepStatsData;
   records: SleepRecord[];
+  canDelete: boolean;
+  deletingRecordId: string | null;
+  onDelete: (type: DeleteRecordType, id: string) => void;
 }) {
   return (
     <View style={styles.sectionStack}>
       <SleepStats data={data} />
-      <SleepHistoryTable records={records} />
+      <SleepHistoryTable
+        records={records}
+        canDelete={canDelete}
+        deletingRecordId={deletingRecordId}
+        onDelete={onDelete}
+      />
     </View>
   );
 }
 
-function SleepHistoryTable({ records }: { records: SleepRecord[] }) {
+function SleepHistoryTable({
+  records,
+  canDelete,
+  deletingRecordId,
+  onDelete,
+}: {
+  records: SleepRecord[];
+  canDelete: boolean;
+  deletingRecordId: string | null;
+  onDelete: (type: DeleteRecordType, id: string) => void;
+}) {
   const rows = useMemo(
     () => sortByTimeDesc(records, (record) => record.sleep_start),
     [records],
@@ -188,6 +275,9 @@ function SleepHistoryTable({ records }: { records: SleepRecord[] }) {
             <Text style={[styles.tableHeaderCell, styles.typeColumn]}>类型</Text>
             <Text style={[styles.tableHeaderCell, styles.metricColumn]}>数据</Text>
             <Text style={[styles.tableHeaderCell, styles.notesColumn]}>备注</Text>
+            {canDelete ? (
+              <Text style={[styles.tableHeaderCell, styles.actionHeaderCell]}>操作</Text>
+            ) : null}
           </View>
           {rows.map((record, index) => (
             <View
@@ -214,6 +304,14 @@ function SleepHistoryTable({ records }: { records: SleepRecord[] }) {
               <Text style={[styles.tableCell, styles.notesColumn]} numberOfLines={2}>
                 {record.notes || '—'}
               </Text>
+              {canDelete ? (
+                <View style={styles.actionColumn}>
+                  <HistoryDeleteButton
+                    isDeleting={deletingRecordId === record.id}
+                    onPress={() => onDelete('sleep', record.id)}
+                  />
+                </View>
+              ) : null}
             </View>
           ))}
         </View>
@@ -241,10 +339,49 @@ function SleepHistoryTable({ records }: { records: SleepRecord[] }) {
 export function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canDeleteRecords = canWriteTracker(user?.access_type);
   const [selectedSection, setSelectedSection] = useState<DashboardSection>('摘要');
   const openDrawer = useCallback(
     () => navigation.dispatch(DrawerActions.openDrawer()),
     [navigation],
+  );
+  const deleteMutation = useMutation({
+    mutationFn: ({ type, id }: { type: DeleteRecordType; id: string }) =>
+      deleteTrackerRecord(type, id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tracker.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.records.all }),
+      ]);
+    },
+    onError: (err: unknown) => {
+      Alert.alert(
+        '删除失败',
+        err instanceof Error ? err.message : '请稍后再试',
+      );
+    },
+  });
+  const deletingRecordId = deleteMutation.isPending
+    ? deleteMutation.variables?.id ?? null
+    : null;
+  const confirmDelete = useCallback(
+    (type: DeleteRecordType, id: string) => {
+      if (!canDeleteRecords || deleteMutation.isPending) return;
+      const typeLabel =
+        type === 'feeding' ? '喂养' : type === 'sleep' ? '睡眠' : '大小便';
+      Alert.alert('删除记录', `确定删除这条${typeLabel}记录？`, [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: () => deleteMutation.mutate({ type, id }),
+        },
+      ]);
+    },
+    [canDeleteRecords, deleteMutation],
   );
   const results = useQueries({
     queries: [
@@ -366,8 +503,8 @@ export function DashboardScreen() {
             ) : (
               <View style={styles.skeleton} />
             )}
-            <RecentRecords records={recentRecords} />
             <LatestGrowthCards latest={summaryResult.data?.latest_growth ?? null} />
+            <RecentRecords records={recentRecords} />
           </View>
         ) : null}
 
@@ -376,6 +513,9 @@ export function DashboardScreen() {
             <FeedingSection
               data={feedingStatsResult.data}
               records={feedingRecordsResult.data}
+              canDelete={canDeleteRecords}
+              deletingRecordId={deletingRecordId}
+              onDelete={confirmDelete}
             />
           ) : (
             <View style={styles.skeletonTall} />
@@ -387,6 +527,9 @@ export function DashboardScreen() {
             <DiaperStats
               data={diaperStatsResult.data}
               records={diaperRecordsResult.data}
+              canDelete={canDeleteRecords}
+              deletingRecordId={deletingRecordId}
+              onDelete={(id) => confirmDelete('diaper', id)}
             />
           ) : (
             <View style={styles.skeletonTall} />
@@ -395,7 +538,13 @@ export function DashboardScreen() {
 
         {selectedSection === '睡眠' ? (
           sleepStatsResult.data && sleepRecordsResult.data ? (
-            <SleepSection data={sleepStatsResult.data} records={sleepRecordsResult.data} />
+            <SleepSection
+              data={sleepStatsResult.data}
+              records={sleepRecordsResult.data}
+              canDelete={canDeleteRecords}
+              deletingRecordId={deletingRecordId}
+              onDelete={confirmDelete}
+            />
           ) : (
             <View style={styles.skeletonTall} />
           )
@@ -523,6 +672,36 @@ const styles = StyleSheet.create({
   notesColumn: {
     flex: 1.05,
     minWidth: 0,
+  },
+  actionHeaderCell: {
+    width: 50,
+    textAlign: 'right',
+  },
+  actionColumn: {
+    width: 50,
+    alignItems: 'flex-end',
+  },
+  deleteButton: {
+    minWidth: 46,
+    minHeight: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.chip,
+    borderWidth: 1,
+    borderColor: colors['safety-red-light'],
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing['2'],
+  },
+  deleteButtonPressed: {
+    opacity: 0.78,
+  },
+  deleteButtonDisabled: {
+    opacity: 0.55,
+  },
+  deleteButtonText: {
+    ...typography.caption,
+    color: colors['safety-red'],
+    fontWeight: '700',
   },
   emptyTableText: {
     ...typography.bodySmall,
