@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fawn.models import Baby, FeedingRecord, GrowthRecord, HealthRecord, SleepRecord
+from fawn.models import Baby, DiaperRecord, FeedingRecord, GrowthRecord, HealthRecord, SleepRecord
 
 APP_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
@@ -106,6 +106,18 @@ def _feeding_entry(record: FeedingRecord) -> RecentDeterministicEntry:
     )
 
 
+def _diaper_entry(record: DiaperRecord) -> RecentDeterministicEntry:
+    label = {"poop": "大便", "pee": "小便", "mixed": "混合"}.get(
+        record.diaper_type, record.diaper_type
+    )
+    return RecentDeterministicEntry(
+        record_type="大小便",
+        updated_at=record.updated_at,
+        business_time=_format_datetime(record.diaper_time),
+        details=_compact([label, record.notes]),
+    )
+
+
 def _sleep_entry(record: SleepRecord) -> RecentDeterministicEntry:
     end = _format_datetime(record.sleep_end) if record.sleep_end else "未结束"
     return RecentDeterministicEntry(
@@ -163,10 +175,13 @@ async def build_recent_deterministic_context(
 ) -> RecentDeterministicContext | None:
     current = now or datetime.now(APP_TIMEZONE)
     cutoff = (current if current.tzinfo else current.replace(tzinfo=UTC)) - timedelta(hours=hours)
-    growth, feeding, sleep, health = await _fetch_recent_records_by_type(db, family_id, cutoff)
+    growth, feeding, diaper, sleep, health = await _fetch_recent_records_by_type(
+        db, family_id, cutoff
+    )
     entries = (
         [_growth_entry(record) for record in growth]
         + [_feeding_entry(record) for record in feeding]
+        + [_diaper_entry(record) for record in diaper]
         + [_sleep_entry(record) for record in sleep]
         + [_health_entry(record) for record in health]
     )
@@ -179,9 +194,16 @@ async def build_recent_deterministic_context(
 
 async def _fetch_recent_records_by_type(
     db: AsyncSession, family_id: uuid.UUID, cutoff: datetime
-) -> tuple[list[GrowthRecord], list[FeedingRecord], list[SleepRecord], list[HealthRecord]]:
+) -> tuple[
+    list[GrowthRecord],
+    list[FeedingRecord],
+    list[DiaperRecord],
+    list[SleepRecord],
+    list[HealthRecord],
+]:
     growth = await _fetch_records(db, family_id, GrowthRecord, cutoff)
     feeding = await _fetch_records(db, family_id, FeedingRecord, cutoff)
+    diaper = await _fetch_records(db, family_id, DiaperRecord, cutoff)
     sleep = await _fetch_records(db, family_id, SleepRecord, cutoff)
     health = await _fetch_records(db, family_id, HealthRecord, cutoff)
-    return growth, feeding, sleep, health
+    return growth, feeding, diaper, sleep, health

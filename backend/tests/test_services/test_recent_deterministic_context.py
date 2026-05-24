@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
-from fawn.models import Baby, FeedingRecord, GrowthRecord, HealthRecord, SleepRecord
+from fawn.models import Baby, DiaperRecord, FeedingRecord, GrowthRecord, HealthRecord, SleepRecord
 from fawn.services.recent_deterministic_context import build_recent_deterministic_context
 
 
@@ -45,6 +45,15 @@ async def test_recent_deterministic_context_filters_and_limits(
                 created_at=now - timedelta(hours=2),
                 updated_at=now - timedelta(hours=2),
             ),
+            DiaperRecord(
+                baby_id=test_baby.id,
+                recorded_by=test_user.id,
+                diaper_time=now - timedelta(minutes=30),
+                diaper_type="mixed",
+                notes="换尿布",
+                created_at=now - timedelta(minutes=30),
+                updated_at=now - timedelta(minutes=30),
+            ),
             SleepRecord(
                 baby_id=test_baby.id,
                 recorded_by=test_user.id,
@@ -81,6 +90,9 @@ async def test_recent_deterministic_context_filters_and_limits(
     assert context is not None
     rendered = context.render_for_prompt()
     assert rendered.count("喂养") == 3
+    assert "大小便" in rendered
+    assert "混合" in rendered
+    assert "换尿布" in rendered
     assert "80ml" in rendered
     assert "83ml" not in rendered
     assert "体检" not in rendered

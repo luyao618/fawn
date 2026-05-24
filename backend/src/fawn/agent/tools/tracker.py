@@ -132,6 +132,34 @@ async def record_feeding(
 
 
 @tool
+async def record_diaper(
+    diaper_time: str,
+    diaper_type: Literal["poop", "pee", "mixed"],
+    notes: str | None = None,
+    user_id: InjectedUserId = "",
+    conversation_id: InjectedConversationId = "",
+) -> dict[str, str] | str:
+    """Record a diaper event."""
+    if error := _missing_context(user_id, conversation_id):
+        return error
+    session, db, user = await _load_user(user_id)
+    try:
+        record = await tracker_service.create_diaper_record(
+            db,
+            user,
+            diaper_time=_parse_datetime(diaper_time),
+            diaper_type=diaper_type,
+            notes=notes,
+            source_conversation_id=uuid.UUID(conversation_id),
+        )
+        return _record_payload(record)
+    except Exception as exc:
+        return _error(exc)
+    finally:
+        await session.__aexit__(None, None, None)
+
+
+@tool
 async def record_sleep(
     sleep_start: str,
     sleep_type: Literal["nap", "night"],
@@ -195,7 +223,7 @@ async def record_health(
 
 @tool
 async def update_tracker_record(
-    record_type: Literal["growth", "feeding", "sleep", "health"],
+    record_type: Literal["growth", "feeding", "sleep", "health", "diaper"],
     record_id: str,
     updates: dict[str, Any],
     user_id: InjectedUserId = "",
@@ -221,7 +249,7 @@ async def update_tracker_record(
 
 @tool
 async def delete_tracker_record(
-    record_type: Literal["growth", "feeding", "sleep", "health"],
+    record_type: Literal["growth", "feeding", "sleep", "health", "diaper"],
     record_id: str,
     user_id: InjectedUserId = "",
 ) -> dict[str, Any] | str:
@@ -303,6 +331,39 @@ async def query_feeding_data(
         "records": [
             {"id": str(r.id), "feed_time": r.feed_time.isoformat(), "feed_type": r.feed_type}
             for r in milk_records
+        ],
+    }
+
+
+@tool
+async def query_diaper_data(
+    date: str | None = None, user_id: InjectedUserId = ""
+) -> dict[str, Any] | str:
+    """Return diaper records and daily totals."""
+    if error := _missing_context(user_id):
+        return error
+    target = _parse_date(date) if date else date_cls.today()
+    session, db, user = await _load_user(user_id)
+    try:
+        records = await tracker_service.query_diaper(
+            db, family_id=user.family_id, date_value=target, limit=500
+        )
+    finally:
+        await session.__aexit__(None, None, None)
+    return {
+        "date": target.isoformat(),
+        "count": len(records),
+        "poop_count": sum(1 for record in records if record.diaper_type == "poop"),
+        "pee_count": sum(1 for record in records if record.diaper_type == "pee"),
+        "mixed_count": sum(1 for record in records if record.diaper_type == "mixed"),
+        "records": [
+            {
+                "id": str(record.id),
+                "diaper_time": record.diaper_time.isoformat(),
+                "diaper_type": record.diaper_type,
+                "notes": record.notes,
+            }
+            for record in records
         ],
     }
 
