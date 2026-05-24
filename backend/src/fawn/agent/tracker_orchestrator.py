@@ -133,6 +133,12 @@ def _health_type_label(record_type: str | None) -> str:
     )
 
 
+def _diaper_type_label(diaper_type: str | None) -> str:
+    return {"poop": "大便", "pee": "小便", "mixed": "混合"}.get(
+        diaper_type or "", "大小便"
+    )
+
+
 def _slots_payload(slots: TrackerIntentSlots) -> dict[str, Any]:
     return slots.model_dump(exclude_none=True)
 
@@ -263,12 +269,16 @@ def _first_missing_question(intent: TrackerIntent) -> str:
         "feed_type": "这条喂养记录是配方奶还是母乳？",
         "amount_ml": "这次配方奶喝了多少 ml？",
         "duration_min": "这次母乳喂了多少分钟？",
+        "diaper_time": "这条大小便记录是什么时间？",
+        "diaper_type": "这条大小便记录是大便、小便还是混合？",
         "sleep_start": "这次睡眠是什么时候开始的？",
         "sleep_type": "这次睡眠是小睡还是夜睡？",
         "record_date": "这条健康记录是哪一天发生的？",
         "health_type": "这条健康记录是疫苗、生病还是体检？",
         "title": "这条健康记录的标题是什么？",
-        "tracker_type": "你想操作哪一类记录：生长、喂养、睡眠还是健康？",
+        "tracker_type": (
+            "你想操作哪一类记录：生长、喂养、大小便、睡眠还是健康？"
+        ),
     }
     return questions.get(field, "这条记录还缺少关键信息，请再补充一下。")
 
@@ -290,6 +300,11 @@ def _validate_create_intent(intent: TrackerIntent) -> str | None:
                 return "这次配方奶喝了多少 ml？"
             if slots.feed_type == "breast" and slots.duration_min is None:
                 return "这次母乳喂了多少分钟？"
+        case "record_diaper":
+            if not slots.diaper_time:
+                return "这条大小便记录是什么时间？"
+            if not slots.diaper_type:
+                return "这条大小便记录是大便、小便还是混合？"
         case "record_sleep":
             if not slots.sleep_start:
                 return "这次睡眠是什么时候开始的？"
@@ -362,6 +377,8 @@ def _risk_level_for_intent(intent: TrackerIntent) -> str:
         return "high"
     if intent.intent == "record_health":
         return "high"
+    if intent.intent == "record_diaper" and intent.needs_confirmation:
+        return "medium"
     if intent.intent == "record_sleep" and _sleep_crosses_day(intent.slots):
         return "medium"
     if intent.intent == "update_baby_profile":
@@ -396,6 +413,11 @@ def _confirmation_question(intent: TrackerIntent, target_label: str | None = Non
         return (
             f"我理解为记录 {_format_date(_parse_date(slots.record_date))} "
             f"{health_label}：{slots.title or '未命名'}，确认记录吗？"
+        )
+    if intent.intent == "record_diaper":
+        return (
+            f"我理解为记录 {_format_time(_parse_datetime(slots.diaper_time))} "
+            f"{_diaper_type_label(slots.diaper_type)}，确认记录吗？"
         )
     if intent.intent == "update_baby_profile":
         updates = _baby_profile_update_labels(_baby_profile_updates(slots))
@@ -489,6 +511,19 @@ async def _create_record(
                 response = (
                     f"已记录 {_format_time(record.feed_time)} "
                     f"{_feeding_type_label(record.feed_type)}{detail}。"
+                )
+            case "record_diaper":
+                record = await tracker_service.create_diaper_record(
+                    db,
+                    user,
+                    diaper_time=_parse_datetime(slots.diaper_time),
+                    diaper_type=slots.diaper_type,
+                    notes=slots.notes,
+                    source_conversation_id=conversation_id,
+                )
+                response = (
+                    f"已记录 {_format_time(record.diaper_time)} "
+                    f"{_diaper_type_label(record.diaper_type)}。"
                 )
             case "record_sleep":
                 record = await tracker_service.create_sleep_record(
@@ -741,6 +776,32 @@ async def _query_record(
                     f"{len(milk_records)} 次喂养。"
                     f"配方奶合计 {total_ml}ml，母乳合计 {breast_min}分钟。"
                 )
+        case "query_diaper":
+            date_value, from_date, to_date = _query_window(slots)
+            if date_value is None and from_date is None and to_date is None:
+                date_value = datetime.now(APP_TIMEZONE).date()
+            records = await tracker_service.query_diaper(
+                db,
+                family_id=user.family_id,
+                date_value=date_value,
+                from_date=from_date,
+                to_date=to_date,
+                limit=slots.limit or 500,
+            )
+            if not records:
+                response = (
+                    f"{_period_label(date_value, from_date, to_date)}还没有大小便记录。"
+                )
+            else:
+                poop_count = sum(1 for record in records if record.diaper_type == "poop")
+                pee_count = sum(1 for record in records if record.diaper_type == "pee")
+                mixed_count = sum(1 for record in records if record.diaper_type == "mixed")
+                response = (
+                    f"{_period_label(date_value, from_date, to_date)}共有 "
+                    f"{len(records)} 条大小便记录。"
+                    f"大便 {poop_count} 次，"
+                    f"小便 {pee_count} 次，混合 {mixed_count} 次。"
+                )
         case "query_sleep":
             date_value, from_date, to_date = _query_window(slots)
             if date_value is None and from_date is None and to_date is None:
@@ -850,6 +911,11 @@ def _candidate_label(record_type: str, record: Any) -> str:
             f"喂养 {_format_time(record.feed_time)} "
             f"{_feeding_type_label(record.feed_type)} {detail}"
         ).strip()
+    if record_type == "diaper":
+        return (
+            f"大小便 {_format_time(record.diaper_time)} "
+            f"{_diaper_type_label(record.diaper_type)}"
+        )
     if record_type == "sleep":
         return (
             f"睡眠 {_format_time_range(record.sleep_start, record.sleep_end)} "
@@ -952,6 +1018,15 @@ async def _format_full_record(db: AsyncSession, record_type: str, record: Any) -
             parts.append(f"备注：{record.notes}")
         parts.append(f"记录人 {recorded_by}")
         return "刚刚记录的是喂养：" + "，".join(parts) + "。"
+    if record_type == "diaper":
+        parts = [
+            f"时间 {_format_datetime(record.diaper_time)}",
+            f"类型 {_diaper_type_label(record.diaper_type)}",
+        ]
+        if record.notes:
+            parts.append(f"备注：{record.notes}")
+        parts.append(f"记录人 {recorded_by}")
+        return "刚刚记录的是大小便：" + "，".join(parts) + "。"
     if record_type == "sleep":
         parts = [
             f"开始 {_format_datetime(record.sleep_start)}",
@@ -1047,6 +1122,13 @@ def _update_payload(record_type: str, slots: TrackerIntentSlots) -> dict[str, An
         if slots.feed_time:
             updates["feed_time"] = _parse_datetime(slots.feed_time)
         for field_name in ("feed_type", "amount_ml", "duration_min", "notes"):
+            value = getattr(slots, field_name)
+            if value is not None:
+                updates[field_name] = value
+    elif record_type == "diaper":
+        if slots.diaper_time:
+            updates["diaper_time"] = _parse_datetime(slots.diaper_time)
+        for field_name in ("diaper_type", "notes"):
             value = getattr(slots, field_name)
             if value is not None:
                 updates[field_name] = value

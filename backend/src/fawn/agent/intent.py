@@ -15,10 +15,12 @@ APP_TIMEZONE = ZoneInfo("Asia/Shanghai")
 TrackerIntentName = Literal[
     "record_growth",
     "record_feeding",
+    "record_diaper",
     "record_sleep",
     "record_health",
     "query_growth",
     "query_feeding",
+    "query_diaper",
     "query_sleep",
     "query_health",
     "query_baby_profile",
@@ -28,8 +30,9 @@ TrackerIntentName = Literal[
     "delete_tracker_record",
     "unknown",
 ]
-TrackerRecordType = Literal["growth", "feeding", "sleep", "health"]
+TrackerRecordType = Literal["growth", "feeding", "sleep", "health", "diaper"]
 FeedingType = Literal["breast", "formula", "solid"]
+DiaperType = Literal["poop", "pee", "mixed"]
 SleepType = Literal["nap", "night"]
 HealthType = Literal["vaccination", "illness", "checkup"]
 
@@ -44,6 +47,9 @@ class TrackerIntentSlots(BaseModel):
     feed_type: FeedingType | None = None
     amount_ml: int | None = None
     duration_min: int | None = None
+
+    diaper_time: str | None = None
+    diaper_type: DiaperType | None = None
 
     sleep_start: str | None = None
     sleep_end: str | None = None
@@ -92,10 +98,12 @@ TRACKER_INTENT_SYSTEM_PROMPT = """你是 Fawn 后端的 tracker 意图识别器�
 可选 intent：
 - record_growth: 用户要记录体重/身长/头围
 - record_feeding: 用户要记录喂养
+- record_diaper: 用户要记录大便、小便或混合大小便
 - record_sleep: 用户要记录睡眠
 - record_health: 用户要记录疫苗、疾病、体检等健康事件
 - query_growth: 用户要查询生长记录或趋势
 - query_feeding: 用户要查询喂养记录或统计
+- query_diaper: 用户要查询大小便记录或统计
 - query_sleep: 用户要查询睡眠记录或统计
 - query_health: 用户要查询健康时间线
 - query_baby_profile: 用户要查询宝宝档案、年龄、出生信息
@@ -118,6 +126,8 @@ TRACKER_INTENT_SYSTEM_PROMPT = """你是 Fawn 后端的 tracker 意图识别器�
     "feed_type": "breast|formula|solid",
     "amount_ml": 90,
     "duration_min": 12,
+    "diaper_time": "ISO-8601 datetime with timezone",
+    "diaper_type": "poop|pee|mixed",
     "sleep_start": "ISO-8601 datetime with timezone",
     "sleep_end": "ISO-8601 datetime with timezone",
     "sleep_type": "nap|night",
@@ -127,7 +137,7 @@ TRACKER_INTENT_SYSTEM_PROMPT = """你是 Fawn 后端的 tracker 意图识别器�
     "title": "简短标题",
     "description": "描述",
     "notes": "备注",
-    "tracker_type": "growth|feeding|sleep|health",
+    "tracker_type": "growth|feeding|sleep|health|diaper",
     "record_id": "uuid when user provides it",
     "query_date": "YYYY-MM-DD",
     "from_date": "YYYY-MM-DD",
@@ -153,6 +163,9 @@ TRACKER_INTENT_SYSTEM_PROMPT = """你是 Fawn 后端的 tracker 意图识别器�
 - 如果用户说“今天”“刚刚”“早上”等相对时间，
   必须根据当前时间解析成具体日期或带时区 datetime。
 - 配方奶 formula 优先需要 amount_ml；母乳 breast 优先需要 duration_min。
+- 大便、便便、拉屎、poop 对应 diaper_type=poop；
+  小便、尿尿、pee 对应 diaper_type=pee；
+  大小便、混合、又拉又尿对应 diaper_type=mixed。
 - 小睡 nap 的 night_wakings 应为 0。
 - 如果关键字段缺失，把字段名放入 missing_slots，并给 user_facing_question。
 - 如果用户说“不是”“不对”“改成”等短句，并且上下文显示刚刚有记录，

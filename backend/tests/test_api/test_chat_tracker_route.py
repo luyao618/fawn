@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fawn.agent.intent import TrackerIntent, TrackerIntentSlots
-from fawn.models import AgentTask, Baby, FeedingRecord, Message, SleepRecord
+from fawn.models import AgentTask, Baby, DiaperRecord, FeedingRecord, Message, SleepRecord
 from fawn.services.long_term_memory import LongTermMemoryService, MemoryTarget
 
 
@@ -68,6 +68,50 @@ async def test_chat_deterministic_route_creates_feeding_record(
     assert len(records) == 1
     assert records[0].feed_type == "formula"
     assert records[0].amount_ml == 90
+
+
+async def test_chat_deterministic_route_creates_diaper_record(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+    db: AsyncSession,
+    monkeypatch,
+) -> None:
+    async def fake_classifier(message: str) -> TrackerIntent:
+        return TrackerIntent(
+            intent="record_diaper",
+            confidence=0.96,
+            slots=TrackerIntentSlots(
+                diaper_time="2026-05-02T08:30:00+08:00",
+                diaper_type="mixed",
+                notes="换尿布时记录",
+            ),
+        )
+
+    monkeypatch.setattr(
+        "fawn.agent.tracker_orchestrator.classify_tracker_intent", fake_classifier
+    )
+    conversation_id = await _create_conversation(client, auth_headers)
+
+    response = await client.post(
+        f"/api/chat/conversations/{conversation_id}/messages",
+        json={"content": "刚刚大小便都有，换尿布时记录"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    events = _events(response.text)
+    assert any(
+        event["type"] == "tool_call" and event["name"] == "record_diaper"
+        for event in events
+    )
+    assert any(event["type"] == "token" and "已记录" in event["content"] for event in events)
+
+    records = list((await db.execute(select(DiaperRecord))).scalars())
+    assert len(records) == 1
+    assert records[0].diaper_type == "mixed"
+    assert records[0].notes == "换尿布时记录"
+    assert records[0].source_conversation_id == uuid.UUID(conversation_id)
 
 
 async def test_chat_deterministic_route_rejects_friend_write(
@@ -168,6 +212,58 @@ async def test_chat_deterministic_route_reports_empty_sleep_query(
     assert response.status_code == 200
     events = _events(response.text)
     assert any("还没有睡眠记录" in event.get("content", "") for event in events)
+
+
+async def test_chat_deterministic_route_reports_diaper_counts(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+    test_user,
+    db: AsyncSession,
+    monkeypatch,
+) -> None:
+    db.add_all(
+        [
+            DiaperRecord(
+                baby_id=test_baby.id,
+                recorded_by=test_user.id,
+                diaper_time=datetime(2026, 5, 2, 0, 30, tzinfo=UTC),
+                diaper_type="poop",
+            ),
+            DiaperRecord(
+                baby_id=test_baby.id,
+                recorded_by=test_user.id,
+                diaper_time=datetime(2026, 5, 2, 2, 30, tzinfo=UTC),
+                diaper_type="pee",
+            ),
+        ]
+    )
+    await db.commit()
+
+    async def fake_classifier(message: str) -> TrackerIntent:
+        return TrackerIntent(
+            intent="query_diaper",
+            confidence=0.91,
+            slots=TrackerIntentSlots(query_date="2026-05-02"),
+        )
+
+    monkeypatch.setattr(
+        "fawn.agent.tracker_orchestrator.classify_tracker_intent", fake_classifier
+    )
+    conversation_id = await _create_conversation(client, auth_headers)
+
+    response = await client.post(
+        f"/api/chat/conversations/{conversation_id}/messages",
+        json={"content": "今天大小便几次？"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    response_text = "".join(event.get("content", "") for event in _events(response.text))
+    assert "2026-05-02共有 2 条大小便记录" in response_text
+    assert "大便 1 次" in response_text
+    assert "小便 1 次" in response_text
+    assert "混合 0 次" in response_text
 
 
 async def test_chat_falls_back_to_langgraph_for_unknown_tracker_intent(
