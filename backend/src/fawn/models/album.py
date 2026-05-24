@@ -23,6 +23,7 @@ class Photo(UUIDMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    thumbnail_storage_key: Mapped[str | None] = mapped_column(String(500))
     original_filename: Mapped[str] = mapped_column(String(500), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)

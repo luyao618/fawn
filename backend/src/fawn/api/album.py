@@ -20,6 +20,11 @@ def _photo_to_read(photo) -> dict:
     return {
         "id": photo.id,
         "storage_url": get_presigned_url(photo.storage_key),
+        "thumbnail_url": (
+            get_presigned_url(photo.thumbnail_storage_key)
+            if photo.thumbnail_storage_key
+            else None
+        ),
         "original_filename": photo.original_filename,
         "taken_at": photo.taken_at,
         "uploaded_at": photo.uploaded_at,
