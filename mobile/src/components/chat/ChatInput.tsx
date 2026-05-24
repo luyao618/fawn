@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { VoiceHoldButton } from './VoiceHoldButton';
 import {
@@ -34,8 +35,8 @@ import {
  * - Attached image preview row sits above the pill (mirrors Web).
  *
  * Ergonomics (mirrors 42d40a0): + button action menu includes history entry
- * when `onOpenHistory` is provided. keepInputVisibleOnMobile removed —
- * keyboard avoidance is handled by the parent KeyboardAvoidingView.
+ * when `onOpenHistory` is provided. Bottom spacing is owned here so Android
+ * three-button navigation and edge-to-edge layouts do not cover the composer.
  */
 
 interface Props {
@@ -84,7 +85,9 @@ export function ChatInput({
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [mode, setMode] = useState<'keyboard' | 'voice'>('keyboard');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
+  const bottomPadding = spacing['3'] + insets.bottom + keyboardHeight;
 
   // Some Android skins (Vivo Origin OS, Oppo ColorOS) do NOT honor
   // android:windowSoftInputMode=adjustResize under edge-to-edge mode,
@@ -142,7 +145,7 @@ export function ChatInput({
     <View
       style={[
         styles.wrapper,
-        keyboardHeight > 0 ? { paddingBottom: spacing['3'] + keyboardHeight } : null,
+        { paddingBottom: bottomPadding },
       ]}
     >
       {attachedImageUri ? (
