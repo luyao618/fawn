@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -11,9 +12,11 @@ from sqlalchemy.orm import selectinload
 
 from fawn.dependencies import can_soft_delete_data
 from fawn.models import Baby, Photo, PhotoTag, User
+from fawn.services.images import ImageProcessingError, prepare_album_thumbnail
 from fawn.services.storage import get_presigned_download_url, put_bytes
 
 APP_TIMEZONE = ZoneInfo("Asia/Shanghai")
+logger = logging.getLogger(__name__)
 EXIF_CAPTURE_TAGS = (
     (36867, 36881),  # DateTimeOriginal, OffsetTimeOriginal
     (36868, 36882),  # DateTimeDigitized, OffsetTimeDigitized
@@ -31,6 +34,28 @@ class NotFound(AlbumError):
 
 class PermissionDenied(AlbumError):
     pass
+
+
+def thumbnail_storage_key_for(photo: Photo) -> str:
+    filename = photo.storage_key.rsplit("/", 1)[-1]
+    stem = filename.rsplit(".", 1)[0] if "." in filename else filename
+    return f"photos/{photo.baby_id}/thumbnails/{stem}.jpg"
+
+
+def _make_thumbnail_storage_key(baby_id: uuid.UUID, file_id: uuid.UUID) -> str:
+    return f"photos/{baby_id}/thumbnails/{file_id}.jpg"
+
+
+def _store_thumbnail(storage_key: str, file_bytes: bytes) -> str | None:
+    try:
+        thumbnail_bytes, thumbnail_mime_type = prepare_album_thumbnail(file_bytes)
+        put_bytes(storage_key, thumbnail_bytes, thumbnail_mime_type)
+    except ImageProcessingError:
+        return None
+    except Exception:
+        logger.warning("Album thumbnail generation failed for %s", storage_key, exc_info=True)
+        return None
+    return storage_key
 
 
 def _parse_offset(value: object) -> timezone | None:
@@ -119,13 +144,16 @@ async def upload_photo(
     ext = filename.rsplit(".", 1)[-1] if "." in filename else "bin"
     file_id = uuid.uuid4()
     storage_key = f"photos/{baby_id}/{file_id}.{ext}"
+    thumbnail_storage_key = _make_thumbnail_storage_key(baby_id, file_id)
 
     put_bytes(storage_key, file_bytes, mime_type)
+    stored_thumbnail_key = _store_thumbnail(thumbnail_storage_key, file_bytes)
 
     photo = Photo(
         baby_id=baby_id,
         uploaded_by=user.id,
         storage_key=storage_key,
+        thumbnail_storage_key=stored_thumbnail_key,
         original_filename=filename,
         mime_type=mime_type,
         file_size_bytes=file_size,

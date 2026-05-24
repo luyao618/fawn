@@ -91,7 +91,7 @@ export function PhotoGrid({ photos, onPhotoPress }: PhotoGridProps) {
                   ]}
                 >
                   <Image
-                    source={{ uri: resolvePhotoUri(photo.storage_url) }}
+                    source={{ uri: resolvePhotoUri(photo.thumbnail_url ?? photo.storage_url) }}
                     style={StyleSheet.absoluteFill}
                     contentFit="cover"
                     cachePolicy="memory-disk"

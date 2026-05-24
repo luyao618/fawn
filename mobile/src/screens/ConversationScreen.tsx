@@ -89,6 +89,8 @@ interface LoadedArchiveConversation {
   pages: ConversationDetail[];
 }
 
+const MIN_AUTOFILL_TIMELINE_MESSAGES = 12;
+
 function senderMeta(sender: Pick<User, 'display_name' | 'role'> | null | undefined) {
   return {
     name: sender?.display_name?.trim() || '家庭成员',
@@ -167,6 +169,8 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [archiveExhausted, setArchiveExhausted] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [listViewportHeight, setListViewportHeight] = useState(0);
+  const [listContentHeight, setListContentHeight] = useState(0);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   // 80 cps typewriter effect — faster pacing
   const pendingBuffer = useRef<string>('');
@@ -293,12 +297,18 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     () => (authToken ? { Authorization: `Bearer ${authToken}` } : undefined),
     [authToken],
   );
+  const isTimelineShort =
+    reversedMessages.length < MIN_AUTOFILL_TIMELINE_MESSAGES ||
+    (listViewportHeight > 0 &&
+      listContentHeight > 0 &&
+      listContentHeight <= listViewportHeight);
 
   useEffect(() => {
     setArchiveGroups([]);
     setArchiveLoading(false);
     setArchiveExhausted(false);
     setArchiveError(null);
+    setListContentHeight(0);
   }, [resolvedId]);
 
   const olderConversationIds = useMemo(() => {
@@ -579,6 +589,32 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
   const isLoadingOlderTimeline =
     isFetchingNextPage || archiveLoading || conversationHistoryQuery.isFetchingNextPage;
 
+  useEffect(() => {
+    if (
+      conversationId ||
+      !resolvedId ||
+      !data ||
+      !conversationHistoryQuery.data ||
+      conversationHistoryQuery.isFetching ||
+      isLoadingOlderTimeline ||
+      archiveExhausted ||
+      !isTimelineShort
+    ) {
+      return;
+    }
+    void loadOlderTimeline();
+  }, [
+    archiveExhausted,
+    conversationHistoryQuery.data,
+    conversationHistoryQuery.isFetching,
+    conversationId,
+    data,
+    isLoadingOlderTimeline,
+    isTimelineShort,
+    loadOlderTimeline,
+    resolvedId,
+  ]);
+
   if (!conversationId && conversationsQuery.isPending && !conversationsQuery.data) {
     return (
       <View style={styles.center}>
@@ -677,6 +713,12 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
           data={reversedMessages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
+          onLayout={(event) => {
+            setListViewportHeight(Math.ceil(event.nativeEvent.layout.height));
+          }}
+          onContentSizeChange={(_, height) => {
+            setListContentHeight(Math.ceil(height));
+          }}
           contentContainerStyle={[
             styles.listContent,
             { paddingTop: spacing['4'] },

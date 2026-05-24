@@ -86,8 +86,31 @@ async def test_upload_photo(client: AsyncClient, auth_headers: dict, test_baby: 
     data = response.json()
     assert "id" in data
     assert data["storage_url"] == "http://minio/test"
+    assert data["thumbnail_url"] is None
     assert data["original_filename"] == "test.jpg"
     assert data["tags"] == []
+
+
+async def test_upload_photo_returns_thumbnail_url(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+):
+    files = {"file": ("test.jpg", io.BytesIO(_jpeg_bytes()), "image/jpeg")}
+    with patch("fawn.services.album.put_bytes") as put_bytes_mock, patch(
+        "fawn.api.album.get_presigned_url",
+        side_effect=lambda key: f"http://minio/{key}",
+    ):
+        response = await client.post("/api/album/photos", files=files, headers=auth_headers)
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["thumbnail_url"] is not None
+    assert "/thumbnails/" in data["thumbnail_url"]
+    assert data["thumbnail_url"].endswith(".jpg")
+    assert put_bytes_mock.call_count == 2
+    assert "/thumbnails/" in put_bytes_mock.call_args_list[1].args[0]
+    assert put_bytes_mock.call_args_list[1].args[2] == "image/jpeg"
 
 
 async def test_upload_photo_no_longer_auto_tags(

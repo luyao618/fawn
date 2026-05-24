@@ -9,6 +9,8 @@ MODEL_IMAGE_MAX_SIDE = 1280
 MODEL_IMAGE_QUALITY = 78
 MODEL_IMAGE_MIME_TYPE = "image/jpeg"
 MODEL_IMAGE_EXTENSION = ".jpg"
+ALBUM_THUMBNAIL_MAX_SIDE = 720
+ALBUM_THUMBNAIL_QUALITY = 74
 
 
 class ImageProcessingError(Exception):
@@ -35,3 +37,11 @@ def prepare_model_image(
             return output.getvalue(), MODEL_IMAGE_MIME_TYPE
     except (UnidentifiedImageError, OSError, ValueError) as exc:
         raise ImageProcessingError("Invalid image") from exc
+
+
+def prepare_album_thumbnail(image_bytes: bytes) -> tuple[bytes, str]:
+    return prepare_model_image(
+        image_bytes,
+        max_side=ALBUM_THUMBNAIL_MAX_SIDE,
+        quality=ALBUM_THUMBNAIL_QUALITY,
+    )

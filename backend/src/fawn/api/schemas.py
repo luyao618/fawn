@@ -454,6 +454,7 @@ class PhotoTagRead(BaseModel):
 class PhotoRead(BaseModel):
     id: uuid.UUID
     storage_url: str
+    thumbnail_url: str | None = None
     original_filename: str
     taken_at: datetime | None
     uploaded_at: datetime

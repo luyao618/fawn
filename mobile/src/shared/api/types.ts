@@ -154,6 +154,7 @@ export interface PhotoTag {
 export interface PhotoRecord {
   id: string;
   storage_url: string;
+  thumbnail_url?: string | null;
   original_filename: string;
   taken_at: string | null;
   uploaded_at: string;

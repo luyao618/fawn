@@ -54,7 +54,11 @@ export function PhotoGrid({ photos, onPhotoClick }: PhotoGridProps) {
                   className="relative aspect-[4/5] overflow-hidden rounded-[24px] bg-warm-gray text-left shadow-card transition-transform active:scale-[0.99]"
                   aria-label={`查看照片：${label || photo.original_filename}`}
                 >
-                  <PhotoImage src={photo.storage_url} alt={photo.original_filename} className="h-full w-full object-cover" />
+                  <PhotoImage
+                    src={photo.thumbnail_url ?? photo.storage_url}
+                    alt={photo.original_filename}
+                    className="h-full w-full object-cover"
+                  />
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 pt-10 text-white">
                     <p className="truncate text-sm font-semibold">{label}</p>
                   </div>
