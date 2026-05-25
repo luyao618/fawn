@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     memory_curator_timeout_seconds: float = 8.0
 
     doubao_api_key: str | None = None
+    doubao_tts_resource_id: str = "seed-tts-2.0"
+    doubao_tts_speaker: str = "zh_female_vv_uranus_bigtts"
+    doubao_tts_audio_format: str = "mp3"
+    doubao_tts_sample_rate: int = 24000
+    doubao_tts_timeout_seconds: float = 30.0
 
 
 @lru_cache

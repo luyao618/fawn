@@ -7,18 +7,22 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 
 import {
   chatImageUrl,
   chatQueries,
   createConversation,
   fetchConversation,
+  messageTtsSource,
   queryKeys,
   resolveChatImageUrl,
   sendChatMessage,
@@ -43,6 +47,10 @@ import { TopBar } from '../components/layout/TopBar';
 import { ChatInput } from '../components/chat/ChatInput';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { TimeSeparator } from '../components/chat/TimeSeparator';
+import {
+  getChatTtsSpeakerEnabled,
+  setChatTtsSpeakerEnabled,
+} from '../shared/settings/storage';
 
 /**
  * Conversation (聊天) screen — visual parity with Web `app/(main)/chat/page.tsx`.
@@ -90,6 +98,7 @@ interface LoadedArchiveConversation {
 }
 
 const MIN_AUTOFILL_TIMELINE_MESSAGES = 12;
+type TtsPlaybackState = 'idle' | 'loading' | 'playing' | 'stopped' | 'error';
 
 function senderMeta(sender: Pick<User, 'display_name' | 'role'> | null | undefined) {
   return {
@@ -151,6 +160,10 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [ttsEnabled, setTtsEnabled] = useState(() => getChatTtsSpeakerEnabled());
+  const [latestTtsMessageId, setLatestTtsMessageId] = useState<string | null>(null);
+  const [activeTtsMessageId, setActiveTtsMessageId] = useState<string | null>(null);
+  const [ttsPlaybackState, setTtsPlaybackState] = useState<TtsPlaybackState>('idle');
   // Optimistic user message rendered immediately on send so the UI feels
   // instant. Cleared after we invalidate the conversation query and the
   // canonical row arrives.
@@ -172,6 +185,11 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
   const [listViewportHeight, setListViewportHeight] = useState(0);
   const [listContentHeight, setListContentHeight] = useState(0);
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  const ttsPlayerRef = useRef<AudioPlayer | null>(null);
+  const ttsListenerRef = useRef<{ remove: () => void } | null>(null);
+  const ttsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ttsRequestRef = useRef(0);
+  const autoPlayedTtsMessageId = useRef<string | null>(null);
   // 80 cps typewriter effect — faster pacing
   const pendingBuffer = useRef<string>('');
   const typingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -208,6 +226,118 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
       );
     }, 12); // ~80 chars/sec
   }, [stopTypingTimer]);
+
+  const releaseTtsPlayer = useCallback(() => {
+    if (ttsTimeoutRef.current !== null) {
+      clearTimeout(ttsTimeoutRef.current);
+      ttsTimeoutRef.current = null;
+    }
+    ttsListenerRef.current?.remove();
+    ttsListenerRef.current = null;
+    const player = ttsPlayerRef.current;
+    ttsPlayerRef.current = null;
+    if (!player) return;
+    try {
+      player.pause();
+    } catch {
+      // Player may already be removed or failed to load.
+    }
+    try {
+      player.remove();
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }, []);
+
+  const stopLatestTts = useCallback((nextState: TtsPlaybackState = 'stopped') => {
+    ttsRequestRef.current += 1;
+    releaseTtsPlayer();
+    setActiveTtsMessageId(null);
+    setTtsPlaybackState(nextState);
+  }, [releaseTtsPlayer]);
+
+  const playLatestTts = useCallback(
+    async (messageId: string) => {
+      const requestId = ttsRequestRef.current + 1;
+      ttsRequestRef.current = requestId;
+      releaseTtsPlayer();
+      setActiveTtsMessageId(messageId);
+      setTtsPlaybackState('loading');
+
+      const token = authToken ?? (await getToken());
+      if (!token) {
+        if (ttsRequestRef.current === requestId) setTtsPlaybackState('error');
+        return;
+      }
+      if (!authToken) setAuthToken(token);
+
+      try {
+        await setAudioModeAsync({
+          allowsRecording: false,
+          playsInSilentMode: true,
+          shouldPlayInBackground: false,
+        });
+        if (ttsRequestRef.current !== requestId) return;
+
+        const player = createAudioPlayer(messageTtsSource(baseUrl, messageId, token), {
+          updateInterval: 250,
+        });
+        ttsPlayerRef.current = player;
+        ttsTimeoutRef.current = setTimeout(() => {
+          if (ttsRequestRef.current !== requestId) return;
+          releaseTtsPlayer();
+          setActiveTtsMessageId(messageId);
+          setTtsPlaybackState('error');
+        }, 30000);
+        ttsListenerRef.current = player.addListener('playbackStatusUpdate', (status) => {
+          if (ttsRequestRef.current !== requestId) return;
+          if (status.didJustFinish) {
+            releaseTtsPlayer();
+            setActiveTtsMessageId(null);
+            setTtsPlaybackState('idle');
+            return;
+          }
+          if (status.playing) {
+            if (ttsTimeoutRef.current !== null) {
+              clearTimeout(ttsTimeoutRef.current);
+              ttsTimeoutRef.current = null;
+            }
+            setTtsPlaybackState('playing');
+          }
+        });
+        player.play();
+        setTtsPlaybackState('playing');
+      } catch {
+        if (ttsRequestRef.current === requestId) {
+          releaseTtsPlayer();
+          setActiveTtsMessageId(messageId);
+          setTtsPlaybackState('error');
+        }
+      }
+    },
+    [authToken, baseUrl, releaseTtsPlayer],
+  );
+
+  const toggleTtsEnabled = useCallback(() => {
+    const next = !ttsEnabled;
+    setTtsEnabled(next);
+    setChatTtsSpeakerEnabled(next);
+    if (!next) stopLatestTts('idle');
+  }, [stopLatestTts, ttsEnabled]);
+
+  const handleVoiceActionPress = useCallback(
+    (messageId: string) => {
+      if (
+        activeTtsMessageId === messageId &&
+        (ttsPlaybackState === 'loading' || ttsPlaybackState === 'playing')
+      ) {
+        stopLatestTts('stopped');
+        return;
+      }
+      void playLatestTts(messageId);
+    },
+    [activeTtsMessageId, playLatestTts, stopLatestTts, ttsPlaybackState],
+  );
 
   // Flatten infinite-query pages (each page is asc) and dedup by id BEFORE any
   // reversal so consumers downstream never see duplicate keys at page
@@ -293,6 +423,13 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     };
   }, [stopTypingTimer]);
 
+  useEffect(() => {
+    return () => {
+      ttsRequestRef.current += 1;
+      releaseTtsPlayer();
+    };
+  }, [releaseTtsPlayer]);
+
   const imageHeaders = useMemo(
     () => (authToken ? { Authorization: `Bearer ${authToken}` } : undefined),
     [authToken],
@@ -304,12 +441,15 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
       listContentHeight <= listViewportHeight);
 
   useEffect(() => {
+    stopLatestTts('idle');
+    setLatestTtsMessageId(null);
+    autoPlayedTtsMessageId.current = null;
     setArchiveGroups([]);
     setArchiveLoading(false);
     setArchiveExhausted(false);
     setArchiveError(null);
     setListContentHeight(0);
-  }, [resolvedId]);
+  }, [resolvedId, stopLatestTts]);
 
   const olderConversationIds = useMemo(() => {
     if (!resolvedId) return [];
@@ -445,6 +585,9 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     const sentImage = pendingImage;
     const sentContent = content || (pendingImage ? '[图片]' : '');
     const sentImageUrl = sentImage?.imageUrl ?? null;
+    stopLatestTts('idle');
+    setLatestTtsMessageId(null);
+    autoPlayedTtsMessageId.current = null;
     // Clear composer + show optimistic rows synchronously so the keyboard
     // dismiss and bubbles land in the same frame.
     setText('');
@@ -452,14 +595,19 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     setOptimisticUser({ content: sentContent, imageUrl: sentImageUrl });
     setStreamingAssistant({ content: '' });
     setSending(true);
+    let completedMessageId: string | null = null;
+    let completedMessageType: string | null = null;
     try {
       const token = authToken ?? (await getToken());
+      if (token && !authToken) setAuthToken(token);
       const callbacks = {
         onToken: (chunk: string) => {
           pendingBuffer.current += chunk;
           startTypingTimer();
         },
-        onDone: () => {
+        onDone: (messageId: string, messageType: string) => {
+          completedMessageId = messageId || null;
+          completedMessageType = messageType || 'text';
           // Flush remaining buffer before refreshing the first page so the
           // user never sees text jump from mid-typewriter to the full
           // response.
@@ -541,6 +689,16 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
       });
       setOptimisticUser(null);
       setStreamingAssistant(null);
+      if (
+        completedMessageId &&
+        (completedMessageType === 'text' || completedMessageType === 'safety_alert')
+      ) {
+        setLatestTtsMessageId(completedMessageId);
+        if (ttsEnabled && autoPlayedTtsMessageId.current !== completedMessageId) {
+          autoPlayedTtsMessageId.current = completedMessageId;
+          void playLatestTts(completedMessageId);
+        }
+      }
     } catch (err) {
       // Roll back optimistic UI so the user can retry without ghost rows.
       stopTypingTimer();
@@ -569,6 +727,13 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
       !prevInTime ||
       new Date(item.created_at).toDateString() !==
         new Date(prevInTime.created_at).toDateString();
+    const showVoiceAction =
+      item.role === 'assistant' &&
+      item.id === latestTtsMessageId &&
+      item.id !== 'temp-assistant' &&
+      (item.message_type === 'text' || item.message_type === 'safety_alert');
+    const voiceActionState =
+      activeTtsMessageId === item.id ? ttsPlaybackState : 'idle';
     return (
       <>
         <MessageBubble
@@ -578,6 +743,9 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
           senderName={isUserMessage ? meta.name : undefined}
           senderRole={isUserMessage ? meta.role : undefined}
           isStreaming={item.id === 'temp-assistant'}
+          showVoiceAction={showVoiceAction}
+          voiceActionState={voiceActionState}
+          onPressVoiceAction={() => handleVoiceActionPress(item.id)}
         />
         {/* In an inverted FlatList, JSX rendered AFTER the bubble visually
             appears ABOVE it (column-reverse). Putting the separator here
@@ -615,6 +783,26 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     resolvedId,
   ]);
 
+  const ttsHeaderAction = (
+    <Pressable
+      onPress={toggleTtsEnabled}
+      accessibilityRole="button"
+      accessibilityLabel={ttsEnabled ? '关闭语音播放' : '开启语音播放'}
+      style={({ pressed }) => [
+        styles.ttsToggle,
+        ttsEnabled ? styles.ttsToggleEnabled : null,
+        pressed ? styles.ttsTogglePressed : null,
+      ]}
+      hitSlop={8}
+    >
+      <Ionicons
+        name={ttsEnabled ? 'volume-high-outline' : 'volume-mute-outline'}
+        size={22}
+        color={ttsEnabled ? colors['fawn-amber'] : colors['soft-charcoal']}
+      />
+    </Pressable>
+  );
+
   if (!conversationId && conversationsQuery.isPending && !conversationsQuery.data) {
     return (
       <View style={styles.center}>
@@ -639,9 +827,9 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     return (
       <View style={[styles.canvas, hideHeader ? { paddingTop: insets.top } : undefined]}>
         {tabRoot ? (
-          <TopBar title="" onMenu={openDrawer} />
+          <TopBar title="" onMenu={openDrawer} rightAction={ttsHeaderAction} />
         ) : hideHeader ? null : (
-          <TopBar title="" onBack={onBack} />
+          <TopBar title="" onBack={onBack} rightAction={ttsHeaderAction} />
         )}
         <View style={styles.center}>
           <View style={styles.emptyCard}>
@@ -674,11 +862,13 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
         <TopBar
           title=""
           onMenu={openDrawer}
+          rightAction={ttsHeaderAction}
         />
       ) : hideHeader ? null : (
         <TopBar
           title=""
           onBack={onBack}
+          rightAction={ttsHeaderAction}
         />
       )}
 
@@ -785,6 +975,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors['warm-cream'],
   },
   flex: { flex: 1 },
+  ttsToggle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.transparent,
+  },
+  ttsToggleEnabled: {
+    backgroundColor: colors['card-frosted'],
+    borderWidth: 1,
+    borderColor: colors['frosted-border'],
+  },
+  ttsTogglePressed: {
+    opacity: 0.72,
+  },
   center: {
     flex: 1,
     alignItems: 'center',

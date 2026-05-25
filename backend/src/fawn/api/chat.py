@@ -52,6 +52,7 @@ from fawn.services.memory import get_or_create_current_conversation
 from fawn.services.memory_curator import CuratorTurn, MemoryCurator
 from fawn.services.storage import get_bytes, put_bytes
 from fawn.services.voice_asr import DoubaoASRError, DoubaoASRService
+from fawn.services.voice_tts import DoubaoTTSError, DoubaoTTSService, normalize_tts_text
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger(__name__)
@@ -407,6 +408,91 @@ async def search_messages_compat(
     page_size: int = Query(20, ge=1, le=100),
 ) -> PaginatedResponse:
     return await _search_messages(q, user, db, page, page_size)
+
+
+async def _get_family_message(
+    db: AsyncSession,
+    user: User,
+    message_id: uuid.UUID,
+) -> Message:
+    message = await db.scalar(
+        select(Message)
+        .join(Conversation, Conversation.id == Message.conversation_id)
+        .where(Message.id == message_id, Conversation.family_id == user.family_id)
+    )
+    if message is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+    return message
+
+
+async def _has_newer_assistant_message(db: AsyncSession, message: Message) -> bool:
+    newer_id = await db.scalar(
+        select(Message.id)
+        .where(
+            Message.conversation_id == message.conversation_id,
+            Message.role == "assistant",
+            tuple_(Message.created_at, Message.id) > (message.created_at, message.id),
+        )
+        .limit(1)
+    )
+    return newer_id is not None
+
+
+@router.get("/messages/{message_id}/tts")
+async def get_message_tts(
+    message_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    settings = get_settings()
+    if not settings.doubao_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="语音服务未配置",
+        )
+
+    message = await _get_family_message(db, user, message_id)
+    if message.role != "assistant":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="只能播放管家回复",
+        )
+    if message.message_type not in {"text", "safety_alert"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="该消息类型暂不支持语音播放",
+        )
+    normalized_text = normalize_tts_text(message.content)
+    if not normalized_text:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="没有可播放的文字内容",
+        )
+    if await _has_newer_assistant_message(db, message):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="只能播放最新的管家回复",
+        )
+
+    service = DoubaoTTSService(
+        api_key=settings.doubao_api_key,
+        timeout_s=settings.doubao_tts_timeout_seconds,
+        resource_id=settings.doubao_tts_resource_id,
+        speaker=settings.doubao_tts_speaker,
+        audio_format=settings.doubao_tts_audio_format,
+        sample_rate=settings.doubao_tts_sample_rate,
+    )
+    try:
+        result = await service.synthesize(normalized_text, uid=str(user.id))
+    except DoubaoTTSError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("Message TTS failed for message %s", message_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="语音合成失败，请稍后重试",
+        ) from exc
+    return Response(content=result.audio, media_type=result.media_type)
 
 
 def _chat_image_key(conversation_id: uuid.UUID, filename: str) -> str:

@@ -144,6 +144,21 @@ export async function transcribeVoice(file: {
   return data;
 }
 
+export function messageTtsUrl(baseUrl: string, messageId: string): string {
+  return `${baseUrl}/chat/messages/${messageId}/tts`;
+}
+
+export function messageTtsSource(
+  baseUrl: string,
+  messageId: string,
+  token: string | null,
+): { uri: string; headers?: Record<string, string> } {
+  return {
+    uri: messageTtsUrl(baseUrl, messageId),
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  };
+}
+
 /**
  * Send a chat message. The backend streams an SSE response of tokens followed
  * by a final `done` event with the assistant message id. We parse SSE frames

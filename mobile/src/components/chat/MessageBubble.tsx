@@ -1,6 +1,7 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 
 import {
   colors,
@@ -39,6 +40,10 @@ interface Props {
   senderRole?: string;
   /** Show a soft pulsing caret while the assistant message streams in. */
   isStreaming?: boolean;
+  /** Show the latest-reply voice action under this assistant message. */
+  showVoiceAction?: boolean;
+  voiceActionState?: 'idle' | 'loading' | 'playing' | 'stopped' | 'error';
+  onPressVoiceAction?: () => void;
 }
 
 function StreamingCaret() {
@@ -52,6 +57,9 @@ export function MessageBubble({
   senderName,
   senderRole,
   isStreaming,
+  showVoiceAction,
+  voiceActionState = 'idle',
+  onPressVoiceAction,
 }: Props) {
   const isUser = message.role === 'user';
 
@@ -59,25 +67,54 @@ export function MessageBubble({
     return (
       <View style={styles.rowLeft}>
         <View style={styles.assistantBubble}>
-          {message.message_type === 'safety_alert' ? (
-            <SafetyAlert content={message.content} />
-          ) : imageUri ? (
-            <ExpoImage
-              source={imageHeaders ? { uri: imageUri, headers: imageHeaders } : { uri: imageUri }}
-              style={styles.image}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={150}
-              accessibilityLabel="聊天图片"
-            />
-          ) : isStreaming && message.content === '' ? (
-            <ThinkingDots />
-          ) : (
-            <>
-              <MarkdownMessage content={message.content} textColor={colors['soft-charcoal']} />
-              {isStreaming ? <StreamingCaret /> : null}
-            </>
-          )}
+          <View style={styles.assistantContent}>
+            {message.message_type === 'safety_alert' ? (
+              <SafetyAlert content={message.content} />
+            ) : imageUri ? (
+              <ExpoImage
+                source={imageHeaders ? { uri: imageUri, headers: imageHeaders } : { uri: imageUri }}
+                style={styles.image}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={150}
+                accessibilityLabel="聊天图片"
+              />
+            ) : isStreaming && message.content === '' ? (
+              <ThinkingDots />
+            ) : (
+              <>
+                <MarkdownMessage content={message.content} textColor={colors['soft-charcoal']} />
+                {isStreaming ? <StreamingCaret /> : null}
+              </>
+            )}
+          </View>
+          {showVoiceAction ? (
+            <Pressable
+              onPress={onPressVoiceAction}
+              accessibilityRole="button"
+              accessibilityLabel={voiceActionState === 'playing' ? '停止语音播放' : '播放语音'}
+              style={({ pressed }) => [
+                styles.voiceButton,
+                voiceActionState === 'error' ? styles.voiceButtonError : null,
+                pressed ? styles.voiceButtonPressed : null,
+              ]}
+              hitSlop={8}
+            >
+              {voiceActionState === 'loading' ? (
+                <ActivityIndicator size="small" color={colors['fawn-amber']} />
+              ) : (
+                <Ionicons
+                  name={voiceActionState === 'playing' ? 'stop-circle-outline' : 'volume-high-outline'}
+                  size={20}
+                  color={
+                    voiceActionState === 'error'
+                      ? colors['warning-amber']
+                      : colors['fawn-amber']
+                  }
+                />
+              )}
+            </Pressable>
+          ) : null}
         </View>
       </View>
     );
@@ -147,6 +184,26 @@ const styles = StyleSheet.create({
     paddingVertical: spacing['1'],
     backgroundColor: colors.transparent,
     gap: spacing['2'],
+  },
+  assistantContent: {
+    gap: spacing['2'],
+  },
+  voiceButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors['card-frosted'],
+    borderWidth: 1,
+    borderColor: colors['frosted-border'],
+  },
+  voiceButtonError: {
+    borderColor: colors['warning-amber'],
+    backgroundColor: colors['warning-amber-light'],
+  },
+  voiceButtonPressed: {
+    opacity: 0.72,
   },
   userBubble: {
     maxWidth: '78%',
