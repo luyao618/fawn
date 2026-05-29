@@ -1,6 +1,6 @@
 # Fawn
 
-Fawn is a private, self-hosted baby-care agent for families. It combines structured baby-care records, an AI parenting assistant, family memory, and an evidence-grounded knowledge base in one mobile-first web app.
+Fawn is a private, self-hosted baby-care agent for families. It combines structured baby-care records, an AI parenting assistant, family memory, an evidence-grounded knowledge base, a mobile-first web app, and a native Android client.
 
 中文 | [English](#english)
 
@@ -12,7 +12,7 @@ Fawn is a private, self-hosted baby-care agent for families. It combines structu
 |------|------|--------|----------|
 | `backend/` | FastAPI 后端：业务 API、LangGraph agent、RAG、长期记忆。 | Python 3.12, FastAPI, SQLAlchemy, LangGraph, pgvector | `backend/pyproject.toml`、[`docs/deployment.md`](docs/deployment.md) |
 | `frontend/` | Next.js 移动端 Web 应用，对外提供登录、聊天、看板、记录、相册等页面。 | Next.js 15, React 19, TypeScript, Tailwind CSS | `frontend/package.json` |
-| `mobile/` | Expo / React Native 原生 Android 客户端，复用同一个 FastAPI 后端。 | Expo, React Native, TypeScript | [`mobile/README.md`](mobile/README.md)、[`mobile/AGENTS.md`](mobile/AGENTS.md)、[`docs/android-native-build.md`](docs/android-native-build.md) |
+| `mobile/` | Expo / React Native 原生 Android 客户端，覆盖聊天、看板、记录、相册、家庭资料和长期记忆等移动端入口。 | Expo, React Native, TypeScript | [`mobile/README.md`](mobile/README.md)、[`mobile/AGENTS.md`](mobile/AGENTS.md)、[`docs/android-native-build.md`](docs/android-native-build.md) |
 | `docs/` | 部署、构建、PRD 等参考文档。 | Markdown | [`docs/deployment.md`](docs/deployment.md)、[`docs/android-native-build.md`](docs/android-native-build.md)、[`docs/PRD-V2.md`](docs/PRD-V2.md) |
 | `docker-compose.yml` | 一键拉起依赖（Postgres + pgvector、MinIO）以及生产部署的 backend/frontend 服务。 | Docker Compose v2 | [`docs/deployment.md`](docs/deployment.md) |
 
@@ -31,21 +31,26 @@ Fawn 是一个面向个人或家庭自部署的育儿管家系统。它不是公
 
 - **邀请码注册**：登录页提供注册入口，通过 `REGISTRATION_INVITE_CODE` 创建新家庭。注册时创建家庭、首个父母账号和管理员权限；家庭名和账号名保持唯一。
 - **家庭与账号管理**：父母账号可以添加家庭成员或朋友账号，管理昵称、角色、权限和密码。昵称可以重复，账号名必须唯一。
-- **AI 管家对话**：移动端聊天界面支持流式回复、历史对话、消息搜索和图片输入。每个家庭拥有独立会话，跨家庭不可见。
-- **结构化育儿记录**：支持成长、喂养、睡眠、健康四类 tracker 数据。记录既可以在“记录”页手动维护，也可以由管家通过工具调用写入或查询。
+- **AI 管家对话**：移动端聊天界面支持流式回复、历史对话、消息搜索、图片输入，以及 Android 端语音转写和回复播放。每个家庭拥有独立会话，跨家庭不可见。
+- **结构化育儿记录**：支持成长、喂养、睡眠、健康、大小便五类 tracker 数据。记录既可以在“记录”页手动维护，也可以由管家通过工具调用写入或查询。
 - **成长看板**：展示宝宝档案、最新成长数据、今日喂养、今日睡眠、健康时间线、成长曲线和 WHO 参考线。
 - **相册**：照片上传到 MinIO，对象信息保存在数据库中，支持标签、软删除和下载链接。
 - **长期记忆**：按家庭维护 Markdown 记忆文件，包括 `Soul.md`、`Memory.md`、`Baby.md` 和用户画像。每轮回复后会异步整理可记忆信息。
 - **知识库问答**：内置 RAG 知识库 seed，覆盖 WHO、CDC、AAP、疫苗、喂养、新生儿护理等资料。管家回答育儿问题时可以检索知识库，并在医疗、安全类场景保留谨慎边界。
+- **移动端任务与通知**：Android 客户端可触发后台 agent task，并通过 Expo push token 接收任务完成等通知。
 - **宝宝档案可渐进补全**：新家庭可以先没有宝宝档案；宝宝未出生或资料不完整时，系统以空档案运行，之后在家庭页补充。
 
 ### 系统架构
 
 ```text
-Next.js mobile web app
-  ├─ Login / Register
-  ├─ Chat / Dashboard / Record / Album / History / Profile
-  └─ /api proxy
+Clients
+  ├─ Next.js mobile web app
+  │    ├─ Login / Register
+  │    ├─ Chat / Dashboard / Record / Album / History / Profile
+  │    └─ /api proxy
+  └─ Expo Android app
+       ├─ Chat / History / Dashboard / Record / Album / Profile / Memory
+       └─ Voice input, TTS playback, push notification deep links
         │
         ▼
 FastAPI backend
@@ -59,7 +64,7 @@ FastAPI backend
         ├─ PostgreSQL + pgvector
         │    ├─ families, users, babies
         │    ├─ conversations, messages, summaries
-        │    ├─ growth, feeding, sleep, health records
+        │    ├─ growth, feeding, sleep, health and diaper records
         │    ├─ photos and tags
         │    ├─ knowledge documents/chunks/seed metadata
         │    ├─ agent tasks
@@ -93,7 +98,7 @@ Agent 可以调用记录、查询、知识检索、相册浏览和用户画像�
 
 **结构化记录与看板**
 
-成长、喂养、睡眠、健康记录分别建模，并统一提供列表、新增、编辑和删除 API。Dashboard 层把这些记录聚合成前端需要的摘要、趋势和统计数据。WHO 参考线通过 seed 导入数据库，成长曲线接口按宝宝性别、月龄和时间窗口返回参考点。
+成长、喂养、睡眠、健康、大小便记录分别建模，并统一提供列表、新增、编辑和删除 API。Dashboard 层把这些记录聚合成前端需要的摘要、趋势和统计数据。WHO 参考线通过 seed 导入数据库，成长曲线接口按宝宝性别、月龄和时间窗口返回参考点。
 
 **RAG 知识库**
 
@@ -112,37 +117,57 @@ Agent 可以调用记录、查询、知识检索、相册浏览和用户画像�
 `mobile/` 是一个 Expo (managed workflow) + React Native + TypeScript 的原生 Android 客户端，复用 `backend/` 提供的 FastAPI 接口。
 
 - 当前发布形态：v1 仅支持 Android，`minSdkVersion = 26`（Android 8.0+）；测试机安装使用本地 Gradle release APK，未上架 Play Store。
+- 当前移动端已覆盖聊天、历史、看板、记录、相册、家庭资料、长期记忆和 agent task 入口；聊天支持图片输入、语音转写、回复播放和 Expo push 通知跳转。
 - 默认连接的是生产后端 `https://lumingchuan.vip/api`；本地调试请按 [`mobile/AGENTS.md`](mobile/AGENTS.md) 临时改写 `mobile/app.json` 中的 `extra.apiBaseUrl`，不要把本地 URL 提交。
 - Android 查 bug 用本地 debug build（`npm run android:debug` / `android:install`，需要 Metro）；安装到 X90/测试机用本地 Gradle release build（`npm run android:release` 后 `adb install -r`），不需要走 Expo/EAS 额度。详细说明见 [`mobile/README.md`](mobile/README.md) 和 [`docs/android-native-build.md`](docs/android-native-build.md)。
 
 iOS 暂未列入 v1 范围。
 
-### 本地开发快速起步
+### 本地部署 / 快速起步
 
-下面这套流程让你在本机把 backend + frontend 跑起来，无需打开部署文档。生产部署仍以 [`docs/deployment.md`](docs/deployment.md) 为准。
+下面这套流程用于在本机跑起完整的 `frontend` + `backend` + 数据服务。默认路径是 Docker Compose：backend 容器会自动执行 Alembic 迁移、知识库 seed 和 WHO 生长参考数据 seed。只有在明确做前后端开发调试时，才使用后面的 host 开发模式。
 
 依赖：
 
 - Docker + Docker Compose v2
-- Python 3.12 与 [`uv`](https://docs.astral.sh/uv/)（backend）
-- Node ≥ 20（frontend 和 mobile）
+- Python 3.12 与 [`uv`](https://docs.astral.sh/uv/)（仅 host backend 开发模式需要）
+- Node ≥ 20（仅 host frontend 开发模式和 `mobile/` 需要）
 - 可选：Expo CLI、Android Studio / 实机（仅当需要跑 `mobile/`）
-- 可选：PostgreSQL client（`psql`），本地跑 `scripts.seed_knowledge` 时需要
+- 可选：PostgreSQL client（`psql`），仅 host backend 开发模式下本机跑 `scripts.seed_knowledge` 时需要
 
-1. 启动依赖（Postgres + pgvector、MinIO）：
+1. 配置 backend 环境：
+
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+
+   至少确认 `OPENAI_API_KEY`、`OPENAI_API_BASE`、`EMBEDDING_MODEL`、`EMBEDDING_DIMENSIONS` 和 `REGISTRATION_INVITE_CODE`。Docker 部署时，`OPENAI_API_BASE` 必须是 backend 容器可访问的地址；Docker Desktop 本地常用 `http://host.docker.internal:7024/v1`。
+
+2. 启动完整本地服务：
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+3. 验证服务状态：
+
+   ```bash
+   docker compose ps
+   curl -fsS http://localhost:8000/api/health
+   docker compose exec -T backend python -m scripts.check_knowledge_readiness
+   ```
+
+4. 注册第一个家庭：打开 `http://localhost:3000`，进入注册页，使用 `backend/.env` 中的 `REGISTRATION_INVITE_CODE`（默认值 `2026`）创建家庭、首个父母账号与密码。登录后到 `/profile` 补充宝宝档案。
+
+Host 开发模式仅用于本机改代码时快速调试，不代表本地部署形态：
+
+1. 只启动依赖（Postgres + pgvector、MinIO）：
 
    ```bash
    docker compose up -d postgres minio minio-init
    ```
 
-2. 配置 backend 环境：
-
-   ```bash
-   cp backend/.env.example backend/.env
-   # 至少确认 OPENAI_API_KEY / OPENAI_API_BASE / EMBEDDING_MODEL / EMBEDDING_DIMENSIONS / REGISTRATION_INVITE_CODE
-   ```
-
-3. 启动 backend（默认监听 `8000`）：
+2. 在宿主机启动 backend（默认监听 `8000`）：
 
    ```bash
    cd backend
@@ -153,7 +178,7 @@ iOS 暂未列入 v1 范围。
    uv run uvicorn fawn.main:app --reload
    ```
 
-4. 启动 frontend（默认监听 `3000`，会把 `/api/*` 反向代理到 backend）：
+3. 在另一个终端启动 frontend（默认监听 `3000`，会把 `/api/*` 反向代理到 backend）：
 
    ```bash
    cd frontend
@@ -161,7 +186,7 @@ iOS 暂未列入 v1 范围。
    INTERNAL_API_URL=http://localhost:8000 npm run dev
    ```
 
-5. （可选）启动 mobile：
+4. （可选）启动 mobile：
 
    ```bash
    cd mobile
@@ -169,8 +194,6 @@ iOS 暂未列入 v1 范围。
    npm run start         # Expo dev server
    npm run android       # 安装到连接的 Android 设备 / 模拟器
    ```
-
-6. 注册第一个家庭：打开 `http://localhost:3000`，进入注册页，使用 `backend/.env` 中的 `REGISTRATION_INVITE_CODE`（默认值 `2026`）创建家庭、首个父母账号与密码。登录后到 `/profile` 补充宝宝档案。
 
 默认端口：
 
@@ -196,7 +219,7 @@ iOS 暂未列入 v1 范围。
 |-----------|------|-------|-----------|
 | `backend/` | FastAPI backend: business APIs, LangGraph agent, RAG, long-term memory. | Python 3.12, FastAPI, SQLAlchemy, LangGraph, pgvector | `backend/pyproject.toml`, [`docs/deployment.md`](docs/deployment.md) |
 | `frontend/` | Next.js mobile-first web app: login, chat, dashboard, record, album. | Next.js 15, React 19, TypeScript, Tailwind CSS | `frontend/package.json` |
-| `mobile/` | Expo / React Native native Android client that reuses the same FastAPI backend. | Expo, React Native, TypeScript | [`mobile/README.md`](mobile/README.md), [`mobile/AGENTS.md`](mobile/AGENTS.md), [`docs/android-native-build.md`](docs/android-native-build.md) |
+| `mobile/` | Expo / React Native native Android client covering chat, dashboard, records, album, family profile and long-term memory entry points. | Expo, React Native, TypeScript | [`mobile/README.md`](mobile/README.md), [`mobile/AGENTS.md`](mobile/AGENTS.md), [`docs/android-native-build.md`](docs/android-native-build.md) |
 | `docs/` | Deployment, build, PRD and other reference material. | Markdown | [`docs/deployment.md`](docs/deployment.md), [`docs/android-native-build.md`](docs/android-native-build.md), [`docs/PRD-V2.md`](docs/PRD-V2.md) |
 | `docker-compose.yml` | One-shot way to bring up dependencies (Postgres + pgvector, MinIO) and the production backend/frontend services. | Docker Compose v2 | [`docs/deployment.md`](docs/deployment.md) |
 
@@ -210,21 +233,26 @@ The goal is to make the assistant useful because it understands the current fami
 
 - **Invite-code registration**: create a new family from the login page with `REGISTRATION_INVITE_CODE`. Registration creates the family and first parent admin account. Family names and usernames must be unique.
 - **Family and account management**: parent accounts can create and manage family or friend accounts, permissions, roles, display names, and passwords.
-- **AI chat assistant**: mobile-first chat with streaming responses, conversation history, message search, and image input. Conversations are scoped to the current family.
-- **Structured baby-care tracking**: growth, feeding, sleep, and health records can be edited manually or written/queryable through agent tools.
+- **AI chat assistant**: mobile-first chat with streaming responses, conversation history, message search, image input, and Android voice transcription / reply playback. Conversations are scoped to the current family.
+- **Structured baby-care tracking**: growth, feeding, sleep, health, and diaper records can be edited manually or written/queryable through agent tools.
 - **Dashboard**: baby profile, latest growth data, today's feeding and sleep summaries, health timeline, growth charts, and WHO reference lines.
 - **Album**: photos are stored in MinIO with database metadata, tags, soft delete, and download links.
 - **Long-term memory**: per-family Markdown memory files store assistant identity, family memory, baby memory, and user profiles.
 - **RAG knowledge base**: bundled seed artifacts provide retrieval over parenting references such as WHO, CDC, AAP, immunization, feeding, and newborn-care material.
+- **Mobile tasks and notifications**: the Android app can trigger background agent tasks and receive completion notifications through Expo push tokens.
 - **Gradual baby profile setup**: a newly registered family can start without a baby profile and fill in birth date, gender, and birth measurements later.
 
 ### Architecture
 
 ```text
-Next.js mobile web app
-  ├─ Login / Register
-  ├─ Chat / Dashboard / Record / Album / History / Profile
-  └─ /api proxy
+Clients
+  ├─ Next.js mobile web app
+  │    ├─ Login / Register
+  │    ├─ Chat / Dashboard / Record / Album / History / Profile
+  │    └─ /api proxy
+  └─ Expo Android app
+       ├─ Chat / History / Dashboard / Record / Album / Profile / Memory
+       └─ Voice input, TTS playback, push notification deep links
         │
         ▼
 FastAPI backend
@@ -238,7 +266,7 @@ FastAPI backend
         ├─ PostgreSQL + pgvector
         │    ├─ families, users, babies
         │    ├─ conversations, messages, summaries
-        │    ├─ growth, feeding, sleep, health records
+        │    ├─ growth, feeding, sleep, health and diaper records
         │    ├─ photos and tags
         │    ├─ knowledge documents/chunks/seed metadata
         │    ├─ agent tasks
@@ -272,7 +300,7 @@ The agent can call tools for recording and querying tracker data, searching the 
 
 **Tracker and dashboard**
 
-Growth, feeding, sleep, and health records are represented as structured database tables with list/create/update/delete APIs. Dashboard endpoints aggregate those records into summaries and chart-ready data. WHO growth references are seeded into PostgreSQL and returned according to baby sex, age, and requested chart range.
+Growth, feeding, sleep, health, and diaper records are represented as structured database tables with list/create/update/delete APIs. Dashboard endpoints aggregate those records into summaries and chart-ready data. WHO growth references are seeded into PostgreSQL and returned according to baby sex, age, and requested chart range.
 
 **RAG knowledge base**
 
@@ -291,37 +319,57 @@ Album photos and chat images are stored in MinIO. PostgreSQL keeps metadata, tag
 `mobile/` is an Expo (managed workflow) + React Native + TypeScript native Android client that reuses the FastAPI surface in `backend/`.
 
 - v1 ships Android only, `minSdkVersion = 26` (Android 8.0+). Test-device installs use a local Gradle release APK. Not published to the Play Store.
+- The current Android app covers chat, history, dashboard, records, album, family profile, long-term memory, and agent tasks. Chat supports image input, voice transcription, reply playback, and Expo push notification deep links.
 - The default backend baked into the app is production (`https://lumingchuan.vip/api`). For local debugging, follow [`mobile/AGENTS.md`](mobile/AGENTS.md) and temporarily override `extra.apiBaseUrl` in `mobile/app.json` — do not commit the local URL.
 - Use local debug builds (`npm run android:debug` / `android:install`, with Metro) for bug investigation. Use local Gradle release builds (`npm run android:release`, then `adb install -r`) for X90/test-device installs; this does not consume Expo/EAS quota. See [`mobile/README.md`](mobile/README.md) and [`docs/android-native-build.md`](docs/android-native-build.md).
 
 iOS is out of scope for v1.
 
-### Local development / Quick start
+### Local deployment / Quick start
 
-This is the path to bring up `backend` + `frontend` on your machine without reaching for the deployment guide. Production deployment still follows [`docs/deployment.md`](docs/deployment.md).
+This is the path to bring up the full `frontend` + `backend` + data services on your machine. The default path is Docker Compose: the backend container automatically runs Alembic migrations, the knowledge seed, and the WHO growth-reference seed. Use the host development mode below only when you are actively debugging frontend or backend code.
 
 Prerequisites:
 
 - Docker + Docker Compose v2
-- Python 3.12 and [`uv`](https://docs.astral.sh/uv/) (for backend)
-- Node ≥ 20 (for frontend and mobile)
+- Python 3.12 and [`uv`](https://docs.astral.sh/uv/) (host backend development mode only)
+- Node ≥ 20 (host frontend development mode and `mobile/` only)
 - Optional: Expo CLI and Android Studio / a real device (only if you need `mobile/`)
-- Optional: PostgreSQL client (`psql`) — required when running `scripts.seed_knowledge` on the host
+- Optional: PostgreSQL client (`psql`) — required only when running `scripts.seed_knowledge` on the host
 
-1. Start dependencies (Postgres + pgvector, MinIO):
+1. Configure the backend env:
+
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+
+   At minimum, check `OPENAI_API_KEY`, `OPENAI_API_BASE`, `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`, and `REGISTRATION_INVITE_CODE`. In Docker, `OPENAI_API_BASE` must be reachable from the backend container; Docker Desktop local setups commonly use `http://host.docker.internal:7024/v1`.
+
+2. Start the full local stack:
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+3. Verify the stack:
+
+   ```bash
+   docker compose ps
+   curl -fsS http://localhost:8000/api/health
+   docker compose exec -T backend python -m scripts.check_knowledge_readiness
+   ```
+
+4. Register the first family: open `http://localhost:3000`, go to the register page, and use the `REGISTRATION_INVITE_CODE` from `backend/.env` (default `2026`) to create the family, the first parent account, and a password. After login, go to `/profile` to fill in the baby profile.
+
+Host development mode is for fast local code iteration only; it is not the local deployment shape:
+
+1. Start only the dependencies (Postgres + pgvector, MinIO):
 
    ```bash
    docker compose up -d postgres minio minio-init
    ```
 
-2. Configure the backend env:
-
-   ```bash
-   cp backend/.env.example backend/.env
-   # At minimum set OPENAI_API_KEY / OPENAI_API_BASE / EMBEDDING_MODEL / EMBEDDING_DIMENSIONS / REGISTRATION_INVITE_CODE
-   ```
-
-3. Start the backend (listens on `8000`):
+2. Start the backend on the host (listens on `8000`):
 
    ```bash
    cd backend
@@ -332,7 +380,7 @@ Prerequisites:
    uv run uvicorn fawn.main:app --reload
    ```
 
-4. Start the frontend (listens on `3000`, proxies `/api/*` to the backend):
+3. In another terminal, start the frontend (listens on `3000`, proxies `/api/*` to the backend):
 
    ```bash
    cd frontend
@@ -340,7 +388,7 @@ Prerequisites:
    INTERNAL_API_URL=http://localhost:8000 npm run dev
    ```
 
-5. (Optional) start mobile:
+4. (Optional) start mobile:
 
    ```bash
    cd mobile
@@ -348,8 +396,6 @@ Prerequisites:
    npm run start         # Expo dev server
    npm run android       # install onto a connected Android device / emulator
    ```
-
-6. Register the first family: open `http://localhost:3000`, go to the register page, and use the `REGISTRATION_INVITE_CODE` from `backend/.env` (default `2026`) to create the family, the first parent account, and a password. After login, go to `/profile` to fill in the baby profile.
 
 Default ports:
 
