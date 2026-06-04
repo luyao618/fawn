@@ -2,14 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Linking,
+  Platform,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
+  AudioQuality,
+  IOSOutputFormat,
   RecordingPresets,
   requestRecordingPermissionsAsync,
+  setAudioModeAsync,
   useAudioRecorder,
   type RecordingOptions,
 } from 'expo-audio';
@@ -55,21 +59,67 @@ const ELAPSED_TICK_MS = 250;
  * showing the user a "识别失败" alert for what looks like a no-op tap. */
 const MIN_UPLOAD_MS = 500;
 
+const RECORDING_AUDIO_MODE = {
+  allowsRecording: true,
+  playsInSilentMode: true,
+  shouldPlayInBackground: false,
+};
+
+const PLAYBACK_AUDIO_MODE = {
+  allowsRecording: false,
+  playsInSilentMode: true,
+  shouldPlayInBackground: false,
+};
+
 /**
- * 16kHz mono m4a/aac matches the backend ASR submit body (codec:raw,
- * rate:16000, bits:16, channel:1). Derived from HIGH_QUALITY preset with
- * sample rate + channel count downgraded for ASR efficiency.
+ * Use lean iOS AAC settings for the primary path. Expo's preset includes
+ * Linear PCM keys alongside AAC; iOS can reject that combination on prepare.
  */
-const VOICE_RECORDING_OPTIONS: RecordingOptions = {
-  ...RecordingPresets.HIGH_QUALITY,
-  sampleRate: 16000,
+const IOS_M4A_RECORDING_OPTIONS: RecordingOptions = {
+  extension: '.m4a',
+  sampleRate: 44100,
   numberOfChannels: 1,
   bitRate: 64000,
-  android: {
-    ...RecordingPresets.HIGH_QUALITY.android,
-    outputFormat: 'mpeg4',
-    audioEncoder: 'aac',
+  android: { ...RecordingPresets.HIGH_QUALITY.android },
+  ios: {
+    outputFormat: IOSOutputFormat.MPEG4AAC,
+    audioQuality: AudioQuality.HIGH,
   },
+  web: { ...RecordingPresets.HIGH_QUALITY.web },
+};
+
+/**
+ * Last-resort iOS format for proving local capture when AAC prepare fails.
+ * This keeps files under the backend's 2 MB / 60s guard, but backend ASR may
+ * still reject it because production ASR is currently tuned for m4a/aac.
+ */
+const IOS_CAF_RECORDING_OPTIONS: RecordingOptions = {
+  extension: '.caf',
+  sampleRate: 16000,
+  numberOfChannels: 1,
+  bitRate: 256000,
+  android: { ...RecordingPresets.HIGH_QUALITY.android },
+  ios: {
+    outputFormat: IOSOutputFormat.LINEARPCM,
+    audioQuality: AudioQuality.HIGH,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: { ...RecordingPresets.HIGH_QUALITY.web },
+};
+
+const VOICE_RECORDING_OPTIONS: RecordingOptions =
+  Platform.OS === 'ios' ? IOS_M4A_RECORDING_OPTIONS : RecordingPresets.HIGH_QUALITY;
+
+const DEFAULT_UPLOAD_FILE = {
+  name: 'voice.m4a',
+  type: 'audio/m4a',
+};
+
+const IOS_CAF_UPLOAD_FILE = {
+  name: 'voice.caf',
+  type: 'audio/x-caf',
 };
 
 /**
@@ -96,6 +146,7 @@ export function VoiceHoldButton({ onTranscribed, onUploadStart, onUploadEnd, dis
   const disabledRef = useRef(disabled);
   disabledRef.current = disabled;
   const finishingRef = useRef(false); // synchronous idempotency guard
+  const uploadFileRef = useRef(DEFAULT_UPLOAD_FILE);
   // Tracks whether the finger is still on the button at any given moment.
   // Set to true on LongPress.onStart, flipped to false in onEnd/onFinalize.
   // We read this AFTER the OS permission dialog resolves — if the dialog
@@ -197,9 +248,11 @@ export function VoiceHoldButton({ onTranscribed, onUploadStart, onUploadEnd, dis
     // that permission is granted.
     if (!ok || stageRef.current !== 'idle' || !fingerDownRef.current) return;
     try {
-      await recorder.prepareToRecordAsync();
+      await setAudioModeAsync(RECORDING_AUDIO_MODE);
+      await prepareRecorder();
       recorder.record();
     } catch (err) {
+      await setAudioModeAsync(PLAYBACK_AUDIO_MODE).catch(() => undefined);
       Alert.alert('录音失败', err instanceof Error ? err.message : '请稍后重试');
       return;
     }
@@ -217,6 +270,22 @@ export function VoiceHoldButton({ onTranscribed, onUploadStart, onUploadEnd, dis
     }, MAX_RECORDING_MS);
   }
 
+  async function prepareRecorder() {
+    uploadFileRef.current = DEFAULT_UPLOAD_FILE;
+    if (Platform.OS !== 'ios') {
+      await recorder.prepareToRecordAsync();
+      return;
+    }
+
+    try {
+      await recorder.prepareToRecordAsync(IOS_M4A_RECORDING_OPTIONS);
+    } catch (err) {
+      console.warn('[voice] iOS m4a recorder prepare failed; retrying caf pcm', err);
+      await recorder.prepareToRecordAsync(IOS_CAF_RECORDING_OPTIONS);
+      uploadFileRef.current = IOS_CAF_UPLOAD_FILE;
+    }
+  }
+
   async function finishRecording(cancelled: boolean) {
     // Idempotency — onEnd, onFinalize(!success), and autoStop can all race.
     if (finishingRef.current) return;
@@ -228,6 +297,7 @@ export function VoiceHoldButton({ onTranscribed, onUploadStart, onUploadEnd, dis
       } catch {
         // recorder may already be stopped by the auto-stop branch; ignore.
       }
+      await setAudioModeAsync(PLAYBACK_AUDIO_MODE).catch(() => undefined);
       if (cancelled) return;
       // Drop sub-500ms recordings silently — almost always an accidental
       // tap-then-release that would either charge Doubao for noise or surface
@@ -242,10 +312,11 @@ export function VoiceHoldButton({ onTranscribed, onUploadStart, onUploadEnd, dis
       try {
         // Temporary log to verify cancel path stays silent — see AC7 in plan.
         console.log('[voice] POST transcribe', uri);
+        const uploadFile = uploadFileRef.current;
         const { text } = await transcribeVoice({
           uri,
-          name: 'voice.m4a',
-          type: 'audio/m4a',
+          name: uploadFile.name,
+          type: uploadFile.type,
         });
         if (text.trim().length > 0) {
           uploadOk = true;
