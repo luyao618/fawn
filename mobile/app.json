@@ -28,6 +28,17 @@
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
+    "ios": {
+      "bundleIdentifier": "com.luyao618.fawn.local",
+      "appleTeamId": "MQGR7A6V5C",
+      "buildNumber": "10",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "鹿小宝需要使用相机，用于拍摄宝宝照片并上传到家庭相册。",
+        "NSPhotoLibraryUsageDescription": "鹿小宝需要访问相册，用于选择宝宝照片并上传到家庭相册。",
+        "NSMicrophoneUsageDescription": "鹿小宝需要使用麦克风，用于录制语音消息并识别成聊天文字。"
+      }
+    },
     "plugins": [
       [
         "expo-build-properties",
@@ -38,9 +49,17 @@
         }
       ],
       [
-        "expo-notifications",
+        "./plugins/withAndroidNotifications",
         {
           "color": "#2c7a4b"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "鹿小宝需要访问相册，用于选择宝宝照片并上传到家庭相册。",
+          "cameraPermission": "鹿小宝需要使用相机，用于拍摄宝宝照片并上传到家庭相册。",
+          "microphonePermission": "鹿小宝需要使用麦克风，用于录制语音消息并识别成聊天文字。"
         }
       ],
       "expo-font",
@@ -48,7 +67,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "用于语音输入聊天消息"
+          "microphonePermission": "鹿小宝需要使用麦克风，用于录制语音消息并识别成聊天文字。"
         }
       ]
     ],

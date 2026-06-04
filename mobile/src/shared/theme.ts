@@ -215,22 +215,22 @@ export const shadows: Record<'card' | 'float' | 'modal' | 'topbar' | 'tabbar', S
 
 export const fontFamily = {
   sans: Platform.select({
-    ios: 'Nunito',
+    ios: 'Nunito_400Regular',
     android: 'Nunito_400Regular',
     default: 'System',
   }) as string,
   sansSemibold: Platform.select({
-    ios: 'Nunito-SemiBold',
+    ios: 'Nunito_600SemiBold',
     android: 'Nunito_600SemiBold',
     default: 'System',
   }) as string,
   sansBold: Platform.select({
-    ios: 'Nunito-Bold',
+    ios: 'Nunito_700Bold',
     android: 'Nunito_700Bold',
     default: 'System',
   }) as string,
   sansExtraBold: Platform.select({
-    ios: 'Nunito-ExtraBold',
+    ios: 'Nunito_800ExtraBold',
     android: 'Nunito_800ExtraBold',
     default: 'System',
   }) as string,

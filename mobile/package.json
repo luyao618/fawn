@@ -11,7 +11,10 @@
     "android:debug": "bash scripts/android-debug.sh",
     "android:release": "bash scripts/android-release.sh",
     "android:install": "bash scripts/android-install.sh",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "ios:prebuild": "expo prebuild --platform ios --no-install",
+    "ios:device": "expo run:ios --device",
+    "ios:release:device": "bash scripts/ios-release-device.sh"
   },
   "dependencies": {
     "@expo-google-fonts/nunito": "^0.4.2",

@@ -11,9 +11,10 @@ local flows:
 EAS is optional for cloud/production distribution. Do not spend EAS quota just
 to put a test build on a local device.
 
-> Sibling docs: see `mobile/README.md` for the mobile overview. Local Gradle
-> builds and EAS builds can coexist — the `android/` directory is generated on
-> demand and git-ignored.
+> Sibling docs: see `mobile/README.md` for the mobile overview and
+> `ios-native-build.md` for local iOS simulator / iPhone builds. Local Gradle
+> builds, Xcode builds, and EAS builds can coexist — the generated `android/`
+> and `ios/` directories are created on demand and git-ignored.
 
 ## Build policy (read this first)
 

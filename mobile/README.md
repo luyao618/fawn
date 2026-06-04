@@ -1,4 +1,4 @@
-# Fawn Mobile (Android)
+# Fawn Mobile
 
 > **Backend URLs (read first):**
 > - **Default = Production**: `https://lumingchuan.vip/api` (in `app.json` and `src/lib/api.ts`). This is what every build ships with.
@@ -10,9 +10,9 @@
 React Native + Expo app for the Fawn family parenting agent system.
 
 - **Stack**: Expo (managed workflow) + TypeScript + React Native
-- **Target**: Android only in v1, `minSdkVersion = 26` (Android 8.0+)
+- **Targets**: Android (`minSdkVersion = 26`) and local iOS development builds
 - **Backend**: reuses the existing FastAPI backend in `../backend`
-- **Distribution (v1)**: local Gradle APK for test-device sideloads; no Play Store
+- **Distribution**: local Android APKs and local iOS simulator/device installs; no store pipeline by default
 
 ## Layout in the monorepo
 
@@ -20,7 +20,7 @@ React Native + Expo app for the Fawn family parenting agent system.
 fawn/
 ├── backend/    FastAPI + LangGraph
 ├── frontend/   Next.js web app
-└── mobile/     ← this package (Expo Android)
+└── mobile/     ← this package (Expo mobile)
 ```
 
 ## Local development
@@ -30,15 +30,18 @@ cd mobile
 npm install
 npm run start         # Expo dev server (Metro)
 npm run android       # launch on connected Android device / emulator
+npm run ios           # launch on an iOS simulator
+npm run ios:device    # install/run on a connected iPhone via Xcode signing
 ```
 
 You need:
 
 - Node ≥ 20
 - Android Studio with an emulator, or a real Android 8.0+ device with USB debugging
+- Xcode for iOS simulator or local iPhone development installs
 - Optional only for cloud builds: an [Expo account](https://expo.dev) and `npm i -g eas-cli`
 
-## Building locally (no EAS)
+## Building locally (no EAS): Android
 
 For day-to-day Android UI work we now have a fully local build chain that
 skips EAS / cloud queues. See [`../docs/android-native-build.md`](../docs/android-native-build.md)
@@ -65,12 +68,33 @@ production/store artifacts.
 
 `android/` is generated on demand via `expo prebuild` and is git-ignored.
 
+## Building locally (no EAS): iOS
+
+Use Expo CNG/prebuild for iOS too; `ios/` is generated on demand and
+git-ignored.
+
+```bash
+cd mobile
+npm run ios:prebuild
+npm run ios           # simulator
+npm run ios:device    # connected iPhone, e.g. iPhone 16
+npm run ios:release:device  # connected iPhone, embedded JS bundle, no Metro
+```
+
+See [`../docs/ios-native-build.md`](../docs/ios-native-build.md) for Xcode,
+Apple ID/team signing, device trust, permission prompts, and known local push
+notification limits. It also documents the `devicectl` install fallback for
+machines where Expo's iPhone installer cannot read the device pair record. Use
+`ios:release:device` when you want the app to open directly against
+`https://lumingchuan.vip/api` without a Metro bundle URL. This local flow does
+not require TestFlight, App Store Connect, or App Store metadata.
+
 ## Building with EAS (optional)
 
 EAS is optional and should not be the default way to install builds on local
 test devices. Use it only when you intentionally need Expo's cloud build
-environment or a production distribution pipeline. The `preview` profile in
-`eas.json` produces a sideloadable `.apk` file (not an `.aab`).
+environment or a production distribution pipeline. The current EAS profiles are
+Android-focused; use the local Xcode flow above for first-stage iOS testing.
 
 ```bash
 cd mobile
