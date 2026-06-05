@@ -32,7 +32,7 @@ import {
 } from '../shared/api';
 import { dedupById } from '../shared/utils/dedupById';
 import { useAuth } from '../auth/AuthContext';
-import { getApiBaseUrl } from '../lib/api';
+import { getApiBaseUrl, getApiErrorMessage } from '../lib/api';
 import { getToken } from '../lib/tokenStorage';
 import type { User } from '../lib/types';
 import { roleLabel } from '../lib/utils';
@@ -554,6 +554,8 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       quality: 0.8,
     });
     if (result.canceled || result.assets.length === 0) return;
@@ -570,7 +572,7 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
         filename,
       });
     } catch (err) {
-      Alert.alert('上传失败', (err as Error).message);
+      Alert.alert('上传失败', getApiErrorMessage(err));
     } finally {
       setUploading(false);
     }
