@@ -96,6 +96,8 @@ async function pickFromLibrary(): Promise<PickedAsset | null> {
   }
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    preferredAssetRepresentationMode:
+      ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     quality: 0.85,
     exif: true,
   });
