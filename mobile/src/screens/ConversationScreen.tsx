@@ -630,21 +630,6 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
           callbacks,
         );
 
-      const refreshFirstPage = async (targetConversationId: string) => {
-        // Refresh page 0 only (NOT all pages, to avoid spurious refetch of every
-        // previously-loaded older page). React Query v5 removed `refetchPage`, so
-        // we manually fetch page 0 and splice it into the cache; dedup-by-id in
-        // `baseMessages` protects against boundary overlap with page 1.
-        const fresh = await fetchConversation(targetConversationId, undefined, 50);
-        const key = chatQueries.messages(targetConversationId).queryKey;
-        queryClient.setQueryData<
-          { pages: ConversationDetail[]; pageParams: (string | undefined)[] } | undefined
-        >(key, (old) => ({
-          pages: [fresh, ...(old?.pages.slice(1) ?? [])],
-          pageParams: [undefined, ...(old?.pageParams.slice(1) ?? [])],
-        }));
-      };
-
       const retryAfterSessionExpired = async () => {
         // Expired sends are server-defined as non-persisting. Reset the local
         // streaming placeholder, resolve the current active conversation, then
@@ -685,12 +670,34 @@ export function ConversationScreen({ conversationId, onBack, hideHeader, tabRoot
           ? await retryAfterSessionExpired()
           : resolvedId;
 
-      await refreshFirstPage(completedConversationId);
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.chat.all,
-      });
+      // Fetch the authoritative page 0 (the real user + assistant rows) BEFORE
+      // touching any state, so the swap from optimistic → canonical happens in a
+      // single render.
+      const fresh = await fetchConversation(completedConversationId, undefined, 50);
+      const messagesKey = chatQueries.messages(completedConversationId).queryKey;
+      // Commit the fresh page into the cache and drop the optimistic rows in the
+      // same React batch. Splicing page 0 (rather than invalidating the whole
+      // ['chat'] tree) avoids force-refetching the on-screen messages query,
+      // which would otherwise blank the timeline and relayout the inverted list —
+      // the flicker where only the just-sent message is briefly visible. dedup-by-id
+      // in `baseMessages` protects against boundary overlap with page 1.
+      queryClient.setQueryData<
+        { pages: ConversationDetail[]; pageParams: (string | undefined)[] } | undefined
+      >(messagesKey, (old) => ({
+        pages: [fresh, ...(old?.pages.slice(1) ?? [])],
+        pageParams: [undefined, ...(old?.pageParams.slice(1) ?? [])],
+      }));
       setOptimisticUser(null);
       setStreamingAssistant(null);
+      // Refresh conversation-list / history previews in the background (title,
+      // last-message, ordering) without blocking or refetching the visible
+      // messages query.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.chat.conversations(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.chat.historyRoot(),
+      });
       if (
         completedMessageId &&
         (completedMessageType === 'text' || completedMessageType === 'safety_alert')
