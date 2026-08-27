@@ -9,7 +9,7 @@ class LLMConfig(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     default_provider: str = "anthropic"
-    default_model: str = "claude-sonnet-4-20250514"
+    default_model: str = "claude-sonnet-4-6"
     summary_provider: str | None = None
     summary_model: str | None = None
     vision_provider: str | None = None

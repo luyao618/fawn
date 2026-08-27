@@ -67,6 +67,10 @@ TestSessionFactory = async_sessionmaker(
 def memory_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = tmp_path / "memory"
     monkeypatch.setenv("MEMORY_ROOT", str(root))
+    # The production default secret is deliberately short so a real deployment
+    # that forgets to set JWT_SECRET still trips PyJWT's InsecureKeyLengthWarning.
+    # Tests supply a realistic >=32-byte secret so that signal stays meaningful.
+    monkeypatch.setenv("JWT_SECRET", "fawn-test-jwt-secret-value-for-hs256-signing")
     from fawn.config import get_settings
 
     get_settings.cache_clear()

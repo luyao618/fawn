@@ -858,7 +858,7 @@ async def transcribe_voice(
         total += len(chunk)
         if total > _VOICE_MAX_BYTES:
             raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail="录音文件过大，请缩短时长",
             )
         chunks.append(chunk)
