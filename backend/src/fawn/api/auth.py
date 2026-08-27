@@ -65,15 +65,15 @@ async def register(
     username = body.username.strip()
     display_name = body.display_name.strip()
     if not username:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="用户名不能为空")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="用户名不能为空")
     if not display_name:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="昵称不能为空")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="昵称不能为空")
     try:
         family_name = display_family_name(body.family_name)
         family_name_key = normalize_family_name(family_name)
     except FamilyNameError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="家庭名称不能为空"
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="家庭名称不能为空"
         ) from exc
 
     existing_user = await db.scalar(select(User).where(User.username == username))
@@ -192,7 +192,7 @@ async def update_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     updates = body.model_dump(exclude_unset=True)
     if updates.get("access_type") and user.id == parent.id and updates["access_type"] != "parent":
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Cannot demote yourself")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Cannot demote yourself")
     for key, value in updates.items():
         setattr(user, key, value)
     if "access_type" in updates:
@@ -229,7 +229,7 @@ async def delete_user(
     if user is None or user.family_id != parent.family_id or user.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     if user.id == parent.id:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Cannot delete yourself")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Cannot delete yourself")
     if user.access_type == "parent":
         parent_count = await db.scalar(
             select(func.count())
@@ -242,7 +242,7 @@ async def delete_user(
         )
         if (parent_count or 0) <= 1:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Cannot delete the last parent account",
             )
     user.deleted_at = datetime.now(UTC)

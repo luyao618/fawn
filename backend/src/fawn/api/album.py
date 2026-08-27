@@ -54,7 +54,7 @@ async def upload_photo(
         )
     except profile_service.NotFound as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="请先在家庭页创建宝宝档案",
         ) from exc
     except album_service.NotFound as exc:

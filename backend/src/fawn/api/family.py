@@ -29,7 +29,7 @@ async def update_family(
         family_name_key = normalize_family_name(family_name)
     except FamilyNameError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="家庭名称不能为空",
         ) from exc
 
