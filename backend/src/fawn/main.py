@@ -1,3 +1,5 @@
+from importlib.metadata import version
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5,7 +7,7 @@ from fawn.api.router import api_router
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Fawn API", version="2.1.5")
+    app = FastAPI(title="Fawn API", version=version("fawn-backend"))
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
