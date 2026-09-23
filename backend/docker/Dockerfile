@@ -2,12 +2,13 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir hatchling
+COPY --from=ghcr.io/astral-sh/uv:0.11.21 /uv /usr/local/bin/uv
 
-COPY pyproject.toml .
+COPY pyproject.toml uv.lock ./
 COPY src/ src/
 
-RUN pip install --no-cache-dir .
+# Keep the install paths used by the runtime stage below.
+RUN UV_PROJECT_ENVIRONMENT=/usr/local uv sync --frozen --no-dev --no-editable --no-cache --no-python-downloads
 
 FROM python:3.12-slim
 
