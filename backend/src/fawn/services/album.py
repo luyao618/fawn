@@ -22,6 +22,18 @@ EXIF_CAPTURE_TAGS = (
     (36868, 36882),  # DateTimeDigitized, OffsetTimeDigitized
     (306, 36880),  # DateTime, OffsetTime
 )
+ALBUM_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+# Stored object extensions come from this mapping, never from the client filename.
+# HEIC/HEIF are stored as-is; thumbnail/EXIF extraction degrade gracefully when
+# Pillow cannot decode them.
+ALBUM_MIME_EXTENSIONS = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/heic": "heic",
+    "image/heif": "heif",
+}
 
 
 class AlbumError(Exception):
@@ -34,6 +46,21 @@ class NotFound(AlbumError):
 
 class PermissionDenied(AlbumError):
     pass
+
+
+class UnsupportedMediaType(AlbumError):
+    pass
+
+
+class UploadTooLarge(AlbumError):
+    pass
+
+
+def normalize_album_mime_type(mime_type: str | None) -> str:
+    normalized = (mime_type or "").split(";", 1)[0].strip().lower()
+    if normalized not in ALBUM_MIME_EXTENSIONS:
+        raise UnsupportedMediaType(f"Unsupported photo type: {normalized or 'unknown'}")
+    return normalized
 
 
 def thumbnail_storage_key_for(photo: Photo) -> str:
@@ -134,6 +161,10 @@ async def upload_photo(
     file_size: int,
     taken_at: str | None = None,
 ) -> Photo:
+    mime_type = normalize_album_mime_type(mime_type)
+    if len(file_bytes) > ALBUM_MAX_UPLOAD_BYTES:
+        raise UploadTooLarge("Photo exceeds the upload size limit")
+
     # Verify baby exists
     baby = await db.get(Baby, baby_id)
     if baby is None:
@@ -141,7 +172,7 @@ async def upload_photo(
     if baby.family_id != user.family_id:
         raise PermissionDenied("Cannot upload a photo for another family")
 
-    ext = filename.rsplit(".", 1)[-1] if "." in filename else "bin"
+    ext = ALBUM_MIME_EXTENSIONS[mime_type]
     file_id = uuid.uuid4()
     storage_key = f"photos/{baby_id}/{file_id}.{ext}"
     thumbnail_storage_key = _make_thumbnail_storage_key(baby_id, file_id)

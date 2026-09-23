@@ -5,11 +5,16 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
+import pytest
+from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fawn.api.album import _read_upload_limited
 from fawn.models import Baby, Photo, PhotoTag, User
+from fawn.services import album as album_service
+from fawn.services.album import ALBUM_MAX_UPLOAD_BYTES
 
 
 async def create_photo(
@@ -211,6 +216,211 @@ async def test_upload_photo_falls_back_to_upload_time(
     assert response.status_code == 201
     taken_at = _parse_api_datetime(response.json()["taken_at"])
     assert before - timedelta(seconds=1) <= taken_at <= after + timedelta(seconds=1)
+
+
+async def _post_upload(
+    client: AsyncClient,
+    headers: dict,
+    *,
+    filename: str,
+    content: bytes,
+    mime_type: str,
+):
+    files = {"file": (filename, io.BytesIO(content), mime_type)}
+    with patch("fawn.services.album.put_bytes") as put_bytes_mock, patch(
+        "fawn.api.album.get_presigned_url", return_value="http://minio/test"
+    ):
+        response = await client.post("/api/album/photos", files=files, headers=headers)
+    return response, put_bytes_mock
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "mime_type"),
+    [
+        ("evil.html", b"<html><script>alert(1)</script></html>", "text/html"),
+        ("evil.svg", b"<svg xmlns='http://www.w3.org/2000/svg' onload='alert(1)'/>", "image/svg+xml"),
+        ("photo.jpg", b"<html></html>", "text/html"),
+        ("doc.pdf", b"%PDF-1.4", "application/pdf"),
+        ("blob.bin", b"\x00\x01", "application/octet-stream"),
+    ],
+)
+async def test_upload_photo_rejects_unsupported_types(
+    db: AsyncSession,
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+    filename: str,
+    content: bytes,
+    mime_type: str,
+):
+    response, put_bytes_mock = await _post_upload(
+        client, auth_headers, filename=filename, content=content, mime_type=mime_type
+    )
+
+    assert response.status_code == 415
+    put_bytes_mock.assert_not_called()
+    assert await db.scalar(select(func.count()).select_from(Photo)) == 0
+
+
+async def test_upload_photo_rejects_oversize_file(
+    db: AsyncSession,
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+):
+    content = b"\xff" * (ALBUM_MAX_UPLOAD_BYTES + 1)
+    response, put_bytes_mock = await _post_upload(
+        client, auth_headers, filename="big.jpg", content=content, mime_type="image/jpeg"
+    )
+
+    assert response.status_code == 413
+    put_bytes_mock.assert_not_called()
+    assert await db.scalar(select(func.count()).select_from(Photo)) == 0
+
+
+async def test_upload_photo_accepts_file_at_size_limit(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+):
+    content = b"\xff" * ALBUM_MAX_UPLOAD_BYTES
+    response, _ = await _post_upload(
+        client, auth_headers, filename="max.jpg", content=content, mime_type="image/jpeg"
+    )
+
+    assert response.status_code == 201
+
+
+async def test_upload_photo_derives_extension_from_mime_type(
+    db: AsyncSession,
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+):
+    response, put_bytes_mock = await _post_upload(
+        client,
+        auth_headers,
+        filename="evil.html",
+        content=_jpeg_bytes(),
+        mime_type="image/jpeg",
+    )
+
+    assert response.status_code == 201
+    storage_key, _, stored_mime = put_bytes_mock.call_args_list[0].args
+    assert storage_key.startswith(f"photos/{test_baby.id}/")
+    assert storage_key.endswith(".jpg")
+    assert ".html" not in storage_key
+    assert stored_mime == "image/jpeg"
+
+    photo = await db.get(Photo, uuid.UUID(response.json()["id"]))
+    assert photo.storage_key == storage_key
+    assert photo.mime_type == "image/jpeg"
+    assert photo.original_filename == "evil.html"
+
+
+async def test_upload_photo_accepts_jpeg(
+    db: AsyncSession,
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+):
+    content = _jpeg_bytes()
+    response, put_bytes_mock = await _post_upload(
+        client, auth_headers, filename="baby.jpeg", content=content, mime_type="image/jpeg"
+    )
+
+    assert response.status_code == 201
+    storage_key, stored_bytes, stored_mime = put_bytes_mock.call_args_list[0].args
+    assert storage_key.endswith(".jpg")
+    assert stored_bytes == content
+    assert stored_mime == "image/jpeg"
+    photo = await db.get(Photo, uuid.UUID(response.json()["id"]))
+    assert photo.file_size_bytes == len(content)
+
+
+@pytest.mark.parametrize(
+    ("mime_type", "expected_ext"),
+    [("image/heic", ".heic"), ("image/heif", ".heif"), ("IMAGE/HEIC", ".heic")],
+)
+async def test_upload_photo_preserves_heic_without_decoding(
+    db: AsyncSession,
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+    mime_type: str,
+    expected_ext: str,
+):
+    # Not decodable by stock Pillow: the original must still be stored untouched,
+    # with thumbnail generation degrading to None.
+    content = b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic" + b"\x00" * 64
+    response, put_bytes_mock = await _post_upload(
+        client, auth_headers, filename="IMG_0001.HEIC", content=content, mime_type=mime_type
+    )
+
+    assert response.status_code == 201
+    assert response.json()["thumbnail_url"] is None
+    assert put_bytes_mock.call_count == 1
+    storage_key, stored_bytes, stored_mime = put_bytes_mock.call_args_list[0].args
+    assert storage_key.endswith(expected_ext)
+    assert stored_bytes == content
+    assert stored_mime == mime_type.lower()
+    photo = await db.get(Photo, uuid.UUID(response.json()["id"]))
+    assert photo.mime_type == mime_type.lower()
+
+
+@pytest.mark.parametrize(
+    ("mime_type", "expected_ext"),
+    [("image/png", ".png"), ("image/webp", ".webp"), ("image/gif", ".gif")],
+)
+async def test_upload_photo_accepts_other_allowed_types(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_baby: Baby,
+    mime_type: str,
+    expected_ext: str,
+):
+    response, put_bytes_mock = await _post_upload(
+        client, auth_headers, filename="upload", content=b"image bytes", mime_type=mime_type
+    )
+
+    assert response.status_code == 201
+    assert put_bytes_mock.call_args_list[0].args[0].endswith(expected_ext)
+
+
+async def test_read_upload_limited_ignores_content_length():
+    # A client may under-report Content-Length; the guard must count real bytes.
+    from starlette.datastructures import Headers, UploadFile
+
+    content = b"x" * (ALBUM_MAX_UPLOAD_BYTES + 1)
+    upload = UploadFile(
+        file=io.BytesIO(content),
+        filename="big.jpg",
+        headers=Headers({"content-type": "image/jpeg", "content-length": "10"}),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _read_upload_limited(upload, ALBUM_MAX_UPLOAD_BYTES)
+    assert exc_info.value.status_code == 413
+
+
+async def test_service_rejects_unsupported_mime_type(
+    db: AsyncSession,
+    test_user: User,
+    test_baby: Baby,
+):
+    with patch("fawn.services.album.put_bytes") as put_bytes_mock, pytest.raises(
+        album_service.UnsupportedMediaType
+    ):
+        await album_service.upload_photo(
+            db,
+            test_user,
+            baby_id=test_baby.id,
+            file_bytes=b"<svg/>",
+            filename="x.jpg",
+            mime_type="image/svg+xml",
+            file_size=6,
+        )
+    put_bytes_mock.assert_not_called()
 
 
 async def test_list_photos(client: AsyncClient, auth_headers: dict):

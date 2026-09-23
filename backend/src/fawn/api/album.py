@@ -15,6 +15,24 @@ from fawn.services.storage import get_presigned_url
 
 router = APIRouter(prefix="/album", tags=["album"])
 
+_UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+
+async def _read_upload_limited(file: UploadFile, max_bytes: int) -> bytes:
+    # Content-Length is client-controlled; count the bytes actually received so
+    # worker memory stays bounded at max_bytes.
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await file.read(_UPLOAD_CHUNK_BYTES):
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="照片文件过大，最大 25 MB",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
 
 def _photo_to_read(photo) -> dict:
     return {
@@ -40,15 +58,23 @@ async def upload_photo(
     db: AsyncSession = Depends(get_db),
 ):
     try:
+        mime_type = album_service.normalize_album_mime_type(file.content_type)
+    except album_service.UnsupportedMediaType as exc:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="仅支持 JPEG、PNG、WebP、GIF、HEIC、HEIF 格式的照片",
+        ) from exc
+    content = await _read_upload_limited(file, album_service.ALBUM_MAX_UPLOAD_BYTES)
+
+    try:
         baby = await profile_service.get_baby(db, user.family_id)
-        content = await file.read()
         photo = await album_service.upload_photo(
             db,
             user,
             baby_id=baby.id,
             file_bytes=content,
             filename=file.filename or "upload.bin",
-            mime_type=file.content_type or "application/octet-stream",
+            mime_type=mime_type,
             file_size=len(content),
             taken_at=taken_at,
         )
@@ -59,6 +85,14 @@ async def upload_photo(
         ) from exc
     except album_service.NotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except album_service.UnsupportedMediaType as exc:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(exc)
+        ) from exc
+    except album_service.UploadTooLarge as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(exc)
+        ) from exc
     return _photo_to_read(photo)
 
 
