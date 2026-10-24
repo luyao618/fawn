@@ -2,7 +2,7 @@
   "expo": {
     "name": "鹿小宝",
     "slug": "fawn",
-    "version": "2.3.2",
+    "version": "2.3.3",
     "orientation": "portrait",
     "icon": "./assets/fawn-icon.png",
     "userInterfaceStyle": "light",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.luyao618.fawn",
-      "versionCode": 10,
+      "versionCode": 11,
       "adaptiveIcon": {
         "foregroundImage": "./assets/fawn-adaptive-foreground.png",
         "backgroundImage": "./assets/fawn-adaptive-background.png",
@@ -31,7 +31,7 @@
     "ios": {
       "bundleIdentifier": "com.luyao618.fawn.local",
       "appleTeamId": "MQGR7A6V5C",
-      "buildNumber": "10",
+      "buildNumber": "11",
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "鹿小宝需要使用相机，用于拍摄宝宝照片并上传到家庭相册。",
@@ -80,7 +80,7 @@
       "eas": {
         "projectId": "950d40e4-ccb4-4bae-9d0c-fb9f9237c0e2"
       },
-      "apiBaseUrl": "https://lumingchuan.vip/api"
+      "apiBaseUrl": "https://lumingchuan.vip/fawn/api"
     },
     "owner": "luyao618"
   }

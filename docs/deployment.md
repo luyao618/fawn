@@ -86,7 +86,7 @@ docker-compose.override.yml
 cat > .env <<'EOF'
 COMPOSE_PROJECT_NAME=fawn
 FRONTEND_PORT=3000
-NEXT_PUBLIC_API_URL=/api
+NEXT_PUBLIC_API_URL=/fawn/api
 NEXT_PUBLIC_USE_MOCK=false
 INTERNAL_API_URL=http://backend:8000
 JWT_SECRET=replace-with-a-long-random-production-secret
@@ -94,6 +94,7 @@ POSTGRES_PASSWORD=replace-with-a-long-random-db-password
 MINIO_ROOT_USER=fawnminio
 MINIO_ROOT_PASSWORD=replace-with-a-long-random-minio-password
 MINIO_PUBLIC_ENDPOINT=your-domain.com
+MINIO_PUBLIC_PATH_PREFIX=/fawn/storage
 MINIO_PUBLIC_USE_SSL=true
 MINIO_REGION=us-east-1
 EOF
@@ -109,7 +110,7 @@ EOF
 如果前端、后端都走同一个域名和反向代理，保留：
 
 ```bash
-NEXT_PUBLIC_API_URL=/api
+NEXT_PUBLIC_API_URL=/fawn/api
 INTERNAL_API_URL=http://backend:8000
 ```
 
@@ -136,14 +137,14 @@ cp backend/.env.example backend/.env
 
 ```bash
 DEFAULT_PROVIDER=openai
-DEFAULT_MODEL=claude-sonnet-4.6
+DEFAULT_MODEL=gemini-4-argon
 SUMMARY_PROVIDER=openai
-SUMMARY_MODEL=claude-sonnet-4.6
+SUMMARY_MODEL=gemini-4-argon
 VISION_PROVIDER=openai
-VISION_MODEL=claude-sonnet-4.6
+VISION_MODEL=gemini-4-argon
 
 OPENAI_API_KEY=replace-with-your-key
-OPENAI_API_BASE=http://host.docker.internal:7024/v1
+OPENAI_API_BASE=https://raven-api.yaolu.me/v1
 
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1024
@@ -151,6 +152,10 @@ TOOL_CALLING_ENABLED=true
 
 REGISTRATION_INVITE_CODE=2026
 ```
+
+当前服务器通过 Raven 的 OpenAI-compatible 接口使用 `gemini-4-argon`，主对话、摘要和图片理解采用同一模型。知识库向量仍使用 `text-embedding-3-small`，不能替换成聊天模型。可用模型 ID 应以 Raven `/v1/models` 的实时返回为准。
+
+修改 `backend/.env` 的模型配置后，执行 `docker compose up -d --no-deps --no-build backend`，让容器环境变量和进程内缓存的模型实例重新加载。仅重启旧容器不会重新读取 Compose 的 `env_file`。
 
 `REGISTRATION_INVITE_CODE` 是注册家庭的邀请码。不设置时后端默认是 `2026`。个人部署可以先用默认值，但只要服务可能被别人访问，就建议改成你自己的值。
 
@@ -332,7 +337,7 @@ docker compose logs -f frontend
 
 默认地址：
 
-- Frontend: `http://localhost:3000`
+- Frontend: `http://localhost:3000/fawn`
 - Backend API docs: `http://localhost:8000/docs`
 - MinIO console: `http://localhost:9001`
 
@@ -344,7 +349,7 @@ docker compose logs -f frontend
 4. 创建家庭、账号名、昵称、角色和密码。
 5. 注册完成后回到登录页手动登录。
 
-新注册家庭默认没有宝宝档案。登录后先到 `/profile` 创建或补充宝宝资料。宝宝未出生或资料不完整时，可以先只填能确定的信息。
+新注册家庭默认没有宝宝档案。登录后先到 `/fawn/profile` 创建或补充宝宝资料。宝宝未出生或资料不完整时，可以先只填能确定的信息。
 
 ## 3. 生产访问和端口建议
 
@@ -355,15 +360,16 @@ docker compose logs -f frontend
 
 如果用 Nginx、Caddy、Traefik 等反向代理，推荐：
 
-- `https://your-domain/` 代理到 frontend `3000`。
-- `https://your-domain/api/*` 代理到 backend `8000`。
-- `https://your-domain/fawn/*` 代理到 MinIO `9000`，用于私有 bucket 的 presigned 照片 URL。
-- 前端保持 `NEXT_PUBLIC_API_URL=/api`。
+- `https://your-domain/fawn` 和 `/fawn/*` 代理到 frontend `3000`，保留路径前缀。
+- `https://your-domain/fawn/api/*` 代理到 backend `8000`，去掉 `/fawn`，内部仍使用 `/api/*`。
+- `https://your-domain/fawn/storage/*` 代理到 MinIO `9000`，去掉 `/fawn/storage`，用于私有 bucket 的 presigned 照片 URL。
+- 前端保持 `NEXT_PUBLIC_API_URL=/fawn/api`。
 
 照片访问依赖 `MINIO_PUBLIC_ENDPOINT`。如果照片需要通过 HTTPS 域名访问，设置：
 
 ```bash
 MINIO_PUBLIC_ENDPOINT=your-domain-or-minio-domain
+MINIO_PUBLIC_PATH_PREFIX=/fawn/storage
 MINIO_PUBLIC_USE_SSL=true
 ```
 
@@ -376,13 +382,9 @@ MINIO_PUBLIC_USE_SSL=false
 
 ### 3.1 单域名 Nginx 示例
 
-下面示例使用单域名：
+Web 挂载到 `/fawn`；mobile 的生产 API 地址为 `https://lumingchuan.vip/fawn/api`。Next.js 的 `basePath` 和 `NEXT_PUBLIC_API_URL` 都需要在镜像构建时确定。根路径可以用于其他项目。
 
-- `/` 转发到 frontend。
-- `/api/` 转发到 backend，并关闭 buffering，保证聊天 SSE 流式输出正常。
-- `/fawn/` 转发到 MinIO。bucket 仍是 private，只有后端生成的 presigned URL 能访问照片。
-
-先安装 Nginx 并配置 HTTP：
+仓库提供可直接 include 的配置：`deploy/nginx/fawn.locations.conf`。它包含 Web、API、MinIO 和 Android 下载路由（`/fawn/download`）；下载目录沿用 `/var/www/download`。
 
 ```nginx
 server {
@@ -390,46 +392,22 @@ server {
     listen [::]:80;
     server_name your-domain.com;
 
-    client_max_body_size 100m;
-
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/html;
     }
 
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_buffering off;
-        proxy_read_timeout 300s;
-        proxy_send_timeout 300s;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /fawn/ {
-        access_log off;
-        proxy_pass http://127.0.0.1:9000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
+    # 替换为实际 checkout 的绝对路径。
+    include /root/repos/fawn/deploy/nginx/fawn.locations.conf;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
+        return 404;
     }
 }
 ```
+
+MinIO 仍使用 `fawn` bucket。对外链接类似 `/fawn/storage/fawn/photos/...`；backend 先生成原始 S3 签名，再添加 `/fawn/storage`。Nginx 去掉这个前缀，并保留 Host、原始编码路径和查询参数。`MINIO_PUBLIC_ENDPOINT` 只填写域名，路径单独通过 `MINIO_PUBLIC_PATH_PREFIX` 设置；直接通过 MinIO 端口访问时保持该前缀为空。
+
+切换已有部署时先备份 `.env`、Nginx 配置和数据库，再重新构建 backend/frontend 并 reload Nginx。现有 volumes、bucket 和对象 key 沿用。旧 `/api`、`/chat` 和 `/download` 入口停止提供服务；mobile 必须重新构建安装，新版会清除含旧 URL 的查询缓存。聊天图片保留已存储的 `/api/chat/...` 引用，由客户端通过新的 API base URL 读取。
 
 然后申请 HTTPS 证书：
 
@@ -440,11 +418,11 @@ certbot --nginx -d your-domain.com
 Certbot 会把 443 证书配置写入对应 Nginx site，并配置自动续期。部署后验证：
 
 ```bash
-curl -fsS https://your-domain.com/api/health
+curl -fsS https://your-domain.com/fawn/api/health
 curl -I http://your-domain.com
 ```
 
-`/fawn/` 不带 presigned query 时返回 `403` 是正常的，说明 MinIO bucket 没有公开。
+`/fawn/storage/fawn/photos/...` 不带 presigned query 时返回 `403` 是正常的，说明 MinIO bucket 没有公开。
 
 ### 3.2 只开放 80/443 时的防火墙建议
 
@@ -719,7 +697,7 @@ npm install
 INTERNAL_API_URL=http://localhost:8000 npm run dev
 ```
 
-frontend 默认在 `http://localhost:3000`。`frontend/next.config.ts` 会把 `/api/*` 代理到 `INTERNAL_API_URL`。
+frontend 默认在 `http://localhost:3000/fawn`。`frontend/next.config.ts` 会把 `/fawn/api/*` 代理到 `INTERNAL_API_URL` 的 `/api/*`。
 
 ### 6.5 本地验证
 

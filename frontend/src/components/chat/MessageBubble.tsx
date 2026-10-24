@@ -1,4 +1,5 @@
 import { DataCard } from './DataCard';
+import { ChatImage } from './ChatImage';
 import { MarkdownMessage } from './MarkdownMessage';
 import { SafetyAlert } from './SafetyAlert';
 import { useAuthStore } from '@/lib/auth-store';
@@ -46,7 +47,7 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
           {message.message_type === 'safety_alert' ? (
             <SafetyAlert content={message.content} />
           ) : message.message_type === 'image' && imageUrl ? (
-            <img src={imageUrl} alt={message.content} className="max-h-64 rounded-xl object-cover" />
+            <ChatImage src={imageUrl} alt={message.content} className="max-h-64 rounded-xl object-cover" />
           ) : (
             <>
               <MarkdownMessage content={message.content} />
@@ -72,7 +73,7 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
         )}
       >
         {message.message_type === 'image' && imageUrl ? (
-          <img src={imageUrl} alt={message.content} className="max-h-64 rounded-xl object-cover" />
+          <ChatImage src={imageUrl} alt={message.content} className="max-h-64 rounded-xl object-cover" />
         ) : (
           <>
             {isUser ? <span className="whitespace-pre-wrap">{message.content}</span> : <MarkdownMessage content={message.content} />}

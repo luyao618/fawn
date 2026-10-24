@@ -184,7 +184,23 @@ describe('api mock layer', () => {
       }),
     );
     await api.login({ username: 'x', password: 'y' });
-    expect(fetchMock).toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith('/fawn/api/auth/login', expect.objectContaining({
+      method: 'POST',
+    }));
+  });
+
+  it('loads stored chat image references through the mounted API with authentication', async () => {
+    window.localStorage.setItem('access_token', 'image-token');
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      new Response('image bytes', { status: 200 }),
+    );
+    const blob = await api.getChatImage('/api/chat/conversations/conv/images/image.jpg');
+    expect(blob.size).toBeGreaterThan(0);
+    expect(fetchMock).toHaveBeenCalledWith('/fawn/api/chat/conversations/conv/images/image.jpg', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer image-token' }),
+    }));
+    await expect(api.getChatImage('https://other.example/image.jpg')).rejects.toThrow('Invalid chat image URL');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('returns the five required mock SSE scenarios', async () => {

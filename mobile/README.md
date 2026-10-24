@@ -1,7 +1,7 @@
 # Fawn Mobile
 
 > **Backend URLs (read first):**
-> - **Default = Production**: `https://lumingchuan.vip/api` (in `app.json` and `src/lib/api.ts`). This is what every build ships with.
+> - **Default = Production**: `https://lumingchuan.vip/fawn/api` (in `app.json` and `src/lib/api.ts`). This is what every build ships with.
 > - **Local emulator only**: `http://10.0.2.2:8000/api`. Does **not** work on a physical device.
 >
 > See [`AGENTS.md`](./AGENTS.md) for the full policy. Never default back to
@@ -86,7 +86,7 @@ Apple ID/team signing, device trust, permission prompts, and known local push
 notification limits. It also documents the `devicectl` install fallback for
 machines where Expo's iPhone installer cannot read the device pair record. Use
 `ios:release:device` when you want the app to open directly against
-`https://lumingchuan.vip/api` without a Metro bundle URL. This local flow does
+`https://lumingchuan.vip/fawn/api` without a Metro bundle URL. This local flow does
 not require TestFlight, App Store Connect, or App Store metadata.
 
 ## Building with EAS (optional)
