@@ -118,7 +118,7 @@ Agent 可以调用记录、查询、知识检索、相册浏览和用户画像�
 
 - 当前发布形态：v1 仅支持 Android，`minSdkVersion = 26`（Android 8.0+）；测试机安装使用本地 Gradle release APK，未上架 Play Store。
 - 当前移动端已覆盖聊天、历史、看板、记录、相册、家庭资料、长期记忆和 agent task 入口；聊天支持图片输入、语音转写、回复播放和 Expo push 通知跳转。
-- 默认连接的是生产后端 `https://lumingchuan.vip/api`；本地调试请按 [`mobile/AGENTS.md`](mobile/AGENTS.md) 临时改写 `mobile/app.json` 中的 `extra.apiBaseUrl`，不要把本地 URL 提交。
+- 默认连接的是生产后端 `https://lumingchuan.vip/fawn/api`；本地调试请按 [`mobile/AGENTS.md`](mobile/AGENTS.md) 临时改写 `mobile/app.json` 中的 `extra.apiBaseUrl`，不要把本地 URL 提交。
 - Android 查 bug 用本地 debug build（`npm run android:debug` / `android:install`，需要 Metro）；安装到 X90/测试机用本地 Gradle release build（`npm run android:release` 后 `adb install -r`），不需要走 Expo/EAS 额度。详细说明见 [`mobile/README.md`](mobile/README.md) 和 [`docs/android-native-build.md`](docs/android-native-build.md)。
 
 iOS 暂未列入 v1 范围。
@@ -157,7 +157,7 @@ iOS 暂未列入 v1 范围。
    docker compose exec -T backend python -m scripts.check_knowledge_readiness
    ```
 
-4. 注册第一个家庭：打开 `http://localhost:3000`，进入注册页，使用 `backend/.env` 中的 `REGISTRATION_INVITE_CODE`（默认值 `2026`）创建家庭、首个父母账号与密码。登录后到 `/profile` 补充宝宝档案。
+4. 注册第一个家庭：打开 `http://localhost:3000/fawn`，进入注册页，使用 `backend/.env` 中的 `REGISTRATION_INVITE_CODE`（默认值 `2026`）创建家庭、首个父母账号与密码。登录后到 `/fawn/profile` 补充宝宝档案。
 
 Host 开发模式仅用于本机改代码时快速调试，不代表本地部署形态：
 
@@ -320,7 +320,7 @@ Album photos and chat images are stored in MinIO. PostgreSQL keeps metadata, tag
 
 - v1 ships Android only, `minSdkVersion = 26` (Android 8.0+). Test-device installs use a local Gradle release APK. Not published to the Play Store.
 - The current Android app covers chat, history, dashboard, records, album, family profile, long-term memory, and agent tasks. Chat supports image input, voice transcription, reply playback, and Expo push notification deep links.
-- The default backend baked into the app is production (`https://lumingchuan.vip/api`). For local debugging, follow [`mobile/AGENTS.md`](mobile/AGENTS.md) and temporarily override `extra.apiBaseUrl` in `mobile/app.json` — do not commit the local URL.
+- The default backend baked into the app is production (`https://lumingchuan.vip/fawn/api`). For local debugging, follow [`mobile/AGENTS.md`](mobile/AGENTS.md) and temporarily override `extra.apiBaseUrl` in `mobile/app.json` — do not commit the local URL.
 - Use local debug builds (`npm run android:debug` / `android:install`, with Metro) for bug investigation. Use local Gradle release builds (`npm run android:release`, then `adb install -r`) for X90/test-device installs; this does not consume Expo/EAS quota. See [`mobile/README.md`](mobile/README.md) and [`docs/android-native-build.md`](docs/android-native-build.md).
 
 iOS is out of scope for v1.
@@ -359,7 +359,7 @@ Prerequisites:
    docker compose exec -T backend python -m scripts.check_knowledge_readiness
    ```
 
-4. Register the first family: open `http://localhost:3000`, go to the register page, and use the `REGISTRATION_INVITE_CODE` from `backend/.env` (default `2026`) to create the family, the first parent account, and a password. After login, go to `/profile` to fill in the baby profile.
+4. Register the first family: open `http://localhost:3000/fawn`, go to the register page, and use the `REGISTRATION_INVITE_CODE` from `backend/.env` (default `2026`) to create the family, the first parent account, and a password. After login, go to `/fawn/profile` to fill in the baby profile.
 
 Host development mode is for fast local code iteration only; it is not the local deployment shape:
 

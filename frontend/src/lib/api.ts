@@ -63,7 +63,7 @@ import type {
   UserUpdate,
 } from './types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/fawn/api';
 
 type AuthTokenGetter = () => string | null;
 type UnauthorizedHandler = () => void;
@@ -76,7 +76,7 @@ let getAuthToken: AuthTokenGetter = () => {
 let onUnauthorized: UnauthorizedHandler = () => {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem('access_token');
-  if (window.location.pathname !== '/login') window.location.assign('/login');
+  if (window.location.pathname !== '/fawn/login') window.location.assign('/fawn/login');
 };
 
 export function configureApiAuth(options: {
@@ -799,6 +799,18 @@ export class ApiClient {
     await delay();
     const accessType = currentUserAccessType();
     return createMockSSEResponse(mockSSEEventsFor(content, accessType));
+  }
+
+  async getChatImage(imageUrl: string, signal?: AbortSignal): Promise<Blob> {
+    // Stored image references remain /api/chat/... regardless of the public mount path.
+    if (!imageUrl.startsWith('/api/chat/')) throw new Error('Invalid chat image URL');
+    const response = await fetch(`${API_BASE}${imageUrl.slice(4)}`, {
+      headers: this.getHeaders(),
+      signal,
+    });
+    if (response.status === 401) onUnauthorized();
+    if (!response.ok) throw new ApiError(response.status, '图片加载失败');
+    return response.blob();
   }
 
   async uploadChatImage(conversationId: string, file: File): Promise<{ image_url: string; mime_type: string }> {

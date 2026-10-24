@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Plus, Send, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ChatImage } from './ChatImage';
 
 interface ChatInputProps {
   onSend: (content: string, imageUrl?: string) => void;
@@ -75,7 +76,7 @@ export function ChatInput({
     <form onSubmit={submit} className="shrink-0 bg-transparent px-4 pb-3 pt-2">
       {attachedImage ? (
         <div className="mb-2 flex items-center gap-2 rounded-2xl bg-white/90 p-2 shadow-card">
-          <img src={attachedImage} alt="已选择图片" className="h-16 w-16 rounded-2xl object-cover" />
+          <ChatImage src={attachedImage} alt="已选择图片" className="h-16 w-16 rounded-2xl object-cover" />
           <button
             type="button"
             onClick={onRemoveImage}

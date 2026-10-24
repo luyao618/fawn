@@ -28,7 +28,7 @@ permission copy changes, and must not be committed.
 The default mobile backend is production:
 
 ```text
-https://lumingchuan.vip/api
+https://lumingchuan.vip/fawn/api
 ```
 
 It is defined in both `mobile/app.json` and `mobile/src/lib/api.ts`. Do not
@@ -93,7 +93,7 @@ npm run ios:release:device
 
 This signs with the local Apple team/profile, bundles JavaScript into the app,
 installs through `devicectl`, and launches without Metro. It still uses the
-default production API URL, `https://lumingchuan.vip/api`.
+default production API URL, `https://lumingchuan.vip/fawn/api`.
 
 ## Permission flows to verify
 

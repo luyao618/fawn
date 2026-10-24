@@ -7,7 +7,7 @@ without an explicit instruction from the user.
 
 | Environment | Base URL | Status |
 |-------------|----------|--------|
-| **Production (default)** | `https://lumingchuan.vip/api` | Hard-coded in `mobile/app.json` `extra.apiBaseUrl` and `mobile/src/lib/api.ts` `DEFAULT_BASE_URL`. This is what every release / debug build ships with. |
+| **Production (default)** | `https://lumingchuan.vip/fawn/api` | Hard-coded in `mobile/app.json` `extra.apiBaseUrl` and `mobile/src/lib/api.ts` `DEFAULT_BASE_URL`. This is what every release / debug build ships with. |
 | Local dev — Android emulator | `http://10.0.2.2:8000/api` | `10.0.2.2` is the emulator's alias for the host machine's `localhost`. **Does not work on a real device.** |
 | Local dev — real device on same Wi-Fi | `http://<mac-LAN-ip>:8000/api` | Only when explicitly testing against a backend running on the dev Mac. |
 
@@ -16,7 +16,7 @@ without an explicit instruction from the user.
 1. **Never silently switch the default to `http://10.0.2.2:8000/api`.** That
    URL only works inside an Android Studio emulator. Defaulting to it has
    bitten the user repeatedly — do not do it again.
-2. The production URL `https://lumingchuan.vip/api` is the correct default.
+2. The production URL `https://lumingchuan.vip/fawn/api` is the correct default.
    Anything installed on a real phone must point here.
 3. If a task requires a local backend, override the base URL **temporarily**
    for that session only (e.g. edit `app.json` for one build, then revert),

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from minio import Minio
 
@@ -69,14 +69,24 @@ def get_bytes(storage_key: str) -> bytes:
         response.release_conn()
 
 
+def _public_url(url: str) -> str:
+    prefix = get_settings().minio_public_path_prefix.strip("/")
+    if not prefix:
+        return url
+    parts = urlsplit(url)
+    return urlunsplit(parts._replace(path=f"/{prefix}{parts.path}"))
+
+
 def get_presigned_url(storage_key: str, expires: int = 3600) -> str:
     settings = get_settings()
     client = get_public_minio_client()
     from datetime import timedelta
-    return client.presigned_get_object(
-        settings.minio_bucket,
-        storage_key.lstrip("/"),
-        expires=timedelta(seconds=expires),
+    return _public_url(
+        client.presigned_get_object(
+            settings.minio_bucket,
+            storage_key.lstrip("/"),
+            expires=timedelta(seconds=expires),
+        )
     )
 
 
@@ -94,9 +104,11 @@ def get_presigned_download_url(storage_key: str, filename: str, expires: int = 3
         f"attachment; filename=\"{ascii_fallback}\"; "
         f"filename*=UTF-8''{quote(safe_filename)}"
     )
-    return client.presigned_get_object(
-        settings.minio_bucket,
-        storage_key.lstrip("/"),
-        expires=timedelta(seconds=expires),
-        response_headers={"response-content-disposition": disposition},
+    return _public_url(
+        client.presigned_get_object(
+            settings.minio_bucket,
+            storage_key.lstrip("/"),
+            expires=timedelta(seconds=expires),
+            response_headers={"response-content-disposition": disposition},
+        )
     )
